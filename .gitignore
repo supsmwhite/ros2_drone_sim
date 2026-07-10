@@ -1,0 +1,20 @@
+# ROS2 build directories
+build/
+install/
+log/
+
+# VS Code
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+
+# Temporary files
+*.swp
+*.tmp
+*~
+
+# ROS bag
+*.db3
+metadata.yaml

@@ -50,14 +50,16 @@
 
 项目目前处于初始化阶段。
 
-当前主要工作：
+已完成并验证的工程初始化内容：
 
 * 建立 ROS2 工作空间和 Git 仓库；
-* 确定系统模块、节点及 Topic 关系；
-* 实现并验证四旋翼动力学模块；
-* 建立基础 RViz2 可视化环境。
+* 创建 `drone_msgs`、`drone_dynamics`、`drone_controller` 和 `drone_bringup`；
+* 生成四电机 RPM 自定义消息；
+* 实现并独立验证四旋翼刚体动力学、电机一阶响应和 X 型力矩分配；
+* 动力学节点可发布 Odom、IMU、Path 和 `map -> base_link` TF；
+* 使用基础 Launch 文件启动动力学节点和位置控制器节点骨架。
 
-已稳定实现的功能将在通过测试后更新到本节。
+动力学模块已完成第一阶段独立测试。位置与姿态控制律、控制器 RPM 指令生成、URDF 和 RViz2 显示尚未实现。
 
 ## 项目结构
 
@@ -71,8 +73,6 @@ ros2_drone_sim/
 │   ├── drone_msgs/
 │   ├── drone_dynamics/
 │   ├── drone_controller/
-│   ├── drone_map/
-│   ├── drone_planner/
 │   └── drone_bringup/
 ├── tools/
 ├── results/
@@ -94,33 +94,38 @@ ros2_drone_sim/
 
 ## 环境与依赖
 
-计划使用环境：
+已验证的基础开发环境：
 
-* Ubuntu 22.04；
+* Ubuntu 22.04.5；
 * ROS2 Humble；
-* C++17；
-* Eigen3；
+* g++ 11.4.0，使用 C++17；
+* CMake 3.22.1；
+* Eigen3 3.4.0；
+* colcon、rosdep 和 ament_cmake；
 * tf2；
 * RViz2；
-* rqt_plot 或 PlotJuggler。
+* ROS2 常用消息包。
 
 最终使用的完整依赖和安装方式将在项目实现过程中补充。
 
 ## 编译与运行
 
-项目初始化完成后，预计使用以下方式编译：
+当前四个基础 package 已使用以下命令完成编译验证：
 
 ```bash
 cd ~/ros2_drone_sim
+source /opt/ros/humble/setup.bash
 colcon build --symlink-install
 source install/setup.bash
 ```
 
-基础仿真系统计划通过以下命令启动：
+基础系统已使用以下命令完成启动验证：
 
 ```bash
 ros2 launch drone_bringup basic_sim.launch.py
 ```
+
+该 Launch 当前启动已实现的 `quadrotor_dynamics_node` 和仍为骨架的 `position_controller_node`，不代表控制器功能已经完成。
 
 完整地图与避障系统计划通过以下命令启动：
 
@@ -128,7 +133,7 @@ ros2 launch drone_bringup basic_sim.launch.py
 ros2 launch drone_bringup full_sim.launch.py
 ```
 
-以上命令将在对应功能实现并验证后正式启用。
+完整地图与避障 Launch 尚未实现，不能运行。
 
 ## 计划验收场景
 

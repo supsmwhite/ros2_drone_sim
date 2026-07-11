@@ -3,8 +3,9 @@ build/
 install/
 log/
 
-# VS Code
-.vscode/
+# VS Code: keep shared workspace settings, ignore other local state
+.vscode/*
+!.vscode/settings.json
 
 # Python
 __pycache__/

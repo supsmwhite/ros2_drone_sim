@@ -1,0 +1,8 @@
+{
+  "C_Cpp.default.compileCommands": [
+    "${workspaceFolder}/build/drone_controller/compile_commands.json",
+    "${workspaceFolder}/build/drone_dynamics/compile_commands.json"
+  ],
+  "C_Cpp.default.compilerPath": "/usr/bin/g++",
+  "C_Cpp.default.cppStandard": "c++17"
+}

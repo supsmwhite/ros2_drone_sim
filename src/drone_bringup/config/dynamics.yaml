@@ -1,0 +1,24 @@
+quadrotor_dynamics_node:
+  ros__parameters:
+    # Rigid-body parameters in SI units.
+    mass: 1.0
+    inertia_xx: 0.02
+    inertia_yy: 0.02
+    inertia_zz: 0.04
+    arm_length: 0.20
+
+    # F = k_F * omega^2 and Q = k_M * omega^2, with omega in rad/s.
+    thrust_coefficient: 1.91e-6
+    drag_torque_coefficient: 2.60e-7
+
+    # First-order motor response and command limits.
+    motor_time_constant: 0.05
+    min_rpm: 0.0
+    max_rpm: 20000.0
+
+    gravity: 9.80665
+    simulation_frequency: 200.0
+
+    # Odom, IMU, and TF publish every simulation step. Path publishes at 20 Hz.
+    path_publish_divider: 10
+    path_max_points: 2000

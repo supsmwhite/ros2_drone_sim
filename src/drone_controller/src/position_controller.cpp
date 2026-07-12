@@ -3,7 +3,7 @@
 namespace drone_controller
 {
 
-void PositionController::set_goal(const geometry_msgs::msg::PointStamped & goal)
+void PositionController::set_goal(const geometry_msgs::msg::PoseStamped & goal)
 {
   goal_ = goal;
 }

@@ -1,0 +1,111 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="drone">
+  <!-- Geometry follows the dynamics convention: base_link is FLU and motor centers
+       are 0.20 m from the center in an X configuration. -->
+  <xacro:property name="arm_length" value="0.20"/>
+  <xacro:property name="motor_offset" value="${arm_length / sqrt(2.0)}"/>
+
+  <material name="body_dark">
+    <color rgba="0.72 0.75 0.80 1.0"/>
+  </material>
+  <material name="arm_gray">
+    <color rgba="0.55 0.60 0.68 1.0"/>
+  </material>
+  <material name="front_red">
+    <color rgba="0.90 0.08 0.08 1.0"/>
+  </material>
+  <material name="ccw_blue">
+    <color rgba="0.10 0.35 0.95 0.85"/>
+  </material>
+  <material name="cw_orange">
+    <color rgba="1.00 0.48 0.05 0.85"/>
+  </material>
+
+  <!-- Root link. robot_state_publisher publishes only fixed child transforms below
+       this link; map -> base_link remains owned by quadrotor_dynamics_node. -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="0.14 0.10 0.05"/>
+      </geometry>
+      <material name="body_dark"/>
+    </visual>
+  </link>
+
+  <!-- A bright marker extends along +x, making the nose direction obvious in RViz. -->
+  <link name="front_marker_link">
+    <visual>
+      <geometry>
+        <box size="0.09 0.035 0.025"/>
+      </geometry>
+      <material name="front_red"/>
+    </visual>
+  </link>
+  <joint name="front_marker_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="front_marker_link"/>
+    <origin xyz="0.105 0 0.035" rpy="0 0 0"/>
+  </joint>
+
+  <xacro:macro name="arm" params="name x y yaw">
+    <link name="${name}_arm_link">
+      <visual>
+        <origin xyz="${x / 2.0} ${y / 2.0} 0" rpy="0 0 ${yaw}"/>
+        <geometry>
+          <box size="${arm_length} 0.025 0.018"/>
+        </geometry>
+        <material name="arm_gray"/>
+      </visual>
+    </link>
+    <joint name="${name}_arm_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="${name}_arm_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="motor_and_rotor" params="name x y rotor_material">
+    <link name="${name}_motor_link">
+      <visual>
+        <geometry>
+          <cylinder radius="0.025" length="0.035"/>
+        </geometry>
+        <material name="body_dark"/>
+      </visual>
+    </link>
+    <joint name="${name}_motor_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="${name}_motor_link"/>
+      <origin xyz="${x} ${y} 0" rpy="0 0 0"/>
+    </joint>
+
+    <link name="${name}_rotor_link">
+      <visual>
+        <geometry>
+          <cylinder radius="0.065" length="0.006"/>
+        </geometry>
+        <material name="${rotor_material}"/>
+      </visual>
+    </link>
+    <joint name="${name}_rotor_joint" type="fixed">
+      <parent link="${name}_motor_link"/>
+      <child link="${name}_rotor_link"/>
+      <origin xyz="0 0 0.025" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- M1 front-left CCW, M2 rear-left CW, M3 rear-right CCW, M4 front-right CW. -->
+  <xacro:arm name="m1" x="${ motor_offset}" y="${ motor_offset}" yaw="${ pi / 4.0}"/>
+  <xacro:arm name="m2" x="${-motor_offset}" y="${ motor_offset}" yaw="${3.0 * pi / 4.0}"/>
+  <xacro:arm name="m3" x="${-motor_offset}" y="${-motor_offset}" yaw="${-3.0 * pi / 4.0}"/>
+  <xacro:arm name="m4" x="${ motor_offset}" y="${-motor_offset}" yaw="${-pi / 4.0}"/>
+
+  <xacro:motor_and_rotor name="m1" x="${ motor_offset}" y="${ motor_offset}"
+    rotor_material="ccw_blue"/>
+  <xacro:motor_and_rotor name="m2" x="${-motor_offset}" y="${ motor_offset}"
+    rotor_material="cw_orange"/>
+  <xacro:motor_and_rotor name="m3" x="${-motor_offset}" y="${-motor_offset}"
+    rotor_material="ccw_blue"/>
+  <xacro:motor_and_rotor name="m4" x="${ motor_offset}" y="${-motor_offset}"
+    rotor_material="cw_orange"/>
+</robot>

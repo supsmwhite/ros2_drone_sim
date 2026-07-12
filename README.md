@@ -57,9 +57,11 @@
 * 生成四电机 RPM 自定义消息；
 * 实现并独立验证四旋翼刚体动力学、电机一阶响应和 X 型力矩分配；
 * 动力学节点可发布 Odom、IMU、Path 和 `map -> base_link` TF；
-* 使用基础 Launch 文件启动动力学节点和位置控制器节点骨架。
+* 创建与 X 型布局一致的基础四旋翼 Xacro 模型；
+* RViz2 可显示无人机模型、TF、轨迹、目标点、坐标轴和网格；
+* 使用基础 Launch 文件启动动力学、控制器骨架、robot_state_publisher 和 RViz2。
 
-动力学模块已完成第一阶段独立测试。位置与姿态控制律、控制器 RPM 指令生成、URDF 和 RViz2 显示尚未实现。
+动力学模块和基础 RViz2 可视化已完成第一阶段独立测试。位置与姿态控制律及控制器 RPM 指令生成尚未实现。
 
 ## 项目结构
 
@@ -126,6 +128,12 @@ ros2 launch drone_bringup basic_sim.launch.py
 ```
 
 该 Launch 当前启动已实现的 `quadrotor_dynamics_node` 和仍为骨架的 `position_controller_node`，不代表控制器功能已经完成。
+
+默认同时启动 robot_state_publisher 和 RViz2。无界面运行可使用：
+
+```bash
+ros2 launch drone_bringup basic_sim.launch.py use_rviz:=false
+```
 
 完整地图与避障系统计划通过以下命令启动：
 

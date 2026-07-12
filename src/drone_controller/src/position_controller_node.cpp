@@ -2,7 +2,7 @@
 
 #include "drone_controller/position/position_controller.hpp"
 #include "drone_msgs/msg/motor_rpm.hpp"
-#include "geometry_msgs/msg/point_stamped.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
 
@@ -15,9 +15,9 @@ public:
   PositionControllerNode()
   : Node("position_controller_node")
   {
-    goal_subscription_ = create_subscription<geometry_msgs::msg::PointStamped>(
+    goal_subscription_ = create_subscription<geometry_msgs::msg::PoseStamped>(
       "/drone/goal", 10,
-      [this](const geometry_msgs::msg::PointStamped::SharedPtr message) {
+      [this](const geometry_msgs::msg::PoseStamped::SharedPtr message) {
         controller_.set_goal(*message);
       });
 
@@ -37,7 +37,7 @@ public:
 
 private:
   PositionController controller_;
-  rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr goal_subscription_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_subscription_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_subscription_;
   rclcpp::Publisher<drone_msgs::msg::MotorRPM>::SharedPtr motor_rpm_publisher_;
 };

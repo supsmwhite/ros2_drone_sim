@@ -48,8 +48,8 @@
 1. 四旋翼刚体动力学、电机一阶响应和固定步长积分已实现；
 2. 零 RPM、对称推力、roll、pitch、yaw 和电机限幅测试已通过；
 3. Odom、IMU、Path 和 `map -> base_link` TF 已接入并完成运行检查；
-4. 下一步补充基础 URDF/RViz 显示和更长时间的数值稳定性测试；
-5. 在动力学阶段完成标准全部满足后再实现控制器。
+4. 基础 URDF、robot_state_publisher 和 RViz2 显示已实现并完成运行检查；
+5. 下一步进行更长时间的数值稳定性测试，并在人工确认可视化后进入 Mixer 与控制器。
 
 ### 当前阶段完成标准
 
@@ -84,6 +84,9 @@
 * 六项 GTest 全部通过，覆盖要求的五类动力学场景以及电机限幅/一阶响应；
 * 动力学节点已实际发布 `/drone/odom`、`/drone/imu`、`/drone/path` 和 `map -> base_link` TF；
 * Odom 实测约 200 Hz，Path 实测约 20 Hz；Topic 输入的零 RPM、对称推力、roll、pitch 和 yaw 响应方向均通过检查。
+* 已创建与 0.20 m X 型机臂约定一致的基础 Xacro 模型，并由 robot_state_publisher 发布 `base_link` 到固定子链接；
+* RViz2 已实际启动并显示 RobotModel、TF、Path、Pose、map/base_link Axes 和 Grid；
+* 12000 RPM 竖直运动时，模型状态与 Path 由同一 `map -> base_link`/Odom 状态驱动；短时 roll 输入后四元数和 base_link 坐标轴均发生对应变化。
 
 详细命令、结果和验证边界见“验证记录”。以上工程初始化结果不代表动力学、控制器或可视化功能已经实现。
 
@@ -103,7 +106,7 @@
 
 尚未确认的事项：
 
-* RViz2 的可执行文件和命令行入口可用，但尚未创建或验证项目 URDF、RViz 配置和显示效果；
+* 基础 RViz2 显示已验证；不同屏幕尺寸下的默认视角、模型大小和配色仍建议由用户人工确认并按演示需要微调；
 * 尚未实现控制律和控制器电机指令发布；
 * 当前模型没有地面碰撞，因此零 RPM 会持续落到 `z < 0`；
 * 当前模型没有空气阻力、旋翼陀螺效应或传感器噪声，持续不对称力矩会使角速度不断增加；
@@ -145,6 +148,8 @@
 * 地图和规划分别使用独立功能包；
 * 不使用 Gazebo 作为动力学计算核心；
 * RViz2 仅负责显示，实际运动由动力学节点计算。
+* `map -> base_link` 只由 `quadrotor_dynamics_node` 动态发布；robot_state_publisher 的 URDF 根链接是 `base_link`，只发布到固定子链接的静态 TF；
+* `/drone/goal` 统一使用 `geometry_msgs/msg/PoseStamped`，供控制器骨架和 RViz Pose 显示共同订阅。
 
 ### 动力学参数基线
 
@@ -252,7 +257,7 @@ position_controller_node
 订阅：
 
 ```text
-/drone/goal  (geometry_msgs/msg/PointStamped)
+/drone/goal  (geometry_msgs/msg/PoseStamped)
 /drone/odom
 ```
 
@@ -263,6 +268,17 @@ position_controller_node
 ```
 
 当前仅创建电机 RPM 发布器，尚未发布控制指令。
+
+### 可视化节点
+
+`basic_sim.launch.py` 默认启动：
+
+```text
+/robot_state_publisher
+/rviz2
+```
+
+robot_state_publisher 从 `drone.urdf.xacro` 生成的 robot_description 发布 `base_link` 到机臂、电机、旋翼和机头标记的固定 TF。RViz Fixed Frame 为 `map`，订阅 `/robot_description`、`/drone/path` 和 `/drone/goal`。可通过 `use_rviz:=false` 关闭图形界面。
 
 ### 规划节点
 
@@ -561,6 +577,56 @@ python3 tools/dynamics_probe.py M1 M2 M3 M4 --settle 0.30 --duration 0.30
 
 结论：同名节点和重复 Topic 是旧 Launch 进程并行运行造成的外部运行状态问题，不是 package、Launch 文件或节点命名缺陷；旧进程关闭后隐患已经消除，不需要修改节点或 Topic 名称。
 
+### 2026-07-12：基础 URDF 与 RViz2 可视化验证
+
+测试目标：不修改动力学公式和电机约定，为现有 `map -> base_link` 状态增加简化四旋翼模型、固定子链接 TF、轨迹、目标点、坐标轴和网格显示。
+
+实现内容：
+
+* `drone.urdf.xacro` 使用基础几何体创建 `base_link`、红色机头标记、4 条 X 型机臂、4 个电机和 4 个旋翼；
+* 电机中心到质心距离为 `0.20 m`，位置与 M1 前左、M2 后左、M3 后右、M4 前右一致；M1/M3 旋翼为蓝色，M2/M4 为橙色；
+* 所有关节均为固定关节，robot_state_publisher 只发布 `base_link` 到固定子链接；
+* `drone_sim.rviz` 配置 Fixed Frame=`map`，包含 Grid、RobotModel、TF、map/base_link Axes、`/drone/path` Path 和 `/drone/goal` Pose；
+* `/drone/goal` 从 `PointStamped` 统一调整为 `PoseStamped`，控制器仍只有输入保存骨架，没有新增控制算法；
+* `basic_sim.launch.py` 增加 robot_state_publisher、RViz2 和默认 true 的 `use_rviz` 参数。
+
+实际命令：
+
+```bash
+source /opt/ros/humble/setup.bash
+xacro src/drone_bringup/urdf/drone.urdf.xacro > /tmp/drone.urdf
+check_urdf /tmp/drone.urdf
+colcon build --symlink-install \
+  --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+source install/setup.bash
+ros2 launch drone_bringup basic_sim.launch.py
+ros2 node list
+ros2 topic list
+ros2 run tf2_ros tf2_echo map base_link
+```
+
+结构与启动结果：
+
+* Xacro 和安装后的 Xacro 均通过 `check_urdf`，根链接为 `base_link`；
+* 四个 package 构建成功，已有测试结果保持 `0 errors, 0 failures`；
+* `/quadrotor_dynamics_node`、`/position_controller_node`、`/robot_state_publisher` 和 `/rviz2` 均实际启动；
+* RViz2 使用 OpenGL 4.6 启动，Global Status 和各显示项状态为 OK；
+* `/tf` 的动态消息实测只包含 `map -> base_link`；`/tf_static` 包含 `base_link` 到机头、机臂、电机和旋翼的固定变换，没有重复发布 `map -> base_link`；
+* `base_link -> m1_rotor_link` 实测平移为 `[0.141, 0.141, 0.025] m`，与 0.20 m X 型机臂一致；
+* `use_rviz:=false` 可只启动动力学、控制器骨架和 robot_state_publisher。
+
+三项可视化测试：
+
+1. 目标点：发布 `PoseStamped` `(2.0,1.0,1.5)` 后，RViz Goal Pose 箭头在 map 网格中实际可见；RViz 和控制器骨架均以 `PoseStamped` 订阅该 Topic，通过；
+2. 竖直运动：四电机持续 `12000 RPM` 时，0.30 s 运行窗口得到 `delta_vz=+0.66610 m/s`；RViz 中模型沿 z 运动并形成竖直 Path，RobotModel、TF 和 Path 无状态错误，通过；
+3. 姿态变化：短时左高右低 roll 输入后，Odom 四元数变为 `x=0.92166,w=0.38799`，其他旋转分量为 0；base_link 坐标轴和模型随 TF 发生 roll 方向变化，不是只发生平移，通过。
+
+人工确认项：不同显示器和窗口尺寸下，建议用户确认默认视距 `3.8 m`、模型配色、红色机头辨识度及长轨迹场景是否符合最终演示偏好；这些属于外观微调，不影响已验证的 TF 和消息链路。
+
+验证边界：RViz2 只显示状态，不参与动力学；控制器、Mixer、地图、规划和避障仍未实现；开环动力学没有地面碰撞和角阻尼，长时间零/不对称 RPM 会让模型离开默认 map 视野，测试时应重启 Launch 或调整 RViz Target Frame。
+
+是否通过：本阶段三个验收重点——模型显示、TF 驱动位置/姿态、轨迹与目标点显示——均已实际通过。
+
 后续每次测试应使用以下格式：
 
 ```text
@@ -604,6 +670,12 @@ ros2 launch drone_bringup basic_sim.launch.py
 
 当前 Launch 启动已实现的动力学节点和控制器骨架。动力学节点会产生状态，控制器仍不产生有效 RPM 输出。
 
+无界面启动：
+
+```bash
+ros2 launch drone_bringup basic_sim.launch.py use_rviz:=false
+```
+
 ### 动力学算法测试
 
 ```bash
@@ -638,11 +710,11 @@ ros2 run tf2_ros tf2_echo map base_link
 
 当前优先级：
 
-1. 人工确认本次动力学实现、参数和测试数据并提交 Git；
-2. 创建基础 URDF 和 RViz 配置，验证模型姿态及轨迹显示；
+1. 用户人工确认 RViz 默认视角、模型配色和机头辨识度；
+2. 提交已验证的动力学注释、URDF、RViz、Launch 和文档变更；
 3. 增加长时间、高角速度和最大 RPM 数值稳定性测试；
-4. 决定是否加入地面碰撞、命令超时和简化空气阻力；
-5. 在动力学阶段完成标准全部满足后，再开始姿态与高度控制器开发。
+4. 开始推导并实现与固定电机约定一致的 Mixer；
+5. Mixer 独立验证后再实现姿态与高度控制器。
 
 在以上任务完成并验证前，不开始完整位置控制器、地图或避障模块。
 

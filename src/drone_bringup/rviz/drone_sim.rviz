@@ -1,0 +1,181 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Name: Tool Properties
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.55
+      Cell Size: 0.5
+      Class: rviz_default_plugins/Grid
+      Color: 120; 120; 120
+      Enabled: true
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 40
+      Reference Frame: map
+      Value: true
+    - Alpha: 1
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description Source: Topic
+      Description Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+      Enabled: true
+      Name: Drone Model
+      TF Prefix: ""
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+      Marker Scale: 0.12
+      Name: TF Tree
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+      Tree: {}
+      Update Interval: 0
+      Value: true
+    - Class: rviz_default_plugins/Axes
+      Enabled: true
+      Length: 0.45
+      Name: Map Axes
+      Radius: 0.018
+      Reference Frame: map
+      Value: true
+    - Class: rviz_default_plugins/Axes
+      Enabled: true
+      Length: 0.22
+      Name: Base Link Axes
+      Radius: 0.008
+      Reference Frame: base_link
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 20; 220; 60
+      Enabled: true
+      Head Diameter: 0.06
+      Head Length: 0.08
+      Length: 0.3
+      Line Style: Lines
+      Line Width: 0.025
+      Name: Drone Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.03
+      Shaft Diameter: 0.02
+      Shaft Length: 0.08
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/path
+      Value: true
+    - Alpha: 1
+      Axes Length: 0.5
+      Axes Radius: 0.05
+      Class: rviz_default_plugins/Pose
+      Color: 255; 40; 40
+      Enabled: true
+      Head Length: 0.22
+      Head Radius: 0.09
+      Name: Goal Pose
+      Shape: Arrow
+      Shaft Length: 0.45
+      Shaft Radius: 0.035
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/goal
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 35; 38; 45
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+    - Class: rviz_default_plugins/SetInitialPose
+      Topic: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic: /goal_pose
+    - Class: rviz_default_plugins/PublishPoint
+      Single click: true
+      Topic: /clicked_point
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 3.8
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Focal Point:
+        X: 0.8
+        Y: 0.4
+        Z: 0.5
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: 0.55
+      Target Frame: map
+      Value: Orbit (rviz)
+      Yaw: 0.8
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 900
+  Hide Left Dock: false
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd00000004000000000000015e0000032afc0200000008fb000000100044006900730070006c006100790073010000003d000001d2000000c900fffffffb0000001200530065006c0065006300740069006f006e0000000215000000a00000005c00fffffffb0000001c0054006f006f006c002000500072006f007000650072007400690065007302000001a9000001d800000185000000a3fb0000000a00560069006500770073010000021500000152000000a400ffffff000000010000010f0000032afc0200000003fb0000001200540069006d006500000000000000032a0000000000000000fb0000001200540069006d0065007200000000000000032a0000000000000000fb0000001200560069006500770073010000003d0000032a000000a400ffffff00000003000006a00000003efc0100000001fb0000000800540069006d00650000000000000006a00000030000ffffff0000053c0000032a00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Selection:
+    collapsed: false
+  Tool Properties:
+    collapsed: false
+  Views:
+    collapsed: false
+  Width: 1700
+  X: 100
+  Y: 80

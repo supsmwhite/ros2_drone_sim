@@ -10,8 +10,8 @@ struct AltitudeControllerParameters
 {
   double mass{1.0};
   double gravity{9.80665};
-  double altitude_kp{4.0};
-  double vertical_velocity_kd{3.0};
+  double altitude_kp{3.0};
+  double vertical_velocity_kd{3.5};
   double max_upward_acceleration{5.0};
   double max_downward_acceleration{5.0};
   double min_collective_thrust{0.0};

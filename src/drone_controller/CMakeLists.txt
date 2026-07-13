@@ -16,15 +16,6 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 
-add_library(controller_algorithms src/position_controller.cpp)
-target_include_directories(controller_algorithms
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-)
-target_compile_options(controller_algorithms PRIVATE -Wall -Wextra -Wpedantic)
-ament_target_dependencies(controller_algorithms geometry_msgs nav_msgs)
-
 add_library(motor_mixer src/motor_mixer.cpp)
 target_include_directories(motor_mixer
   PUBLIC
@@ -51,6 +42,16 @@ target_include_directories(altitude_controller
 target_compile_options(altitude_controller PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(altitude_controller Eigen3::Eigen)
 
+add_library(hover_controller src/hover_controller.cpp)
+target_include_directories(hover_controller
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_options(hover_controller PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(
+  hover_controller PUBLIC altitude_controller attitude_controller motor_mixer Eigen3::Eigen)
+
 add_executable(position_controller_node src/position_controller_node.cpp)
 target_compile_options(position_controller_node PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(position_controller_node
@@ -59,7 +60,7 @@ ament_target_dependencies(position_controller_node
   nav_msgs
   rclcpp
 )
-target_link_libraries(position_controller_node controller_algorithms)
+target_link_libraries(position_controller_node hover_controller Eigen3::Eigen)
 
 install(
   DIRECTORY include/
@@ -67,7 +68,7 @@ install(
 )
 
 install(
-  TARGETS controller_algorithms motor_mixer attitude_controller altitude_controller
+  TARGETS motor_mixer attitude_controller altitude_controller hover_controller
     position_controller_node
   EXPORT export_controller_algorithms
   ARCHIVE DESTINATION lib
@@ -91,6 +92,10 @@ if(BUILD_TESTING)
   ament_add_gtest(test_altitude_controller test/test_altitude_controller.cpp)
   target_link_libraries(test_altitude_controller altitude_controller Eigen3::Eigen)
   target_compile_options(test_altitude_controller PRIVATE -Wall -Wextra -Wpedantic)
+
+  ament_add_gtest(test_hover_controller test/test_hover_controller.cpp)
+  target_link_libraries(test_hover_controller hover_controller Eigen3::Eigen)
+  target_compile_options(test_hover_controller PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 ament_package()

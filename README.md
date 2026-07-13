@@ -60,11 +60,12 @@
 * 正常 Launch 启用可配置的简化水平地面，启动时不会继续落入负 z；
 * 实现并独立验证与动力学电机布局和力矩符号一致的 Motor Mixer；
 * 实现并独立验证姿态/角速度控制器和带倾斜补偿的高度控制器纯算法；
+* 已将高度、姿态和 Mixer 组合接入控制节点，可根据 `map` 高度目标自动起飞并悬停；
 * 创建与 X 型布局一致的基础四旋翼 Xacro 模型；
 * RViz2 可显示无人机模型、TF、轨迹、目标点、坐标轴和网格；
-* 使用基础 Launch 文件启动动力学、控制器骨架、robot_state_publisher 和 RViz2。
+* 使用基础 Launch 文件启动动力学、高度/姿态闭环控制节点、robot_state_publisher 和 RViz2。
 
-动力学模块、Motor Mixer、姿态/角速度控制器、高度控制器和基础 RViz2 可视化已完成各自的独立测试。这些控制算法尚未接入控制器节点，x/y 位置控制及闭环 RPM 指令生成尚未实现。
+动力学模块、Motor Mixer、姿态/角速度控制器、高度控制器和基础 RViz2 可视化已完成独立测试。高度/姿态闭环已实际从地面起飞至 `1.5 m` 并稳定悬停；调参后的高度响应在实际复测中平稳收敛且未观察到回弹，yaw 转向也经用户在 RViz2 中确认能够快速到达且基本无超调。当前目标的 x/y 会被忽略，水平位置控制尚未实现。
 
 当前地面模型只约束世界系竖直位置和向下速度，不包含反弹、摩擦、起落架弹性、姿态约束或复杂碰撞。
 
@@ -132,7 +133,7 @@ source install/setup.bash
 ros2 launch drone_bringup basic_sim.launch.py
 ```
 
-该 Launch 当前启动已实现的 `quadrotor_dynamics_node` 和仍为骨架的 `position_controller_node`，不代表控制器功能已经完成。
+该 Launch 启动 `quadrotor_dynamics_node` 和 altitude-hover 模式的 `position_controller_node`。发送目标前控制器持续发布零 RPM；收到有效 `map` 目标后只控制目标 z 和 yaw。
 
 正常 Launch 默认设置 `enable_ground_contact=true`、`ground_z=0.0`：零 RPM 时模型停在地面，推力超过重力后可以正常离地。纯 `QuadrotorModel` 的地面约束默认关闭，以保留自由落体测试行为。
 
@@ -141,6 +142,17 @@ ros2 launch drone_bringup basic_sim.launch.py
 ```bash
 ros2 launch drone_bringup basic_sim.launch.py use_rviz:=false
 ```
+
+例如发布 `1.5 m` 高度、零 yaw 目标：
+
+```bash
+ros2 topic pub --once /drone/goal geometry_msgs/msg/PoseStamped \
+"{header: {frame_id: map}, pose: {position: {z: 1.5}, orientation: {w: 1.0}}}"
+```
+
+当前模式忽略目标 x/y。控制器正常运行时会对缺少目标、里程计超时和非法输入主动发布零 RPM；控制器进程完全退出后的动力学命令超时保护尚未实现。
+
+当前已验证的控制参数基线位于 `drone_bringup/config/controller.yaml`。高度 PD 使用 `Kp=3.0`、`Kd=3.5`；yaw 使用 `Kp=1.0`、`Kd=0.40`、最大力矩 `0.20 N·m`。
 
 完整地图与避障系统计划通过以下命令启动：
 

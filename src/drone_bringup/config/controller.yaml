@@ -1,0 +1,34 @@
+position_controller_node:
+  ros__parameters:
+    control_frequency: 100.0
+    odometry_timeout: 0.2
+    supported_goal_frame: map
+
+    # Altitude control. z and vz inputs are expressed in map/ENU.
+    mass: 1.0
+    gravity: 9.80665
+    altitude_kp: 3.0
+    vertical_velocity_kd: 3.5
+    max_upward_acceleration: 5.0
+    max_downward_acceleration: 5.0
+    min_collective_thrust: 0.0
+    max_collective_thrust: 30.0
+    min_tilt_cosine: 0.5
+
+    # Attitude and body-rate control. Output is body roll/pitch/yaw torque.
+    attitude_kp_roll: 4.0
+    attitude_kp_pitch: 4.0
+    attitude_kp_yaw: 1.0
+    angular_rate_kd_roll: 0.20
+    angular_rate_kd_pitch: 0.20
+    angular_rate_kd_yaw: 0.40
+    max_torque_roll: 1.0
+    max_torque_pitch: 1.0
+    max_torque_yaw: 0.20
+
+    # These physical parameters must match dynamics.yaml.
+    arm_length: 0.20
+    thrust_coefficient: 1.91e-6
+    drag_torque_coefficient: 2.60e-7
+    min_rpm: 0.0
+    max_rpm: 20000.0

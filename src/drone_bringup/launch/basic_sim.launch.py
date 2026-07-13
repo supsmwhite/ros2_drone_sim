@@ -16,6 +16,11 @@ def generate_launch_description():
         'config',
         'dynamics.yaml',
     )
+    controller_parameters = os.path.join(
+        bringup_share,
+        'config',
+        'controller.yaml',
+    )
     xacro_file = os.path.join(bringup_share, 'urdf', 'drone.urdf.xacro')
     rviz_config = os.path.join(bringup_share, 'rviz', 'drone_sim.rviz')
     robot_description = ParameterValue(
@@ -42,6 +47,7 @@ def generate_launch_description():
             executable='position_controller_node',
             name='position_controller_node',
             output='screen',
+            parameters=[controller_parameters],
         ),
         Node(
             package='robot_state_publisher',

@@ -41,7 +41,7 @@
 
 ### 当前阶段
 
-动力学模块第一阶段已验证，正在进行控制器纯算法组件的独立实现与验证。
+动力学和高度/姿态闭环第一阶段已验证，准备进入水平位置控制前的稳定性整理。
 
 ### 当前任务
 
@@ -50,10 +50,10 @@
 3. Odom、IMU、Path 和 `map -> base_link` TF 已接入并完成运行检查；
 4. 基础 URDF、robot_state_publisher 和 RViz2 显示已实现并完成运行检查；
 5. 可配置的简化水平地面约束已实现并完成单元/运行验证；
-6. 与当前动力学符号严格一致的 Motor Mixer 已实现并通过独立单元测试，尚未接入 ROS2 节点；
-7. 与动力学四元数和力矩符号一致的姿态/角速度控制器已实现并通过独立单元测试，尚未接入 ROS2 节点；
-8. 使用世界系高度/竖直速度输入并包含重力和倾斜补偿的高度控制器已通过独立单元测试，尚未接入 ROS2 节点；
-9. 下一步设计纯算法组合接口，在明确 Odom 坐标转换和饱和传播后再接入控制器节点。
+6. Motor Mixer、姿态/角速度控制器和高度控制器已由纯算法 `HoverController` 组合并接入 ROS2 控制节点；
+7. 控制节点已验证无目标安全零 RPM、目标 frame 拒绝、自动起飞和 1.5 m 闭环悬停；
+8. 当前 altitude-hover 模式仅使用目标 z 和 yaw，明确忽略 x/y；
+9. 下一步进行更长时间和扰动稳定性验证，再设计 x/y 位置控制。
 
 ### 当前阶段完成标准
 
@@ -80,7 +80,7 @@
 * 已创建 `drone_msgs`、`drone_dynamics`、`drone_controller` 和 `drone_bringup`，四个 package 均通过 `colcon build --symlink-install`；
 * `drone_msgs/msg/MotorRPM` 已成功生成，字段明确对应 M1～M4、电机位置和旋转方向；
 * 动力学与控制器采用算法类和 ROS2 节点分离结构；
-* `basic_sim.launch.py` 已实际启动动力学节点和控制器骨架，节点名、订阅、发布和 Topic 类型均与当前接口一致；
+* `basic_sim.launch.py` 已实际启动动力学节点和高度/姿态闭环控制节点，节点名、订阅、发布和 Topic 类型均与当前接口一致；
 * Launch 经 Ctrl-C 停止后，两个节点均正常退出。
 * VS Code C/C++ 索引已配置为读取控制器和动力学 package 的真实 CMake 编译数据库；两个 C++ package 会在普通 colcon 构建时自动导出 `compile_commands.json`。
 * `QuadrotorModel` 已实现位置、世界系速度、姿态四元数、机体系角速度和四电机实际转速状态；
@@ -98,6 +98,9 @@
 * `AttitudeController` 已作为与 ROS2 无关的纯算法类实现，输入期望/当前 body-to-world 四元数及机体系角速度，输出 base_link 中的 roll、pitch、yaw 力矩；
 * 姿态误差符号、角速度阻尼、四元数最短路径与归一化、精确 180° 符号确定性、逐轴力矩限幅、非法输入和非法参数等 11 项 GTest 已全部通过；
 * `AltitudeController` 已作为纯算法独立库实现，世界系高度/竖直速度 PD、竖直加速度前馈、重力补偿、倾斜补偿及安全限幅等 13 项 GTest 全部通过。
+* `HoverController` 已按高度控制器→姿态控制器→Mixer 顺序组合三个纯算法组件，并保留各级 valid/saturated 状态；14 项组合与坐标转换 GTest 全部通过；
+* `position_controller_node` 已使用 100 Hz 控制循环发布 `/drone/motor_rpm_cmd`，实际完成从地面自动起飞至 1.5 m 并稳定悬停。
+* yaw 参数调为 `Kp=1.0`、`Kd=0.40`、最大力矩 `0.20 N·m` 后，用户在 RViz2 中确认转向快速且基本无超调；高度参数调为 `Kp=3.0`、`Kd=3.5` 后，隔离 ROS domain 的 0→1.5 m 运行复测单调接近目标，未观察到原先的小幅越界回弹。
 
 详细命令、结果和验证边界见“验证记录”。以上工程初始化结果不代表动力学、控制器或可视化功能已经实现。
 
@@ -118,11 +121,11 @@
 尚未确认的事项：
 
 * 基础 RViz2 显示已验证；不同屏幕尺寸下的默认视角、模型大小和配色仍建议由用户人工确认并按演示需要微调；
-* Mixer、姿态/角速度控制器和高度控制器均尚未接入 `position_controller_node`；x/y 位置控制律及控制器电机指令发布仍未实现；
+* 当前只实现高度、水平姿态和 yaw 保持，目标 x/y 被忽略，尚未实现水平位置控制；
 * 当前只有质心 z 方向的简化刚性地面约束，没有反弹、摩擦、起落架弹性、姿态约束或复杂碰撞形状；
 * 当前模型没有空气阻力、旋翼陀螺效应或传感器噪声，持续不对称力矩会使角速度不断增加；
 * 已验证短时固定步长响应，尚未验证长时间、高角速度或最大 RPM 下的数值稳定性；
-* 节点保持最后一次 RPM 命令，尚未实现命令超时归零机制；
+* 控制节点在无目标、Odom 超时、frame/四元数非法或控制结果无效时主动发布零 RPM；但若控制器进程完全崩溃，动力学仍会保持最后命令，动力学侧超时保护尚未实现；
 * 项目许可证尚未确定，因此四个 package 的 `<license>` 当前保留为 `TODO`；
 * `.idea/` 当前没有忽略规则；只有实际使用 JetBrains IDE 并产生该目录时才需要决定是否补充。
 
@@ -160,7 +163,7 @@
 * 不使用 Gazebo 作为动力学计算核心；
 * RViz2 仅负责显示，实际运动由动力学节点计算。
 * `map -> base_link` 只由 `quadrotor_dynamics_node` 动态发布；robot_state_publisher 的 URDF 根链接是 `base_link`，只发布到固定子链接的静态 TF；
-* `/drone/goal` 统一使用 `geometry_msgs/msg/PoseStamped`，供控制器骨架和 RViz Pose 显示共同订阅。
+* `/drone/goal` 统一使用 `geometry_msgs/msg/PoseStamped`，供 altitude-hover 控制节点和 RViz Pose 显示共同订阅。
 * 地面约束集中在 `QuadrotorModel`，ROS2 消息发布层不修改模型位置；核心模型默认关闭地面，正常 Launch 通过 YAML 默认开启。
 * Motor Mixer 是 `drone_controller` 中不依赖 ROS2 的纯算法组件；其参数独立保存，不让 `drone_controller` 依赖 `drone_dynamics`，但 `arm_length`、`k_F`、`k_M` 和 RPM 范围必须与动力学配置保持一致；
 * Mixer 先在单电机推力空间反解，再转换为 rad/s 和 RPM。当前采用逐电机限幅，饱和后的实际 Wrench 可能不再等于请求值，后续控制器必须处理 `saturated` 标志。
@@ -169,6 +172,10 @@
 * 精确 180° 姿态误差在 `|w|<=epsilon` 时，以误差向量绝对值最大分量的符号确定四元数整体符号，保证 `q` 和 `-q` 得到相同力矩；
 * 高度控制器输入的 z 和 vz 都在 map/ENU 世界系。Odom 的 pose.position 可直接使用，但 twist.linear 在 base_link 中，未来接入时必须先通过 `orientation_body_to_world * velocity_body` 转换为世界系速度；
 * 高度控制律为 `az_cmd=Kp*(z_des-z)+Kd*(vz_des-vz)+az_ff`，再计算 `T=m*(g+az_cmd)/cos_tilt`。速度和前馈项使用加号，保证当前向上过快会减推力、正向上加速度前馈会增推力。
+* `HoverController` 是不依赖 ROS2 的薄组合层，只按高度→姿态→Mixer 顺序调用现有组件；任一级无效则最终零 RPM，任一级饱和则总饱和，各级标志单独保留；
+* altitude-hover 模式只支持空 frame 或 `map` 目标，只读取 z 和目标四元数中的 yaw，并强制期望 roll/pitch 为零；x/y 明确留给后续位置控制；
+* Odom 线速度先执行 `velocity_world=orientation_body_to_world*velocity_body`，再取世界系 z；不能直接使用机体系 `twist.linear.z`。
+* 当前运行调参基线：高度 `Kp=3.0`、`Kd=3.5`；yaw `Kp=1.0`、`Kd=0.40`、`max_torque_yaw=0.20 N·m`。高度阻尼约取简化竖直模型临界阻尼 `2*sqrt(Kp*m)=3.46` 附近；yaw 调参由用户 RViz2 人工验收确认。
 
 ### 动力学参数基线
 
@@ -288,7 +295,7 @@ position_controller_node
 /drone/motor_rpm_cmd
 ```
 
-当前仅创建电机 RPM 发布器，尚未发布控制指令。
+控制循环默认 100 Hz。收到有效 `map` 目标后发布高度/姿态闭环 RPM；未收到目标、Odom 缺失或超过 0.2 s、目标 frame/四元数非法或算法无效时主动发布四电机零 RPM。当前只使用目标 z 和 yaw，忽略 x/y。
 
 ### 可视化节点
 
@@ -745,6 +752,39 @@ colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 验证边界：三个控制算法库均未接入 ROS2 节点，没有发布 RPM；没有修改 `drone_dynamics`，没有实现自动起飞、闭环悬停或 x/y 位置控制。
 
+### 2026-07-13：首个高度/姿态闭环与 1.5 m 悬停
+
+实现内容：
+
+* 新增纯算法 `HoverController`，依次调用 AltitudeController、AttitudeController 和 MotorMixer，不重复实现内部公式；任一级 `valid=false` 最终返回四电机零 RPM，饱和总标志为三级 OR，并保留 `altitude_saturated`、`attitude_saturated`、`mixer_saturated`；
+* 新增纯转换辅助函数，验证水平和倾斜姿态下 `velocity_world=orientation_body_to_world*velocity_body` 后取世界系 vz，以及从目标四元数提取 yaw 并构造 roll=pitch=0 的水平目标姿态；
+* 删除只保存 ROS 消息且职责重复的旧 `PositionController` 和 `controller_algorithms` target；节点直接保存最新 Goal/Odom 并调用 HoverController；
+* 新增 `controller.yaml`，控制频率 100 Hz、Odom 超时 0.2 s；质量、重力、机臂、推力/反扭矩系数和 RPM 范围与 `dynamics.yaml` 一致；
+* `basic_sim.launch.py` 已向控制节点加载 controller.yaml。无目标、无 Odom、Odom 超时、不支持的 frame、非法四元数或无效算法结果均主动发布零 RPM并使用节流日志；
+* 当前 Goal 只支持空 frame（按 map）或 `map`，只使用 z 和 yaw，明确忽略 x/y。
+
+单元测试：控制器 package 的 Mixer 11 项、姿态 11 项、高度 13 项、Hover/转换 14 项全部通过；工作区汇总 `65 tests, 0 errors, 0 failures, 0 skipped`。定向构建 `drone_controller + drone_bringup` 成功，四 package 完整构建成功。
+
+实际运行：
+
+1. 启动 `basic_sim.launch.py use_rviz:=false` 且不发布目标：`/drone/motor_rpm_cmd` 四电机均为 0，Odom `z=0`，通过；运行时 RPM Topic 只有控制节点一个 publisher；
+2. 发布 `map` 中 `z=1.5 m`、单位姿态目标：初始推力 `14.807 N`、四电机约 `13293.9 RPM`，无人机从地面起飞；约 2 s 时 `z=1.51945 m`、`vz=-0.00729 m/s`；约 5 s 时 `z=1.49999944 m`、`vz=5.71e-7 m/s`；约 10 s 时 `z=1.500000000003 m`、`vz=2.71e-13 m/s`，四电机约 `10818.948 RPM`，姿态为单位四元数，稳定悬停通过；
+3. 发布不支持的 `odom` frame 目标：控制节点日志报告拒绝并发布四电机零 RPM，无人机回到地面，安全行为通过。
+
+结论：首个自动起飞和高度/姿态闭环已实际运行通过，稳态高度误差和 |vz| 均显著小于 0.10 的初步标准，未出现 NaN/Inf 或持续发散。本次无界面运行，未把 RViz 人工视觉效果记为已确认。
+
+限制：没有 x/y 位置控制、积分器、轨迹、地图、避障或复杂反饱和；控制节点存活时会主动发安全零 RPM，但其进程完全崩溃后动力学仍缺少命令超时保护。
+
+### 2026-07-13：yaw 与高度闭环参数调优
+
+用户人工验收反馈：原高度参数 `Kp=4.0,Kd=3.0` 在 0→1.5 m、1.5→2 m、2→1.5 m 时均能到达并稳定，但接近目标较快且有小幅越界回弹；原 yaw 参数 `Kp=2.0,Kd=0.10,max_torque=0.5` 在 90° 目标附近持续摇摆。
+
+yaw 复现诊断：角速度实测在约 `-5.71～+4.30 rad/s` 间反向，CW/CCW 电机组约在 `[8560,12693,8560,12693]` 与相反组合间切换，控制器持续饱和。按 `Izz=0.04` 的阻尼估算调为 `Kp=1.0,Kd=0.40,max_torque=0.20 N·m`；用户随后在 RViz2 中确认转向能够快速接近目标且基本无超调。
+
+高度调优：运行参数和纯算法默认值同步改为 `Kp=3.0,Kd=3.5`。降低 Kp 使 1.5 m 初始加速度请求由饱和的 `5.0` 降至 `4.5 m/s²`，Kd 接近简化模型临界阻尼 `2*sqrt(3)=3.46`。控制器和 bringup 构建成功，65 项工作区测试保持 `0 errors,0 failures`。
+
+为避免用户正在运行的 ROS domain 0 节点干扰，最终复测使用隔离的 `ROS_DOMAIN_ID=42`。0→1.5 m 的约 1 s 采样高度为 `0.710,1.268,1.437,1.483,1.495,1.499,1.500 m`，未观察到越过目标再回弹；8 s 时 `z=1.499976 m`、`vz=9.32e-6 m/s`、四电机约 `10818.946 RPM`，全程日志 `saturated=false`。该复测为无界面数值验证；新高度参数的 RViz2 视觉感受仍可由用户继续确认。
+
 后续每次测试应使用以下格式：
 
 ```text
@@ -786,7 +826,7 @@ source install/setup.bash
 ros2 launch drone_bringup basic_sim.launch.py
 ```
 
-当前 Launch 启动已实现的动力学节点和控制器骨架。动力学节点会产生状态，控制器仍不产生有效 RPM 输出。
+当前 Launch 启动动力学节点和 altitude-hover 控制节点。控制器在收到有效目标前发布零 RPM，收到目标后产生闭环 RPM。
 
 无界面启动：
 
@@ -835,11 +875,11 @@ ros2 run tf2_ros tf2_echo map base_link
 
 当前优先级：
 
-1. 提交已验证的动力学、简化地面、URDF、RViz、Mixer、姿态/高度控制器和文档变更；
-2. 增加长时间、高角速度和最大 RPM 数值稳定性测试；
-3. 设计纯算法组合接口，明确高度推力、姿态力矩和 Mixer 饱和标志的传播方式；
-4. 控制算法组合稳定后，再接入 ROS2 控制器节点；
-5. 最后进行悬停闭环测试，暂不进入地图或规划。
+1. 提交已验证的动力学、可视化、控制算法、首个闭环和文档变更；
+2. 增加长时间悬停、目标高度切换和姿态扰动稳定性测试；
+3. 设计并独立测试 x/y 位置控制，输出水平姿态目标；
+4. 为控制器退出场景设计动力学命令超时保护；
+5. 位置闭环稳定后再进入多目标点，暂不进入地图或规划。
 
 在以上任务完成并验证前，不开始完整位置控制器、地图或避障模块。
 

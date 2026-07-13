@@ -1,6 +1,7 @@
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <limits>
 
 #include <gtest/gtest.h>
 
@@ -47,6 +48,154 @@ TEST(QuadrotorModelTest, ZeroRpmFreeFall)
   EXPECT_NEAR(state.velocity_world.z(), -model.parameters().gravity, 1.0e-10);
   EXPECT_NEAR(state.angular_velocity_body.norm(), 0.0, 1.0e-12);
   EXPECT_NEAR(state.orientation_body_to_world.norm(), 1.0, 1.0e-12);
+  EXPECT_NEAR(model.specific_force_body().norm(), 0.0, 1.0e-10);
+}
+
+TEST(QuadrotorModelTest, GroundContactKeepsZeroRpmVehicleStationary)
+{
+  QuadrotorParameters parameters = fast_motor_parameters();
+  parameters.enable_ground_contact = true;
+  parameters.ground_z = 0.0;
+  QuadrotorModel model(parameters);
+
+  EXPECT_DOUBLE_EQ(model.state().position_world.z(), parameters.ground_z);
+  EXPECT_NEAR(model.linear_acceleration_world().norm(), 0.0, 1.0e-12);
+
+  constexpr double dt = 0.01;
+  for (int step = 0; step < 100; ++step) {
+    model.step(dt);
+    EXPECT_GE(model.state().position_world.z(), parameters.ground_z);
+  }
+
+  const QuadrotorState & state = model.state();
+  std::cout << "ground_static: z=" << state.position_world.z()
+            << " vz=" << state.velocity_world.z()
+            << " az=" << model.linear_acceleration_world().z()
+            << " imu_specific_force_z=" << model.specific_force_body().z() << '\n';
+
+  EXPECT_NEAR(state.position_world.z(), parameters.ground_z, 1.0e-12);
+  EXPECT_NEAR(state.velocity_world.z(), 0.0, 1.0e-12);
+  EXPECT_NEAR(state.angular_velocity_body.norm(), 0.0, 1.0e-12);
+  EXPECT_NEAR(state.orientation_body_to_world.norm(), 1.0, 1.0e-12);
+  EXPECT_NEAR(model.linear_acceleration_world().z(), 0.0, 1.0e-12);
+  EXPECT_NEAR(model.specific_force_body().z(), parameters.gravity, 1.0e-10);
+}
+
+TEST(QuadrotorModelTest, GroundContactAllowsTakeoffAboveHoverRpm)
+{
+  QuadrotorParameters parameters;
+  parameters.enable_ground_contact = true;
+  parameters.ground_z = 0.0;
+  QuadrotorModel model(parameters);
+  model.set_motor_rpm_command({12000.0, 12000.0, 12000.0, 12000.0});
+
+  constexpr double dt = 0.005;
+  for (int step = 0; step < 400; ++step) {
+    model.step(dt);
+    EXPECT_GE(model.state().position_world.z(), parameters.ground_z);
+  }
+
+  const QuadrotorState & state = model.state();
+  std::cout << "ground_takeoff: z=" << state.position_world.z()
+            << " vz=" << state.velocity_world.z()
+            << " az=" << model.linear_acceleration_world().z() << '\n';
+
+  EXPECT_GT(state.position_world.z(), parameters.ground_z);
+  EXPECT_GT(state.velocity_world.z(), 0.0);
+}
+
+TEST(QuadrotorModelTest, AirborneVehicleFallsAndStopsAtConfiguredGround)
+{
+  QuadrotorParameters parameters;
+  parameters.enable_ground_contact = true;
+  parameters.ground_z = 0.35;
+  parameters.motor_time_constant = 0.01;
+  QuadrotorModel model(parameters);
+
+  // 先通过模型自身推力起飞，避免为测试暴露可任意修改内部状态的接口。
+  model.set_motor_rpm_command({12000.0, 12000.0, 12000.0, 12000.0});
+  constexpr double dt = 0.01;
+  for (int step = 0; step < 100; ++step) {
+    model.step(dt);
+  }
+  ASSERT_GT(model.state().position_world.z(), parameters.ground_z);
+
+  // 关闭电机后自由下落；每一步都检查没有穿透配置的非零地面高度。
+  model.set_motor_rpm_command({0.0, 0.0, 0.0, 0.0});
+  for (int step = 0; step < 800; ++step) {
+    model.step(dt);
+    EXPECT_GE(model.state().position_world.z(), parameters.ground_z);
+  }
+
+  const QuadrotorState & state = model.state();
+  std::cout << "ground_landing: ground_z=" << parameters.ground_z
+            << " final_z=" << state.position_world.z()
+            << " final_vz=" << state.velocity_world.z()
+            << " final_az=" << model.linear_acceleration_world().z() << '\n';
+
+  EXPECT_NEAR(state.position_world.z(), parameters.ground_z, 1.0e-12);
+  EXPECT_NEAR(state.velocity_world.z(), 0.0, 1.0e-12);
+  EXPECT_NEAR(model.linear_acceleration_world().z(), 0.0, 1.0e-12);
+  EXPECT_NEAR(model.specific_force_body().z(), parameters.gravity, 1.0e-10);
+}
+
+TEST(QuadrotorModelTest, GroundContactDoesNotClearHorizontalVelocity)
+{
+  QuadrotorParameters parameters;
+  parameters.enable_ground_contact = true;
+  parameters.ground_z = 0.0;
+  parameters.motor_time_constant = 0.01;
+  QuadrotorModel model(parameters);
+  constexpr double dt = 0.01;
+
+  // 对称推力先让无人机离地。
+  model.set_motor_rpm_command({12000.0, 12000.0, 12000.0, 12000.0});
+  for (int step = 0; step < 100; ++step) {
+    model.step(dt);
+  }
+  ASSERT_GT(model.state().position_world.z(), parameters.ground_z);
+
+  // 后侧电机较高，短暂正 pitch 后产生非零水平速度。
+  model.set_motor_rpm_command({9000.0, 12000.0, 12000.0, 9000.0});
+  for (int step = 0; step < 20; ++step) {
+    model.step(dt);
+  }
+  ASSERT_GT(std::abs(model.state().velocity_world.x()), 1.0e-3);
+
+  // 零 RPM 下落，记录第一次接触地面时的水平速度。
+  model.set_motor_rpm_command({0.0, 0.0, 0.0, 0.0});
+  Eigen::Vector2d horizontal_velocity_at_landing = Eigen::Vector2d::Zero();
+  bool landed = false;
+  for (int step = 0; step < 1000; ++step) {
+    model.step(dt);
+    if (model.state().position_world.z() == parameters.ground_z &&
+      model.state().velocity_world.z() == 0.0)
+    {
+      horizontal_velocity_at_landing = model.state().velocity_world.head<2>();
+      landed = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(landed);
+  ASSERT_GT(horizontal_velocity_at_landing.norm(), 1.0e-3);
+
+  // 在地面继续运行；无摩擦地面不得改变 x/y 速度。
+  for (int step = 0; step < 100; ++step) {
+    model.step(dt);
+  }
+
+  std::cout << "ground_horizontal_velocity: landing="
+            << horizontal_velocity_at_landing.transpose()
+            << " final=" << model.state().velocity_world.head<2>().transpose() << '\n';
+  EXPECT_TRUE(model.state().velocity_world.head<2>().isApprox(
+    horizontal_velocity_at_landing, 1.0e-10));
+}
+
+TEST(QuadrotorModelTest, NonFiniteGroundHeightIsRejected)
+{
+  QuadrotorParameters parameters;
+  parameters.ground_z = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_THROW(QuadrotorModel model(parameters), std::invalid_argument);
 }
 
 TEST(QuadrotorModelTest, SymmetricThrustHasZeroTorqueAndExpectedVerticalAcceleration)

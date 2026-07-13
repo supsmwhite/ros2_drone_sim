@@ -39,6 +39,13 @@ struct QuadrotorParameters
 
   // 重力加速度大小 g，单位 m/s^2；重力向量在 ENU 世界系中为 [0,0,-g]。
   double gravity{9.80665};
+
+  // 是否启用只约束世界系 z 方向的简化刚性地面。
+  // 默认关闭，保证纯模型默认仍可执行不受地面影响的自由落体测试。
+  bool enable_ground_contact{false};
+
+  // 水平地面在世界坐标系中的 z 高度，单位 m。
+  double ground_z{0.0};
 };
 
 // 模型积分过程中需要持续保存的完整状态。
@@ -90,7 +97,8 @@ public:
   // 保存并检查模型参数，然后把所有状态重置为初始值。
   explicit QuadrotorModel(const QuadrotorParameters & parameters);
 
-  // 恢复到位置/速度/角速度为 0、单位姿态、零电机转速的初始状态。
+  // 恢复到速度/角速度为 0、单位姿态、零电机转速的初始状态；地面开启时
+  // 初始 z 使用 ground_z，关闭时初始位置为世界原点。
   void reset();
 
   // 设置四电机外部 RPM 指令。函数内部负责非法值处理、上下限和单位转换；
@@ -121,6 +129,9 @@ private:
 
   // 根据实际电机角速度计算当前机体系合推力及三轴合力矩。
   BodyWrench calculate_body_wrench() const;
+
+  // 当简化地面启用时，只限制世界系 z 位置和向下速度。
+  void apply_ground_contact_constraint();
 
   // 构造后保持不变的物理参数。
   QuadrotorParameters parameters_;

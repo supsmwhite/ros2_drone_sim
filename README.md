@@ -57,11 +57,14 @@
 * 生成四电机 RPM 自定义消息；
 * 实现并独立验证四旋翼刚体动力学、电机一阶响应和 X 型力矩分配；
 * 动力学节点可发布 Odom、IMU、Path 和 `map -> base_link` TF；
+* 正常 Launch 启用可配置的简化水平地面，启动时不会继续落入负 z；
 * 创建与 X 型布局一致的基础四旋翼 Xacro 模型；
 * RViz2 可显示无人机模型、TF、轨迹、目标点、坐标轴和网格；
 * 使用基础 Launch 文件启动动力学、控制器骨架、robot_state_publisher 和 RViz2。
 
 动力学模块和基础 RViz2 可视化已完成第一阶段独立测试。位置与姿态控制律及控制器 RPM 指令生成尚未实现。
+
+当前地面模型只约束世界系竖直位置和向下速度，不包含反弹、摩擦、起落架弹性、姿态约束或复杂碰撞。
 
 ## 项目结构
 
@@ -128,6 +131,8 @@ ros2 launch drone_bringup basic_sim.launch.py
 ```
 
 该 Launch 当前启动已实现的 `quadrotor_dynamics_node` 和仍为骨架的 `position_controller_node`，不代表控制器功能已经完成。
+
+正常 Launch 默认设置 `enable_ground_contact=true`、`ground_z=0.0`：零 RPM 时模型停在地面，推力超过重力后可以正常离地。纯 `QuadrotorModel` 的地面约束默认关闭，以保留自由落体测试行为。
 
 默认同时启动 robot_state_publisher 和 RViz2。无界面运行可使用：
 

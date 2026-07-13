@@ -17,6 +17,11 @@ quadrotor_dynamics_node:
     max_rpm: 20000.0
 
     gravity: 9.80665
+
+    # Simplified rigid horizontal ground used by the normal Launch workflow.
+    enable_ground_contact: true
+    ground_z: 0.0
+
     simulation_frequency: 200.0
 
     # Odom, IMU, and TF publish every simulation step. Path publishes at 20 Hz.

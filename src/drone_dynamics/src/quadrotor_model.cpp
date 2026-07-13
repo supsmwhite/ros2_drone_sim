@@ -35,18 +35,23 @@ QuadrotorModel::QuadrotorModel(const QuadrotorParameters & parameters)
 }
 
 // 输入：无。
-// 读取：parameters_ 中的重力大小。
+// 读取：parameters_ 中的重力、地面开关和地面高度。
 // 计算：无动力学积分。
 // 修改：清零位置、速度、角速度、电机指令和机体力矩；姿态恢复为单位四元数。
-// 物理意义：无人机回到世界原点、机体与世界系对齐、电机停转的初始状态。
+// 物理意义：无人机回到初始位置、机体与世界系对齐、电机停转的初始状态。
 void QuadrotorModel::reset()
 {
   state_ = QuadrotorState{};
+  if (parameters_.enable_ground_contact) {
+    state_.position_world.z() = parameters_.ground_z;
+  }
   commanded_motor_angular_velocity_rad_s_.fill(0.0);
   body_wrench_ = BodyWrench{};
 
-  // 此时旋翼没有推力，所以初始世界系线加速度只有向下的重力。
-  linear_acceleration_world_ = Eigen::Vector3d(0.0, 0.0, -parameters_.gravity);
+  // 地面关闭时，零推力初始加速度为自由落体；地面开启时，地面支持力
+  // 与重力平衡，静止状态的实际世界系加速度为 0。
+  linear_acceleration_world_ = parameters_.enable_ground_contact ?
+    Eigen::Vector3d::Zero() : Eigen::Vector3d(0.0, 0.0, -parameters_.gravity);
 }
 
 // 输入：四个电机目标转速，单位 RPM，顺序固定为 M1、M2、M3、M4。
@@ -71,7 +76,7 @@ void QuadrotorModel::set_motor_rpm_command(const MotorValues & motor_rpm)
 
 // 输入：本次仿真向前推进的时间 dt，单位 s。
 // 读取：模型参数、当前完整状态、四电机目标转速。
-// 计算：电机响应、推力和力矩、线加速度、角加速度以及姿态增量。
+// 计算：电机响应、推力和力矩、自由加速度、地面约束、实际加速度和姿态增量。
 // 修改：电机实际转速、位置、速度、姿态、角速度和最近一次力/加速度结果。
 // 物理意义：把四旋翼从“当前时刻状态”推进到“dt 秒后的状态”。
 void QuadrotorModel::step(const double dt)
@@ -86,6 +91,10 @@ void QuadrotorModel::step(const double dt)
 
   // 第 3 步：用四个实际转速计算总推力以及 roll、pitch、yaw 三轴力矩。
   body_wrench_ = calculate_body_wrench();
+
+  // 保存积分前速度。地面接触可能改变积分得到的竖直速度，最后要根据
+  // 约束前后的真实速度变化回算实际加速度。
+  const Eigen::Vector3d previous_velocity_world = state_.velocity_world;
 
   // 第 4 步：机体总推力原本沿 base_link 的 +z。
   const Eigen::Vector3d thrust_body(0.0, 0.0, body_wrench_.thrust);
@@ -124,6 +133,14 @@ void QuadrotorModel::step(const double dt)
 
   // 第 11 步：消除浮点累计误差，保证姿态四元数长度始终为 1。
   state_.orientation_body_to_world.normalize();
+
+  // 第 12 步：在模型状态内部施加简化地面约束，不在消息发布时伪造位置。
+  apply_ground_contact_constraint();
+
+  // 第 13 步：用约束后的实际速度变化回算世界系实际加速度。
+  // 自由飞行时它等于前面计算的刚体加速度；地面静止时它变为 0；
+  // 落地瞬间则包含停止向下速度所对应的接触冲量效果。
+  linear_acceleration_world_ = (state_.velocity_world - previous_velocity_world) / dt;
 }
 
 // 输入：无。读取：parameters_。修改：无。
@@ -155,13 +172,16 @@ const Eigen::Vector3d & QuadrotorModel::linear_acceleration_world() const
 }
 
 // 输入：无。
-// 读取：最近一次总推力和无人机质量。
-// 计算：总推力除以质量，方向为机体系 +z。
+// 读取：世界系实际加速度、重力、当前姿态。
+// 计算：从实际加速度中减去重力，再旋转回机体系。
 // 修改：无。
-// 物理意义：返回理想 IMU 加速度计测到的机体系比力；自由落体时为 0。
+// 物理意义：返回理想 IMU 加速度计测到的机体系比力；自由落体时为 0，
+// 静止在水平地面时约为机体系向上的 g。
 Eigen::Vector3d QuadrotorModel::specific_force_body() const
 {
-  return Eigen::Vector3d(0.0, 0.0, body_wrench_.thrust / parameters_.mass);
+  const Eigen::Vector3d gravity_world(0.0, 0.0, -parameters_.gravity);
+  return state_.orientation_body_to_world.conjugate() *
+         (linear_acceleration_world_ - gravity_world);
 }
 
 // 输入：单个电机转速，单位 RPM。
@@ -207,6 +227,9 @@ void QuadrotorModel::validate_parameters() const
   }
   if (!is_positive_finite(parameters_.gravity)) {
     throw std::invalid_argument("gravity must be finite and greater than zero");
+  }
+  if (!std::isfinite(parameters_.ground_z)) {
+    throw std::invalid_argument("ground_z must be finite");
   }
 }
 
@@ -263,6 +286,29 @@ BodyWrench QuadrotorModel::calculate_body_wrench() const
   wrench.torque.z() =
     -reaction_torque[0] + reaction_torque[1] - reaction_torque[2] + reaction_torque[3];
   return wrench;
+}
+
+// 输入：无。
+// 读取：地面开关、ground_z，以及积分后的世界系位置和速度。
+// 计算：判断质心是否在一个积分步内穿过了水平地面。
+// 修改：只夹紧 position_world.z，并只清除负的 velocity_world.z。
+// 物理意义：模拟无反弹、无摩擦、无弹性的简化刚性水平地面。
+void QuadrotorModel::apply_ground_contact_constraint()
+{
+  if (!parameters_.enable_ground_contact) {
+    return;
+  }
+
+  // 正推力足够离地时，积分后的 z 会大于 ground_z，不进入该分支。
+  // 已在空中的无人机也继续沿用原有自由动力学，直到真正穿过地面。
+  if (state_.position_world.z() < parameters_.ground_z) {
+    state_.position_world.z() = parameters_.ground_z;
+
+    // 只移除指向地面内部的速度。向上速度不得清零，否则会阻止起飞。
+    if (state_.velocity_world.z() < 0.0) {
+      state_.velocity_world.z() = 0.0;
+    }
+  }
 }
 
 }  // namespace drone_dynamics

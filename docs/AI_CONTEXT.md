@@ -49,7 +49,8 @@
 2. 零 RPM、对称推力、roll、pitch、yaw 和电机限幅测试已通过；
 3. Odom、IMU、Path 和 `map -> base_link` TF 已接入并完成运行检查；
 4. 基础 URDF、robot_state_publisher 和 RViz2 显示已实现并完成运行检查；
-5. 下一步进行更长时间的数值稳定性测试，并在人工确认可视化后进入 Mixer 与控制器。
+5. 可配置的简化水平地面约束已实现并完成单元/运行验证；
+6. 下一步进行更长时间的数值稳定性测试，并在人工确认可视化后进入 Mixer 与控制器。
 
 ### 当前阶段完成标准
 
@@ -87,6 +88,8 @@
 * 已创建与 0.20 m X 型机臂约定一致的基础 Xacro 模型，并由 robot_state_publisher 发布 `base_link` 到固定子链接；
 * RViz2 已实际启动并显示 RobotModel、TF、Path、Pose、map/base_link Axes 和 Grid；
 * 12000 RPM 竖直运动时，模型状态与 Path 由同一 `map -> base_link`/Odom 状态驱动；短时 roll 输入后四元数和 base_link 坐标轴均发生对应变化。
+* `QuadrotorModel` 已实现可选的简化水平地面约束；正常 Launch 在 `ground_z=0` 启用，零 RPM 保持地面静止，高推力可正常离地；
+* 地面关闭自由落体、地面静止、起飞、空中落地及水平速度不受摩擦影响的测试均已通过；地面静止时世界系实际加速度为 0，IMU 机体系比力为 +g。
 
 详细命令、结果和验证边界见“验证记录”。以上工程初始化结果不代表动力学、控制器或可视化功能已经实现。
 
@@ -108,7 +111,7 @@
 
 * 基础 RViz2 显示已验证；不同屏幕尺寸下的默认视角、模型大小和配色仍建议由用户人工确认并按演示需要微调；
 * 尚未实现控制律和控制器电机指令发布；
-* 当前模型没有地面碰撞，因此零 RPM 会持续落到 `z < 0`；
+* 当前只有质心 z 方向的简化刚性地面约束，没有反弹、摩擦、起落架弹性、姿态约束或复杂碰撞形状；
 * 当前模型没有空气阻力、旋翼陀螺效应或传感器噪声，持续不对称力矩会使角速度不断增加；
 * 已验证短时固定步长响应，尚未验证长时间、高角速度或最大 RPM 下的数值稳定性；
 * 节点保持最后一次 RPM 命令，尚未实现命令超时归零机制；
@@ -150,6 +153,7 @@
 * RViz2 仅负责显示，实际运动由动力学节点计算。
 * `map -> base_link` 只由 `quadrotor_dynamics_node` 动态发布；robot_state_publisher 的 URDF 根链接是 `base_link`，只发布到固定子链接的静态 TF；
 * `/drone/goal` 统一使用 `geometry_msgs/msg/PoseStamped`，供控制器骨架和 RViz Pose 显示共同订阅。
+* 地面约束集中在 `QuadrotorModel`，ROS2 消息发布层不修改模型位置；核心模型默认关闭地面，正常 Launch 通过 YAML 默认开启。
 
 ### 动力学参数基线
 
@@ -163,6 +167,8 @@
 * 电机时间常数：`0.05 s`；
 * RPM 范围：`0～20000 RPM`；
 * 重力加速度：`9.80665 m/s²`；
+* 核心模型地面约束默认值：`enable_ground_contact=false`、`ground_z=0.0 m`；
+* 正常 Launch 参数：`enable_ground_contact=true`、`ground_z=0.0 m`；
 * 仿真频率：`200 Hz`，固定步长 `dt=0.005 s`；
 * Path 每 10 个仿真步发布一次，即名义 `20 Hz`，最多保留 2000 个点。
 
@@ -623,9 +629,50 @@ ros2 run tf2_ros tf2_echo map base_link
 
 人工确认项：不同显示器和窗口尺寸下，建议用户确认默认视距 `3.8 m`、模型配色、红色机头辨识度及长轨迹场景是否符合最终演示偏好；这些属于外观微调，不影响已验证的 TF 和消息链路。
 
-验证边界：RViz2 只显示状态，不参与动力学；控制器、Mixer、地图、规划和避障仍未实现；开环动力学没有地面碰撞和角阻尼，长时间零/不对称 RPM 会让模型离开默认 map 视野，测试时应重启 Launch 或调整 RViz Target Frame。
+验证边界：RViz2 只显示状态，不参与动力学；控制器、Mixer、地图、规划和避障仍未实现；持续不对称 RPM 且没有角阻尼时，模型会持续旋转并可能离开默认 map 视野，测试时应重启 Launch 或调整 RViz Target Frame。
 
 是否通过：本阶段三个验收重点——模型显示、TF 驱动位置/姿态、轨迹与目标点显示——均已实际通过。
+
+### 2026-07-13：简化地面接触与 SetGoal 修正
+
+实现范围：
+
+* `QuadrotorParameters` 新增 `enable_ground_contact` 和 `ground_z`；核心模型默认分别为 `false`、`0.0 m`，正常 Launch 的 YAML 配置为 `true`、`0.0 m`；
+* 地面约束集中在 `QuadrotorModel::apply_ground_contact_constraint()`，积分后只夹紧低于地面的 `position_world.z`，只清除负的 `velocity_world.z`；
+* 正向 z 速度和正向离地加速度不被清零；x/y 位置和速度不受地面约束影响；
+* `reset()` 在地面启用时把初始 z 设置为 `ground_z`，否则保持世界原点；
+* 约束后用实际速度变化除以 dt 回算 `linear_acceleration_world_`；IMU 比力统一由实际世界系加速度减去重力后旋回机体系计算；
+* RViz SetGoal 工具 Topic 从 `/goal_pose` 修正为 `/drone/goal`，类型保持 `geometry_msgs/msg/PoseStamped`。
+
+单元测试：
+
+```bash
+colcon test --packages-select drone_dynamics --event-handlers console_direct+
+colcon test-result --verbose
+```
+
+结果为 11 个 GTest 全部通过，`0 errors, 0 failures`：
+
+* 地面关闭、零 RPM 1 s：`z=-4.95236 m`、`vz=-9.80665 m/s`、IMU 比力 0，原自由落体行为保持；
+* 地面开启、零 RPM 1 s：`z=0`、`vz=0`、`az=0`、IMU z 比力 `9.80665 m/s²`；
+* 地面开启、12000 RPM 2 s：`z=3.81592 m`、`vz=4.14397 m/s`，可以离地；
+* 从空中零 RPM 落到 `ground_z=0.35 m`：最终 `z=0.35`、`vz=0`、`az=0`，整个过程中未穿透；
+* 带水平速度落地：水平速度在接触时和地面继续运行后都为 `0.221007 m/s`，确认没有错误清零 x/y 速度；
+* 非有限 `ground_z`（NaN）会在模型参数校验阶段被拒绝；
+* 原有对称推力、roll、pitch、yaw、电机响应与限幅测试继续通过。
+
+正常 Launch 运行验证：
+
+1. 无 RPM 等待超过 3 s：参数读取为 `enable_ground_contact=true`、`ground_z=0.0`；Odom `z=0,vz=0`，IMU z=`9.80665`；实际 RViz 中模型保持在地面，通过；
+2. 持续 `10818.95 RPM` 3 s：`z=0.000171 m`、`vz=3.67e-05 m/s`、IMU z=`9.806653`；电机响应阶段未下沉，稳态保持在地面附近，通过；
+3. 从地面持续 `12000 RPM`：模型正常离地，采样时 Odom `z=161.57 m,vz=29.12 m/s`，Path 和 `map -> base_link` TF 同步上升，通过。持续开环推力且没有空气阻力，因此高度和速度会继续增长；
+4. 运行中的 `/rviz2` 节点实际创建 `/drone/goal` 的 `PoseStamped` publisher；控制器骨架和 RViz Goal Pose 各有一个同类型 subscriber，安装后的 RViz 配置不再包含 `/goal_pose`。
+
+人工确认项：SetGoal 发布端点和类型已经实际确认，用户仍需在 RViz 中点击 SetGoal 并选择一个具体位置，再用 `ros2 topic echo /drone/goal --once` 确认所选坐标符合预期；本次未自动化鼠标点击，因此不把具体点击坐标写成已验证。
+
+限制：当前是质心 z 方向的无反弹、无摩擦刚性地面，不包含碰撞几何、起落架弹性、地面姿态约束或水平阻力。倾斜机体在地面上仍可转动，符合本阶段明确的简化边界。
+
+是否通过：地面约束、加速度/IMU 一致性、起飞、落地、不清除水平速度及 SetGoal Topic 修正均通过代码和运行检查；RViz 鼠标选择的具体目标坐标待用户人工操作确认。
 
 后续每次测试应使用以下格式：
 
@@ -711,7 +758,7 @@ ros2 run tf2_ros tf2_echo map base_link
 当前优先级：
 
 1. 用户人工确认 RViz 默认视角、模型配色和机头辨识度；
-2. 提交已验证的动力学注释、URDF、RViz、Launch 和文档变更；
+2. 提交已验证的动力学注释、简化地面、URDF、RViz、Launch 和文档变更；
 3. 增加长时间、高角速度和最大 RPM 数值稳定性测试；
 4. 开始推导并实现与固定电机约定一致的 Mixer；
 5. Mixer 独立验证后再实现姿态与高度控制器。

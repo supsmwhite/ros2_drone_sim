@@ -86,8 +86,10 @@ public:
     const double hover_rpm = hover_angular_velocity * 30.0 / 3.14159265358979323846;
     RCLCPP_INFO(
       get_logger(),
-      "Dynamics started at %.1f Hz; nominal steady-state hover RPM is %.1f",
-      simulation_frequency, hover_rpm);
+      "Dynamics started at %.1f Hz; nominal steady-state hover RPM is %.1f; "
+      "ground contact is %s at z=%.3f m",
+      simulation_frequency, hover_rpm,
+      parameters.enable_ground_contact ? "enabled" : "disabled", parameters.ground_z);
   }
 
 private:
@@ -115,6 +117,9 @@ private:
     parameters.min_rpm = declare_parameter<double>("min_rpm", parameters.min_rpm);
     parameters.max_rpm = declare_parameter<double>("max_rpm", parameters.max_rpm);
     parameters.gravity = declare_parameter<double>("gravity", parameters.gravity);
+    parameters.enable_ground_contact =
+      declare_parameter<bool>("enable_ground_contact", parameters.enable_ground_contact);
+    parameters.ground_z = declare_parameter<double>("ground_z", parameters.ground_z);
     return parameters;
   }
 

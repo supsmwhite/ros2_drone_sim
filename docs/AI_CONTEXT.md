@@ -51,7 +51,8 @@
 4. 基础 URDF、robot_state_publisher 和 RViz2 显示已实现并完成运行检查；
 5. 可配置的简化水平地面约束已实现并完成单元/运行验证；
 6. 与当前动力学符号严格一致的 Motor Mixer 已实现并通过独立单元测试，尚未接入 ROS2 节点；
-7. 下一步实现姿态与高度控制算法，并在独立测试后再接入控制器节点。
+7. 与动力学四元数和力矩符号一致的姿态/角速度控制器已实现并通过独立单元测试，尚未接入 ROS2 节点；
+8. 下一步独立设计高度控制器，在各算法稳定后再接入控制器节点。
 
 ### 当前阶段完成标准
 
@@ -92,7 +93,9 @@
 * `QuadrotorModel` 已实现可选的简化水平地面约束；正常 Launch 在 `ground_z=0` 启用，零 RPM 保持地面静止，高推力可正常离地；
 * 地面关闭自由落体、地面静止、起飞、空中落地及水平速度不受摩擦影响的测试均已通过；地面静止时世界系实际加速度为 0，IMU 机体系比力为 +g。
 * `MotorMixer` 已作为与 ROS2 无关的纯算法类实现，可将总推力和机体系 roll、pitch、yaw 力矩反解为固定顺序 `[M1,M2,M3,M4]` 的目标 RPM；
-* Mixer 的零输入、悬停推力、三轴单独力矩、混合指令往返、饱和、非有限输入和非法参数等 10 项 GTest 已全部通过；完整工作空间重新构建通过。
+* Mixer 的零输入、悬停推力、三轴单独力矩、混合指令往返、饱和、非有限/极大有限输入和非法参数等 11 项 GTest 已全部通过；完整工作空间重新构建通过。
+* `AttitudeController` 已作为与 ROS2 无关的纯算法类实现，输入期望/当前 body-to-world 四元数及机体系角速度，输出 base_link 中的 roll、pitch、yaw 力矩；
+* 姿态误差符号、角速度阻尼、四元数最短路径与归一化、逐轴力矩限幅、非法输入和非法参数等 10 项 GTest 已全部通过；Mixer 极大有限输入补丁测试也已通过。
 
 详细命令、结果和验证边界见“验证记录”。以上工程初始化结果不代表动力学、控制器或可视化功能已经实现。
 
@@ -113,7 +116,7 @@
 尚未确认的事项：
 
 * 基础 RViz2 显示已验证；不同屏幕尺寸下的默认视角、模型大小和配色仍建议由用户人工确认并按演示需要微调；
-* Mixer 尚未接入 `position_controller_node`；姿态、高度和位置控制律及控制器电机指令发布仍未实现；
+* Mixer 和姿态/角速度控制器均尚未接入 `position_controller_node`；高度、位置控制律及控制器电机指令发布仍未实现；
 * 当前只有质心 z 方向的简化刚性地面约束，没有反弹、摩擦、起落架弹性、姿态约束或复杂碰撞形状；
 * 当前模型没有空气阻力、旋翼陀螺效应或传感器噪声，持续不对称力矩会使角速度不断增加；
 * 已验证短时固定步长响应，尚未验证长时间、高角速度或最大 RPM 下的数值稳定性；
@@ -159,6 +162,8 @@
 * 地面约束集中在 `QuadrotorModel`，ROS2 消息发布层不修改模型位置；核心模型默认关闭地面，正常 Launch 通过 YAML 默认开启。
 * Motor Mixer 是 `drone_controller` 中不依赖 ROS2 的纯算法组件；其参数独立保存，不让 `drone_controller` 依赖 `drone_dynamics`，但 `arm_length`、`k_F`、`k_M` 和 RPM 范围必须与动力学配置保持一致；
 * Mixer 先在单电机推力空间反解，再转换为 rad/s 和 RPM。当前采用逐电机限幅，饱和后的实际 Wrench 可能不再等于请求值，后续控制器必须处理 `saturated` 标志。
+* 姿态四元数继续使用 `orientation_body_to_world`（base_link 向量旋转到 map）；姿态误差为 `q_current.conjugate()*q_desired`，若误差四元数 `w<0` 则整体反号以选择最短路径；
+* 姿态力矩使用 `Kp .* (2*q_error.vec) + Kd .* (omega_desired-omega_current)`。该阻尼写法保证当前正角速度在期望角速度为零时产生负力矩，与动力学 base_link 三轴正力矩约定一致。
 
 ### 动力学参数基线
 
@@ -704,6 +709,21 @@ colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 验证边界：只验证了纯算法控制分配；没有修改动力学代码，没有让 ROS2 节点调用 Mixer，也没有实现姿态 PID、高度控制、位置控制或闭环飞行。
 
+### 2026-07-13：姿态/角速度控制器独立实现与 Mixer 健壮性补丁
+
+实现内容：
+
+* `AttitudeController` 编译为独立库，输入期望/当前 `orientation_body_to_world` 四元数和期望/当前机体系角速度，输出 base_link 中 `[roll,pitch,yaw]` 力矩及 `valid`、`saturated`；
+* 有效非单位四元数会先稳定归一化，零范数或含 NaN/Inf 的四元数以及非有限角速度返回零力矩和 `valid=false`；
+* 使用 `q_error=q_current.conjugate()*q_desired`，并在 `q_error.w()<0` 时整体反号；姿态误差为 `2*q_error.vec()`；
+* 控制律为 `torque=Kp.*attitude_error+Kd.*(omega_desired-omega_current)`，逐轴限制到 `[-max_torque,+max_torque]`。这里使用加号是为了让正当前角速度产生负阻尼力矩；它等价于 `-Kd.*(omega_current-omega_desired)`；
+* 默认参数为 `Kp=[4,4,2]`、`Kd=[0.2,0.2,0.1]`、`max_torque=[1,1,0.5] N*m`；增益必须有限且非负，力矩上限必须有限且为正；
+* Mixer 补充 roll/pitch/yaw 中间项、四个电机推力、omega 和 RPM 的有限性检查；任何中间非有限结果安全返回四电机零 RPM、`valid=false`、`saturated=true`。
+
+实际结果：`drone_controller` 定向构建成功；Mixer 11 个 GTest 和姿态控制器 10 个 GTest 全部通过。工作区测试汇总为 `35 tests, 0 errors, 0 failures, 0 skipped`，随后四个 package 的完整工作空间构建成功。极大有限 Wrench（`numeric_limits<double>::max()`）会被识别为中间结果溢出并返回有限的四电机零 RPM。
+
+验证边界：姿态控制器与 Mixer 均未接入 `position_controller_node`，没有发布 RPM；没有修改 `drone_dynamics`，没有实现高度、位置或闭环飞行。
+
 后续每次测试应使用以下格式：
 
 ```text
@@ -794,9 +814,9 @@ ros2 run tf2_ros tf2_echo map base_link
 
 当前优先级：
 
-1. 提交已验证的动力学、简化地面、URDF、RViz、Mixer 和文档变更；
+1. 提交已验证的动力学、简化地面、URDF、RViz、Mixer、姿态控制器和文档变更；
 2. 增加长时间、高角速度和最大 RPM 数值稳定性测试；
-3. 独立设计并测试姿态控制器和高度控制器；
+3. 独立设计并测试高度控制器；
 4. 控制算法稳定后，再将其与 Mixer 接入 ROS2 控制器节点；
 5. 最后进行悬停闭环测试，暂不进入地图或规划。
 

@@ -16,6 +16,14 @@ bool is_positive_finite(const double value)
   return std::isfinite(value) && value > 0.0;
 }
 
+MixerResult invalid_result()
+{
+  MixerResult result;
+  result.valid = false;
+  result.saturated = true;
+  return result;
+}
+
 }  // namespace
 
 MotorMixer::MotorMixer(const MixerParameters & parameters)
@@ -44,9 +52,7 @@ MixerResult MotorMixer::mix(const WrenchCommand & command) const
   if (!std::isfinite(command.thrust) || !std::isfinite(command.roll_torque) ||
     !std::isfinite(command.pitch_torque) || !std::isfinite(command.yaw_torque))
   {
-    result.valid = false;
-    result.saturated = true;
-    return result;
+    return invalid_result();
   }
 
   double thrust = command.thrust;
@@ -62,6 +68,11 @@ MixerResult MotorMixer::mix(const WrenchCommand & command) const
   const double roll_term = command.roll_torque / a;
   const double pitch_term = command.pitch_torque / a;
   const double yaw_term = command.yaw_torque / b;
+  if (!std::isfinite(roll_term) || !std::isfinite(pitch_term) ||
+    !std::isfinite(yaw_term))
+  {
+    return invalid_result();
+  }
   std::array<double, 4> motor_thrust{
     0.25 * (thrust + roll_term - pitch_term - yaw_term),
     0.25 * (thrust + roll_term + pitch_term + yaw_term),
@@ -69,6 +80,9 @@ MixerResult MotorMixer::mix(const WrenchCommand & command) const
     0.25 * (thrust - roll_term - pitch_term + yaw_term)};
 
   for (std::size_t index = 0; index < motor_thrust.size(); ++index) {
+    if (!std::isfinite(motor_thrust[index])) {
+      return invalid_result();
+    }
     if (motor_thrust[index] < 0.0) {
       motor_thrust[index] = 0.0;
       result.saturated = true;
@@ -76,6 +90,9 @@ MixerResult MotorMixer::mix(const WrenchCommand & command) const
 
     const double omega = std::sqrt(motor_thrust[index] / parameters_.thrust_coefficient);
     const double rpm = omega * 60.0 / kTwoPi;
+    if (!std::isfinite(omega) || !std::isfinite(rpm)) {
+      return invalid_result();
+    }
     const double clamped_rpm = std::clamp(rpm, parameters_.min_rpm, parameters_.max_rpm);
     if (clamped_rpm != rpm) {
       result.saturated = true;

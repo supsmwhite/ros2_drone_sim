@@ -165,6 +165,19 @@ TEST(MotorMixer, NonFiniteCommandReturnsSafeInvalidResult)
   }
 }
 
+TEST(MotorMixer, ExtremeFiniteCommandCannotProduceNonFiniteOutput)
+{
+  const drone_controller::MotorMixer mixer;
+  const auto maximum = std::numeric_limits<double>::max();
+  const auto result = mixer.mix({maximum, maximum, maximum, maximum});
+  EXPECT_FALSE(result.valid);
+  EXPECT_TRUE(result.saturated);
+  EXPECT_EQ(result.motor_rpm, (std::array<double, 4>{}));
+  for (const double rpm : result.motor_rpm) {
+    EXPECT_TRUE(std::isfinite(rpm));
+  }
+}
+
 TEST(MotorMixer, InvalidParametersThrow)
 {
   drone_controller::MixerParameters parameters;

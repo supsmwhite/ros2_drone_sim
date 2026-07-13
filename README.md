@@ -150,7 +150,7 @@ ros2 topic pub --once /drone/goal geometry_msgs/msg/PoseStamped \
 "{header: {frame_id: map}, pose: {position: {z: 1.5}, orientation: {w: 1.0}}}"
 ```
 
-当前模式忽略目标 x/y。控制器正常运行时会对缺少目标、里程计超时和非法输入主动发布零 RPM；控制器进程完全退出后的动力学命令超时保护尚未实现。
+当前模式忽略目标 x/y。控制器正常运行时会对缺少目标、里程计超时和非法输入主动发布零 RPM；动力学节点也默认启用 `0.30 s` MotorRPM 命令 watchdog，控制器退出后会把目标 RPM 归零，实际电机转速按原有一阶模型衰减。
 
 当前已验证的控制参数基线位于 `drone_bringup/config/controller.yaml`。高度 PD 使用 `Kp=3.0`、`Kd=3.5`；yaw 使用 `Kp=1.0`、`Kd=0.40`、最大力矩 `0.20 N·m`。
 

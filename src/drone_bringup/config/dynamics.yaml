@@ -16,6 +16,10 @@ quadrotor_dynamics_node:
     min_rpm: 0.0
     max_rpm: 20000.0
 
+    # Safety watchdog uses std::chrono::steady_clock, independent of ROS time.
+    enable_motor_command_timeout: true
+    motor_command_timeout: 0.30
+
     gravity: 9.80665
 
     # Simplified rigid horizontal ground used by the normal Launch workflow.

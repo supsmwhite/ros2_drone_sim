@@ -40,6 +40,9 @@ public:
       declare_parameter<double>("simulation_frequency", 200.0);
     path_publish_divider_ = declare_parameter<int>("path_publish_divider", 10);
     path_max_points_ = declare_parameter<int>("path_max_points", 2000);
+    enable_motor_command_timeout_ =
+      declare_parameter<bool>("enable_motor_command_timeout", true);
+    motor_command_timeout_ = declare_parameter<double>("motor_command_timeout", 0.30);
 
     if (!std::isfinite(simulation_frequency) || simulation_frequency <= 0.0) {
       throw std::invalid_argument("simulation_frequency must be finite and greater than zero");
@@ -49,6 +52,10 @@ public:
     }
     if (path_max_points_ <= 0) {
       throw std::invalid_argument("path_max_points must be greater than zero");
+    }
+    if (!std::isfinite(motor_command_timeout_) || motor_command_timeout_ <= 0.0) {
+      throw std::invalid_argument(
+              "motor_command_timeout must be finite and greater than zero");
     }
 
     // 模型使用固定仿真步长 dt=1/f，而不是直接使用两次回调之间有抖动的墙钟差值。
@@ -66,6 +73,12 @@ public:
           message->m2_rear_left_cw_rpm,
           message->m3_rear_right_ccw_rpm,
           message->m4_front_right_cw_rpm});
+        last_motor_command_time_ = std::chrono::steady_clock::now();
+        has_received_motor_command_ = true;
+        if (motor_command_timed_out_) {
+          motor_command_timed_out_ = false;
+          RCLCPP_INFO(get_logger(), "Fresh MotorRPM command received; watchdog recovered");
+        }
       });
 
     // 三个状态 Topic 使用深度为 10 的普通 ROS2 QoS。TF 使用专用广播器发布到 /tf。
@@ -87,9 +100,10 @@ public:
     RCLCPP_INFO(
       get_logger(),
       "Dynamics started at %.1f Hz; nominal steady-state hover RPM is %.1f; "
-      "ground contact is %s at z=%.3f m",
+      "ground contact is %s at z=%.3f m; motor command watchdog is %s (%.3f s)",
       simulation_frequency, hover_rpm,
-      parameters.enable_ground_contact ? "enabled" : "disabled", parameters.ground_z);
+      parameters.enable_ground_contact ? "enabled" : "disabled", parameters.ground_z,
+      enable_motor_command_timeout_ ? "enabled" : "disabled", motor_command_timeout_);
   }
 
 private:
@@ -130,6 +144,8 @@ private:
   // 物理意义：这是 ROS2 节点每一个仿真周期的总流程。
   void simulation_step()
   {
+    check_motor_command_timeout();
+
     // 每次定时器回调只推进一个固定 dt。Odom、IMU 和 TF 每个仿真步都发布，
     // 因而名义频率与 simulation_frequency 相同。
     model_->step(fixed_time_step_);
@@ -144,6 +160,42 @@ private:
     if (simulation_step_count_ % static_cast<std::size_t>(path_publish_divider_) == 0U) {
       publish_path(stamp);
     }
+  }
+
+  // 使用不受 ROS 时间跳变影响的单调时钟检查命令新鲜度。超时只修改模型的
+  // 目标 RPM；实际电机转速仍由 QuadrotorModel 的一阶响应自然衰减。
+  void check_motor_command_timeout()
+  {
+    if (!enable_motor_command_timeout_ || !has_received_motor_command_) {
+      return;
+    }
+
+    const double command_age = std::chrono::duration<double>(
+      std::chrono::steady_clock::now() - last_motor_command_time_).count();
+    if (command_age <= motor_command_timeout_) {
+      return;
+    }
+
+    if (!motor_command_timed_out_) {
+      model_->set_motor_rpm_command({0.0, 0.0, 0.0, 0.0});
+      motor_command_timed_out_ = true;
+      motor_command_timeout_started_ = std::chrono::steady_clock::now();
+      RCLCPP_WARN(
+        get_logger(),
+        "MotorRPM command timed out after %.3f s; target RPM set to zero",
+        command_age);
+      return;
+    }
+
+    const double timeout_duration = std::chrono::duration<double>(
+      std::chrono::steady_clock::now() - motor_command_timeout_started_).count();
+    if (timeout_duration < 5.0) {
+      return;
+    }
+
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 5000,
+      "MotorRPM command remains timed out; target RPM is zero");
   }
 
   // 输入：本次发布使用的 ROS2 时间戳。
@@ -277,6 +329,12 @@ private:
   int path_max_points_{2000};
   std::size_t simulation_step_count_{0};
   nav_msgs::msg::Path path_;
+  bool enable_motor_command_timeout_{true};
+  double motor_command_timeout_{0.30};
+  bool has_received_motor_command_{false};
+  bool motor_command_timed_out_{false};
+  std::chrono::steady_clock::time_point last_motor_command_time_{};
+  std::chrono::steady_clock::time_point motor_command_timeout_started_{};
 
   // ROS2 通信对象。用成员变量持有 shared_ptr，保证订阅、发布器和定时器
   // 在节点整个生命周期内持续有效。

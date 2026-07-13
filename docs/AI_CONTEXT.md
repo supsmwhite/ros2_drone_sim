@@ -53,7 +53,8 @@
 6. Motor Mixer、姿态/角速度控制器和高度控制器已由纯算法 `HoverController` 组合并接入 ROS2 控制节点；
 7. 控制节点已验证无目标安全零 RPM、目标 frame 拒绝、自动起飞和 1.5 m 闭环悬停；
 8. 当前 altitude-hover 模式仅使用目标 z 和 yaw，明确忽略 x/y；
-9. 下一步进行更长时间和扰动稳定性验证，再设计 x/y 位置控制。
+9. 动力学侧 MotorRPM 命令超时保护已实现并通过控制器退出/恢复运行验证；
+10. 下一步进行更长时间和扰动稳定性验证，再设计 x/y 位置控制。
 
 ### 当前阶段完成标准
 
@@ -101,6 +102,7 @@
 * `HoverController` 已按高度控制器→姿态控制器→Mixer 顺序组合三个纯算法组件，并保留各级 valid/saturated 状态；14 项组合与坐标转换 GTest 全部通过；
 * `position_controller_node` 已使用 100 Hz 控制循环发布 `/drone/motor_rpm_cmd`，实际完成从地面自动起飞至 1.5 m 并稳定悬停。
 * yaw 参数调为 `Kp=1.0`、`Kd=0.40`、最大力矩 `0.20 N·m` 后，用户在 RViz2 中确认转向快速且基本无超调；高度参数调为 `Kp=3.0`、`Kd=3.5` 后，隔离 ROS domain 的 0→1.5 m 运行复测单调接近目标，未观察到原先的小幅越界回弹。
+* 动力学节点已使用 `std::chrono::steady_clock` 实现可配置 MotorRPM watchdog；默认 `0.30 s` 无新命令时只把目标 RPM 设为零，恢复命令后立即退出超时状态。
 
 详细命令、结果和验证边界见“验证记录”。以上工程初始化结果不代表动力学、控制器或可视化功能已经实现。
 
@@ -125,7 +127,7 @@
 * 当前只有质心 z 方向的简化刚性地面约束，没有反弹、摩擦、起落架弹性、姿态约束或复杂碰撞形状；
 * 当前模型没有空气阻力、旋翼陀螺效应或传感器噪声，持续不对称力矩会使角速度不断增加；
 * 已验证短时固定步长响应，尚未验证长时间、高角速度或最大 RPM 下的数值稳定性；
-* 控制节点在无目标、Odom 超时、frame/四元数非法或控制结果无效时主动发布零 RPM；但若控制器进程完全崩溃，动力学仍会保持最后命令，动力学侧超时保护尚未实现；
+* 控制节点在无目标、Odom 超时、frame/四元数非法或控制结果无效时主动发布零 RPM；若控制器进程完全退出，动力学侧默认在 `0.30 s` 后把目标 RPM 归零；
 * 项目许可证尚未确定，因此四个 package 的 `<license>` 当前保留为 `TODO`；
 * `.idea/` 当前没有忽略规则；只有实际使用 JetBrains IDE 并产生该目录时才需要决定是否补充。
 
@@ -176,6 +178,7 @@
 * altitude-hover 模式只支持空 frame 或 `map` 目标，只读取 z 和目标四元数中的 yaw，并强制期望 roll/pitch 为零；x/y 明确留给后续位置控制；
 * Odom 线速度先执行 `velocity_world=orientation_body_to_world*velocity_body`，再取世界系 z；不能直接使用机体系 `twist.linear.z`。
 * 当前运行调参基线：高度 `Kp=3.0`、`Kd=3.5`；yaw `Kp=1.0`、`Kd=0.40`、`max_torque_yaw=0.20 N·m`。高度阻尼约取简化竖直模型临界阻尼 `2*sqrt(Kp*m)=3.46` 附近；yaw 调参由用户 RViz2 人工验收确认。
+* MotorRPM watchdog 属于 ROS2 动力学节点的输入安全层，不进入 `QuadrotorModel`：使用 steady clock 记录接收时间，超时只调用 `set_motor_rpm_command({0,0,0,0})`，不直接修改电机实际转速或任何动力学公式；
 
 ### 动力学参数基线
 
@@ -193,6 +196,7 @@
 * 正常 Launch 参数：`enable_ground_contact=true`、`ground_z=0.0 m`；
 * 仿真频率：`200 Hz`，固定步长 `dt=0.005 s`；
 * Path 每 10 个仿真步发布一次，即名义 `20 Hz`，最多保留 2000 个点。
+* MotorRPM watchdog：`enable_motor_command_timeout=true`、`motor_command_timeout=0.30 s`。
 
 按以上参数计算的稳态名义悬停转速约为 `10818.9 RPM/电机`。这是开环稳态推力平衡点，不会自动消除电机启动阶段已经产生的速度误差。
 
@@ -773,7 +777,7 @@ colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 结论：首个自动起飞和高度/姿态闭环已实际运行通过，稳态高度误差和 |vz| 均显著小于 0.10 的初步标准，未出现 NaN/Inf 或持续发散。本次无界面运行，未把 RViz 人工视觉效果记为已确认。
 
-限制：没有 x/y 位置控制、积分器、轨迹、地图、避障或复杂反饱和；控制节点存活时会主动发安全零 RPM，但其进程完全崩溃后动力学仍缺少命令超时保护。
+限制：没有 x/y 位置控制、积分器、轨迹、地图、避障或复杂反饱和；本记录当时尚未实现的动力学命令超时保护已在后续 watchdog 任务中补齐。
 
 ### 2026-07-13：yaw 与高度闭环参数调优
 
@@ -784,6 +788,18 @@ yaw 复现诊断：角速度实测在约 `-5.71～+4.30 rad/s` 间反向，CW/CC
 高度调优：运行参数和纯算法默认值同步改为 `Kp=3.0,Kd=3.5`。降低 Kp 使 1.5 m 初始加速度请求由饱和的 `5.0` 降至 `4.5 m/s²`，Kd 接近简化模型临界阻尼 `2*sqrt(3)=3.46`。控制器和 bringup 构建成功，65 项工作区测试保持 `0 errors,0 failures`。
 
 为避免用户正在运行的 ROS domain 0 节点干扰，最终复测使用隔离的 `ROS_DOMAIN_ID=42`。0→1.5 m 的约 1 s 采样高度为 `0.710,1.268,1.437,1.483,1.495,1.499,1.500 m`，未观察到越过目标再回弹；8 s 时 `z=1.499976 m`、`vz=9.32e-6 m/s`、四电机约 `10818.946 RPM`，全程日志 `saturated=false`。该复测为无界面数值验证；新高度参数的 RViz2 视觉感受仍可由用户继续确认。
+
+### 2026-07-13：动力学 MotorRPM 命令 watchdog
+
+实现：`quadrotor_dynamics_node` 新增 `enable_motor_command_timeout` 和 `motor_command_timeout`，正常 Launch 分别配置为 `true` 和 `0.30 s`。每次收到 `/drone/motor_rpm_cmd` 时使用 `std::chrono::steady_clock` 记录墙钟接收时刻；仿真步开始前检查命令年龄。尚未收到命令时保持初始零目标；首次超时时只调用 `set_motor_rpm_command({0,0,0,0})`，实际转速继续由未修改的一阶电机模型衰减。新命令会清除超时状态。
+
+日志与参数安全：首次超时立即警告，之后每 5 秒节流警告；恢复时记录一次 INFO。`motor_command_timeout<=0` 或非有限时节点拒绝启动，实际负值测试抛出 `std::invalid_argument`。关闭 watchdog 时跳过全部超时逻辑，保留原有最后命令行为。
+
+构建测试：完整四 package 构建成功；`drone_dynamics` 的 11 项 GTest 全部通过；工作区汇总 `65 tests,0 errors,0 failures,0 skipped`。未修改 `QuadrotorModel`、HoverController、控制节点、controller.yaml 增益或任何动力学公式。
+
+隔离域运行验证（`ROS_DOMAIN_ID=45`）：正常控制器连续以 100 Hz 发布命令时未触发 watchdog；悬停过程中结束控制器后，动力学在最后命令后 `0.304 s` 报告超时并把目标 RPM 归零，后续警告间隔 5 秒，无 200 Hz 刷屏。无人机不再保持悬停并最终回到地面。单独重启控制器后，其第一条安全零命令使动力学立即报告 watchdog recovered；重新发送 1.5 m 目标后约 5 秒恢复到 `z=1.49878 m`、`vz=0.000488 m/s`。
+
+验证边界：节点没有发布电机实际 RPM，因此运行时直接确认的是超时触发、目标归零、飞行状态下降和恢复；实际 RPM 的连续衰减由保持不变且已有单元测试覆盖的一阶电机响应实现，而不是被 watchdog 瞬时清零。
 
 后续每次测试应使用以下格式：
 

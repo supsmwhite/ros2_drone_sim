@@ -33,20 +33,27 @@
 ### 当前已实现运行链路
 
 ```text
-/drone/goal (PoseStamped：使用 z 和 yaw，忽略 x/y)
+/drone/goal
   ↓
-高度控制器 + 姿态/角速度控制器
+position_controller_node
   ↓
-Motor Mixer
+HoverController
+  ├─→ AltitudeController
+  ├─→ AttitudeController
+  └─→ MotorMixer
   ↓
 /drone/motor_rpm_cmd
   ↓
-电机一阶响应 + 四旋翼六自由度动力学
+quadrotor_dynamics_node
+  ↓
+QuadrotorModel
   ↓
 /drone/odom、/drone/imu、/drone/path、map -> base_link TF
   ↓
 控制反馈 + RViz2 可视化
 ```
+
+当前 `/drone/goal` 只使用目标 z 和 yaw，x/y 仍被忽略；上述链路不代表三维位置控制已经实现。
 
 ### 最终目标链路
 

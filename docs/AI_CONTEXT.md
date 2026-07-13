@@ -355,13 +355,25 @@ F4 = (T - tx/a - ty/a + tz/b) / 4
 
 ### 仓库状态
 
-文档整理开始前，Git 位于 `main`，与 `origin/main` 同步且工作树干净。最新提交：
+当前稳定代码基线已经包含：
 
-```text
-23487fbaf9d586290c6d69bad1430fefdc68cdee
-feat: add motor command timeout protection
-2026-07-13 17:25:23 +08:00
+- 四旋翼动力学与简化地面；
+- Motor Mixer；
+- 姿态/角速度控制器；
+- 高度控制器；
+- HoverController；
+- 高度和 yaw ROS2 闭环；
+- MotorRPM watchdog；
+- 当前文档整理结果。
+
+开始任何新任务前，应重新执行：
+
+```bash
+git status --short --branch
+git log -3 --oneline
 ```
+
+Git 当前状态始终以实际命令输出为准，不在本文件中长期保存固定提交 SHA。
 
 ### 构建与测试
 

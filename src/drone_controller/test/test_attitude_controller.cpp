@@ -98,6 +98,26 @@ TEST(AttitudeController, QuaternionAndItsNegativeProduceSameTorque)
   EXPECT_TRUE(positive.torque_body.isApprox(negative.torque_body, kTolerance));
 }
 
+TEST(AttitudeController, ExactHalfTurnQuaternionSignIsDeterministic)
+{
+  drone_controller::AttitudeControllerParameters parameters;
+  parameters.max_torque.setConstant(10.0);
+  const drone_controller::AttitudeController controller(parameters);
+  drone_controller::AttitudeControllerInput positive_input;
+  positive_input.desired_orientation_body_to_world =
+    Eigen::Quaterniond(0.0, -1.0 / std::sqrt(5.0), 2.0 / std::sqrt(5.0), 0.0);
+  auto negative_input = positive_input;
+  negative_input.desired_orientation_body_to_world.coeffs() *= -1.0;
+
+  const auto positive = controller.compute(positive_input);
+  const auto negative = controller.compute(negative_input);
+  ASSERT_TRUE(positive.valid);
+  ASSERT_TRUE(negative.valid);
+  EXPECT_TRUE(positive.torque_body.array().isFinite().all());
+  EXPECT_TRUE(negative.torque_body.array().isFinite().all());
+  EXPECT_TRUE(positive.torque_body.isApprox(negative.torque_body, kTolerance));
+}
+
 TEST(AttitudeController, ValidNonUnitQuaternionsAreNormalized)
 {
   const drone_controller::AttitudeController controller;

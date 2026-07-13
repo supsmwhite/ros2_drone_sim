@@ -42,6 +42,15 @@ target_include_directories(attitude_controller
 target_compile_options(attitude_controller PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(attitude_controller Eigen3::Eigen)
 
+add_library(altitude_controller src/altitude_controller.cpp)
+target_include_directories(altitude_controller
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_options(altitude_controller PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(altitude_controller Eigen3::Eigen)
+
 add_executable(position_controller_node src/position_controller_node.cpp)
 target_compile_options(position_controller_node PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(position_controller_node
@@ -58,7 +67,8 @@ install(
 )
 
 install(
-  TARGETS controller_algorithms motor_mixer attitude_controller position_controller_node
+  TARGETS controller_algorithms motor_mixer attitude_controller altitude_controller
+    position_controller_node
   EXPORT export_controller_algorithms
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -77,6 +87,10 @@ if(BUILD_TESTING)
   ament_add_gtest(test_attitude_controller test/test_attitude_controller.cpp)
   target_link_libraries(test_attitude_controller attitude_controller Eigen3::Eigen)
   target_compile_options(test_attitude_controller PRIVATE -Wall -Wextra -Wpedantic)
+
+  ament_add_gtest(test_altitude_controller test/test_altitude_controller.cpp)
+  target_link_libraries(test_altitude_controller altitude_controller Eigen3::Eigen)
+  target_compile_options(test_altitude_controller PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 ament_package()

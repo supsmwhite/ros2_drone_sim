@@ -10,6 +10,7 @@ namespace
 {
 
 constexpr double kMinimumQuaternionScale = 1.0e-12;
+constexpr double kHalfTurnScalarEpsilon = 1.0e-12;
 
 bool vector_is_finite(const Eigen::Vector3d & value)
 {
@@ -79,7 +80,13 @@ AttitudeControllerResult AttitudeController::compute(const AttitudeControllerInp
   // Its vector part therefore has the same base_link roll/pitch/yaw signs used
   // by the dynamics torque vector.
   Eigen::Quaterniond error = current.conjugate() * desired;
-  if (error.w() < 0.0) {
+  bool negate_error = error.w() < -kHalfTurnScalarEpsilon;
+  if (std::abs(error.w()) <= kHalfTurnScalarEpsilon) {
+    Eigen::Index dominant_axis = 0;
+    error.vec().cwiseAbs().maxCoeff(&dominant_axis);
+    negate_error = error.vec()[dominant_axis] < 0.0;
+  }
+  if (negate_error) {
     error.coeffs() *= -1.0;
   }
   const Eigen::Vector3d attitude_error = 2.0 * error.vec();

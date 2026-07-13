@@ -41,7 +41,7 @@
 
 ### 当前阶段
 
-动力学模块第一阶段实现与独立验证。
+动力学模块第一阶段已验证，正在进行控制器纯算法组件的独立实现与验证。
 
 ### 当前任务
 
@@ -50,7 +50,8 @@
 3. Odom、IMU、Path 和 `map -> base_link` TF 已接入并完成运行检查；
 4. 基础 URDF、robot_state_publisher 和 RViz2 显示已实现并完成运行检查；
 5. 可配置的简化水平地面约束已实现并完成单元/运行验证；
-6. 下一步进行更长时间的数值稳定性测试，并在人工确认可视化后进入 Mixer 与控制器。
+6. 与当前动力学符号严格一致的 Motor Mixer 已实现并通过独立单元测试，尚未接入 ROS2 节点；
+7. 下一步实现姿态与高度控制算法，并在独立测试后再接入控制器节点。
 
 ### 当前阶段完成标准
 
@@ -90,6 +91,8 @@
 * 12000 RPM 竖直运动时，模型状态与 Path 由同一 `map -> base_link`/Odom 状态驱动；短时 roll 输入后四元数和 base_link 坐标轴均发生对应变化。
 * `QuadrotorModel` 已实现可选的简化水平地面约束；正常 Launch 在 `ground_z=0` 启用，零 RPM 保持地面静止，高推力可正常离地；
 * 地面关闭自由落体、地面静止、起飞、空中落地及水平速度不受摩擦影响的测试均已通过；地面静止时世界系实际加速度为 0，IMU 机体系比力为 +g。
+* `MotorMixer` 已作为与 ROS2 无关的纯算法类实现，可将总推力和机体系 roll、pitch、yaw 力矩反解为固定顺序 `[M1,M2,M3,M4]` 的目标 RPM；
+* Mixer 的零输入、悬停推力、三轴单独力矩、混合指令往返、饱和、非有限输入和非法参数等 10 项 GTest 已全部通过；完整工作空间重新构建通过。
 
 详细命令、结果和验证边界见“验证记录”。以上工程初始化结果不代表动力学、控制器或可视化功能已经实现。
 
@@ -110,7 +113,7 @@
 尚未确认的事项：
 
 * 基础 RViz2 显示已验证；不同屏幕尺寸下的默认视角、模型大小和配色仍建议由用户人工确认并按演示需要微调；
-* 尚未实现控制律和控制器电机指令发布；
+* Mixer 尚未接入 `position_controller_node`；姿态、高度和位置控制律及控制器电机指令发布仍未实现；
 * 当前只有质心 z 方向的简化刚性地面约束，没有反弹、摩擦、起落架弹性、姿态约束或复杂碰撞形状；
 * 当前模型没有空气阻力、旋翼陀螺效应或传感器噪声，持续不对称力矩会使角速度不断增加；
 * 已验证短时固定步长响应，尚未验证长时间、高角速度或最大 RPM 下的数值稳定性；
@@ -154,6 +157,8 @@
 * `map -> base_link` 只由 `quadrotor_dynamics_node` 动态发布；robot_state_publisher 的 URDF 根链接是 `base_link`，只发布到固定子链接的静态 TF；
 * `/drone/goal` 统一使用 `geometry_msgs/msg/PoseStamped`，供控制器骨架和 RViz Pose 显示共同订阅。
 * 地面约束集中在 `QuadrotorModel`，ROS2 消息发布层不修改模型位置；核心模型默认关闭地面，正常 Launch 通过 YAML 默认开启。
+* Motor Mixer 是 `drone_controller` 中不依赖 ROS2 的纯算法组件；其参数独立保存，不让 `drone_controller` 依赖 `drone_dynamics`，但 `arm_length`、`k_F`、`k_M` 和 RPM 范围必须与动力学配置保持一致；
+* Mixer 先在单电机推力空间反解，再转换为 rad/s 和 RPM。当前采用逐电机限幅，饱和后的实际 Wrench 可能不再等于请求值，后续控制器必须处理 `saturated` 标志。
 
 ### 动力学参数基线
 
@@ -211,7 +216,7 @@
 
 ROS2 外部接口使用 RPM 表示电机转速，动力学内部统一转换为 rad/s。所有物理量统一使用 SI 单位制。
 
-以上约定是后续动力学、控制器、Mixer、URDF 和可视化共同遵循的固定基础，不得擅自修改。Mixer 的具体符号矩阵仍需在实现前根据该布局推导和验证。
+以上约定是后续动力学、控制器、Mixer、URDF 和可视化共同遵循的固定基础，不得擅自修改。Mixer 已按动力学正向矩阵的严格逆运算实现并通过往返验证。
 
 如修改坐标或电机约定，必须同步更新：
 
@@ -674,6 +679,31 @@ colcon test-result --verbose
 
 是否通过：地面约束、加速度/IMU 一致性、起飞、落地、不清除水平速度及 SetGoal Topic 修正均通过代码和运行检查；RViz 鼠标选择的具体目标坐标待用户人工操作确认。
 
+### 2026-07-13：Motor Mixer 独立实现与验证
+
+实现内容：
+
+* 在 `drone_controller` 中实现与 ROS2 无关的 `MotorMixer`，输入为总推力 `T` 和机体系三轴力矩，输出顺序固定为 `[M1,M2,M3,M4]` 的目标 RPM；
+* Mixer 参数默认使用 `arm_length=0.20 m`、`k_F=1.91e-6`、`k_M=2.60e-7`、`0～20000 RPM`，必须与动力学参数保持一致；
+* 令 `a=arm_length/sqrt(2)`、`b=k_M/k_F`，反解为：
+  `F1=(T+tx/a-ty/a-tz/b)/4`、`F2=(T+tx/a+ty/a+tz/b)/4`、`F3=(T-tx/a+ty/a-tz/b)/4`、`F4=(T-tx/a-ty/a+tz/b)/4`；
+* 负总推力、负单电机推力及超范围 RPM 使用逐电机安全限幅并设置 `saturated=true`；非有限 Wrench 返回四电机 0 RPM、`valid=false`、`saturated=true`；
+* Mixer 编译为独立的 `motor_mixer` 库，供后续控制器链接，但本阶段没有接入 `position_controller_node`。
+
+实际命令：
+
+```bash
+colcon build --symlink-install --packages-select drone_controller \
+  --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+colcon test --packages-select drone_controller --event-handlers console_direct+
+colcon test-result --verbose
+colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+```
+
+实际结果：Mixer 的 10 个 GTest 全部通过，覆盖零输入、纯悬停推力、正 roll/pitch/yaw、混合指令正反向往返、不可实现指令、负总推力、NaN/Inf 输入和非法参数。控制器 package 定向构建成功，随后四个 package 的完整工作空间构建成功。`colcon test-result` 显示工作区累计 `23 tests, 0 errors, 0 failures, 0 skipped`；其中本次 Mixer 测试为 10 项，其余是先前保留的动力学测试结果。
+
+验证边界：只验证了纯算法控制分配；没有修改动力学代码，没有让 ROS2 节点调用 Mixer，也没有实现姿态 PID、高度控制、位置控制或闭环飞行。
+
 后续每次测试应使用以下格式：
 
 ```text
@@ -730,6 +760,13 @@ colcon test --packages-select drone_dynamics --event-handlers console_direct+
 colcon test-result --verbose
 ```
 
+### Mixer 算法测试
+
+```bash
+colcon test --packages-select drone_controller --event-handlers console_direct+
+colcon test-result --verbose
+```
+
 ### 查看节点
 
 ```bash
@@ -757,11 +794,11 @@ ros2 run tf2_ros tf2_echo map base_link
 
 当前优先级：
 
-1. 用户人工确认 RViz 默认视角、模型配色和机头辨识度；
-2. 提交已验证的动力学注释、简化地面、URDF、RViz、Launch 和文档变更；
-3. 增加长时间、高角速度和最大 RPM 数值稳定性测试；
-4. 开始推导并实现与固定电机约定一致的 Mixer；
-5. Mixer 独立验证后再实现姿态与高度控制器。
+1. 提交已验证的动力学、简化地面、URDF、RViz、Mixer 和文档变更；
+2. 增加长时间、高角速度和最大 RPM 数值稳定性测试；
+3. 独立设计并测试姿态控制器和高度控制器；
+4. 控制算法稳定后，再将其与 Mixer 接入 ROS2 控制器节点；
+5. 最后进行悬停闭环测试，暂不进入地图或规划。
 
 在以上任务完成并验证前，不开始完整位置控制器、地图或避障模块。
 

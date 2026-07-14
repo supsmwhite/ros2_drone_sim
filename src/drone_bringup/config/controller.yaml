@@ -7,6 +7,15 @@ position_controller_node:
     # Altitude control. z and vz inputs are expressed in map/ENU.
     mass: 1.0
     gravity: 9.80665
+
+    # Horizontal position/velocity control in map/ENU. max_tilt_angle is in rad.
+    horizontal_position_kp_x: 0.1
+    horizontal_position_kp_y: 0.1
+    horizontal_velocity_kd_x: 0.5
+    horizontal_velocity_kd_y: 0.5
+    max_horizontal_acceleration: 0.05
+    max_tilt_angle: 0.02
+
     altitude_kp: 3.0
     vertical_velocity_kd: 3.5
     max_upward_acceleration: 5.0

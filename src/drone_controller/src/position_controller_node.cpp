@@ -8,7 +8,7 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
-#include "drone_controller/hover/hover_controller.hpp"
+#include "drone_controller/position/position_controller.hpp"
 #include "drone_msgs/msg/motor_rpm.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -17,9 +17,8 @@
 namespace drone_controller
 {
 
-// 这个节点是本包中唯一一个依赖 rclcpp 的类，相当于给 HoverController
-// 包上一层“ROS2 话题适配器”：订阅话题 -> 组装 HoverControllerInput ->
-// 调用 HoverController::compute() -> 把 HoverControllerResult 拆分发布到话题。
+// ROS2 adapter: validates Goal/Odom, converts body velocity to world velocity,
+// calls the ROS-independent PositionController, and publishes motor RPM.
 class PositionControllerNode : public rclcpp::Node
 {
 public:
@@ -37,9 +36,7 @@ public:
       throw std::invalid_argument("Invalid controller loop parameters");
     }
 
-    // 把所有控制参数读入后，一次性构造 HoverController（又会依次构造
-    // AltitudeController/AttitudeController/MotorMixer，各自在构造函数里校验参数）。
-    hover_controller_ = std::make_unique<HoverController>(read_hover_parameters());
+    position_controller_ = std::make_unique<PositionController>(read_position_parameters());
     // 订阅 /drone/goal：回调只做最简单的缓存，不在回调里做任何计算，
     // 真正的处理集中在 control_step() 中按固定频率执行。
     goal_subscription_ = create_subscription<geometry_msgs::msg::PoseStamped>(
@@ -67,61 +64,82 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "Altitude-hover controller started at %.1f Hz (odom timeout %.3f s); waiting for a map goal",
+      "3D position controller started at %.1f Hz (odom timeout %.3f s); waiting for a map goal",
       control_frequency, odometry_timeout_);
   }
 
 private:
-  // 把 HoverControllerParameters 里三个子结构体的每个字段都声明成 ROS2 参数，
-  // 默认值取自头文件定义的结构体默认值，允许 YAML/命令行覆盖。
-  // 这里只是单纯的参数搜集，不包含任何算法逻辑。
-  HoverControllerParameters read_hover_parameters()
+  PositionControllerParameters read_position_parameters()
   {
-    HoverControllerParameters parameters;
-    parameters.altitude.mass = declare_parameter<double>("mass", parameters.altitude.mass);
-    parameters.altitude.gravity =
-      declare_parameter<double>("gravity", parameters.altitude.gravity);
-    parameters.altitude.altitude_kp =
-      declare_parameter<double>("altitude_kp", parameters.altitude.altitude_kp);
-    parameters.altitude.vertical_velocity_kd = declare_parameter<double>(
-      "vertical_velocity_kd", parameters.altitude.vertical_velocity_kd);
-    parameters.altitude.max_upward_acceleration = declare_parameter<double>(
-      "max_upward_acceleration", parameters.altitude.max_upward_acceleration);
-    parameters.altitude.max_downward_acceleration = declare_parameter<double>(
-      "max_downward_acceleration", parameters.altitude.max_downward_acceleration);
-    parameters.altitude.min_collective_thrust = declare_parameter<double>(
-      "min_collective_thrust", parameters.altitude.min_collective_thrust);
-    parameters.altitude.max_collective_thrust = declare_parameter<double>(
-      "max_collective_thrust", parameters.altitude.max_collective_thrust);
-    parameters.altitude.min_tilt_cosine = declare_parameter<double>(
-      "min_tilt_cosine", parameters.altitude.min_tilt_cosine);
+    PositionControllerParameters parameters;
+    const double gravity =
+      declare_parameter<double>("gravity", parameters.hover.altitude.gravity);
+    parameters.horizontal.gravity = gravity;
+    parameters.hover.altitude.gravity = gravity;
+    parameters.horizontal.position_kp = Eigen::Vector2d(
+      declare_parameter<double>(
+        "horizontal_position_kp_x", parameters.horizontal.position_kp.x()),
+      declare_parameter<double>(
+        "horizontal_position_kp_y", parameters.horizontal.position_kp.y()));
+    parameters.horizontal.velocity_kd = Eigen::Vector2d(
+      declare_parameter<double>(
+        "horizontal_velocity_kd_x", parameters.horizontal.velocity_kd.x()),
+      declare_parameter<double>(
+        "horizontal_velocity_kd_y", parameters.horizontal.velocity_kd.y()));
+    parameters.horizontal.max_horizontal_acceleration = declare_parameter<double>(
+      "max_horizontal_acceleration", parameters.horizontal.max_horizontal_acceleration);
+    parameters.horizontal.max_tilt_angle =
+      declare_parameter<double>("max_tilt_angle", parameters.horizontal.max_tilt_angle);
 
-    parameters.attitude.attitude_kp = Eigen::Vector3d(
-      declare_parameter<double>("attitude_kp_roll", parameters.attitude.attitude_kp.x()),
-      declare_parameter<double>("attitude_kp_pitch", parameters.attitude.attitude_kp.y()),
-      declare_parameter<double>("attitude_kp_yaw", parameters.attitude.attitude_kp.z()));
-    parameters.attitude.angular_rate_kd = Eigen::Vector3d(
-      declare_parameter<double>(
-        "angular_rate_kd_roll", parameters.attitude.angular_rate_kd.x()),
-      declare_parameter<double>(
-        "angular_rate_kd_pitch", parameters.attitude.angular_rate_kd.y()),
-      declare_parameter<double>(
-        "angular_rate_kd_yaw", parameters.attitude.angular_rate_kd.z()));
-    parameters.attitude.max_torque = Eigen::Vector3d(
-      declare_parameter<double>("max_torque_roll", parameters.attitude.max_torque.x()),
-      declare_parameter<double>("max_torque_pitch", parameters.attitude.max_torque.y()),
-      declare_parameter<double>("max_torque_yaw", parameters.attitude.max_torque.z()));
+    parameters.hover.altitude.mass =
+      declare_parameter<double>("mass", parameters.hover.altitude.mass);
+    parameters.hover.altitude.altitude_kp = declare_parameter<double>(
+      "altitude_kp", parameters.hover.altitude.altitude_kp);
+    parameters.hover.altitude.vertical_velocity_kd = declare_parameter<double>(
+      "vertical_velocity_kd", parameters.hover.altitude.vertical_velocity_kd);
+    parameters.hover.altitude.max_upward_acceleration = declare_parameter<double>(
+      "max_upward_acceleration", parameters.hover.altitude.max_upward_acceleration);
+    parameters.hover.altitude.max_downward_acceleration = declare_parameter<double>(
+      "max_downward_acceleration", parameters.hover.altitude.max_downward_acceleration);
+    parameters.hover.altitude.min_collective_thrust = declare_parameter<double>(
+      "min_collective_thrust", parameters.hover.altitude.min_collective_thrust);
+    parameters.hover.altitude.max_collective_thrust = declare_parameter<double>(
+      "max_collective_thrust", parameters.hover.altitude.max_collective_thrust);
+    parameters.hover.altitude.min_tilt_cosine = declare_parameter<double>(
+      "min_tilt_cosine", parameters.hover.altitude.min_tilt_cosine);
 
-    parameters.mixer.arm_length =
-      declare_parameter<double>("arm_length", parameters.mixer.arm_length);
-    parameters.mixer.thrust_coefficient = declare_parameter<double>(
-      "thrust_coefficient", parameters.mixer.thrust_coefficient);
-    parameters.mixer.drag_torque_coefficient = declare_parameter<double>(
-      "drag_torque_coefficient", parameters.mixer.drag_torque_coefficient);
-    parameters.mixer.min_rpm =
-      declare_parameter<double>("min_rpm", parameters.mixer.min_rpm);
-    parameters.mixer.max_rpm =
-      declare_parameter<double>("max_rpm", parameters.mixer.max_rpm);
+    parameters.hover.attitude.attitude_kp = Eigen::Vector3d(
+      declare_parameter<double>(
+        "attitude_kp_roll", parameters.hover.attitude.attitude_kp.x()),
+      declare_parameter<double>(
+        "attitude_kp_pitch", parameters.hover.attitude.attitude_kp.y()),
+      declare_parameter<double>(
+        "attitude_kp_yaw", parameters.hover.attitude.attitude_kp.z()));
+    parameters.hover.attitude.angular_rate_kd = Eigen::Vector3d(
+      declare_parameter<double>(
+        "angular_rate_kd_roll", parameters.hover.attitude.angular_rate_kd.x()),
+      declare_parameter<double>(
+        "angular_rate_kd_pitch", parameters.hover.attitude.angular_rate_kd.y()),
+      declare_parameter<double>(
+        "angular_rate_kd_yaw", parameters.hover.attitude.angular_rate_kd.z()));
+    parameters.hover.attitude.max_torque = Eigen::Vector3d(
+      declare_parameter<double>(
+        "max_torque_roll", parameters.hover.attitude.max_torque.x()),
+      declare_parameter<double>(
+        "max_torque_pitch", parameters.hover.attitude.max_torque.y()),
+      declare_parameter<double>(
+        "max_torque_yaw", parameters.hover.attitude.max_torque.z()));
+
+    parameters.hover.mixer.arm_length =
+      declare_parameter<double>("arm_length", parameters.hover.mixer.arm_length);
+    parameters.hover.mixer.thrust_coefficient = declare_parameter<double>(
+      "thrust_coefficient", parameters.hover.mixer.thrust_coefficient);
+    parameters.hover.mixer.drag_torque_coefficient = declare_parameter<double>(
+      "drag_torque_coefficient", parameters.hover.mixer.drag_torque_coefficient);
+    parameters.hover.mixer.min_rpm =
+      declare_parameter<double>("min_rpm", parameters.hover.mixer.min_rpm);
+    parameters.hover.mixer.max_rpm =
+      declare_parameter<double>("max_rpm", parameters.hover.mixer.max_rpm);
     return parameters;
   }
 
@@ -133,7 +151,7 @@ private:
 
   // 每个控制周期（默认 100 Hz）执行一次，是本节点的核心。
   // 整体结构是一条“安全检查链”：任一环不满足就立即 publish_zero_rpm() 并 return，
-  // 只有全部通过才会真正调用 HoverController::compute()。
+  // 只有全部通过才会真正调用 PositionController::compute()。
   void control_step()
   {
     // 检查 1：尚未收到任何目标。
@@ -180,46 +198,49 @@ private:
     const Eigen::Quaterniond current_orientation(
       current_pose.orientation.w, current_pose.orientation.x,
       current_pose.orientation.y, current_pose.orientation.z);
-    // 调用 hover_controller.hpp 里的纯函数：只从目标四元数提取 yaw，
-    // 生成 roll=pitch=0 的期望姿态，这就是目前忽略目标 x/y 后仍能使用的
-    // “只控 z+yaw”策略具体落地处。
+    // Reuse the validated goal-quaternion helper, then pass only its yaw to the
+    // position controller. Goal roll/pitch remain intentionally ignored.
     Eigen::Quaterniond desired_level_orientation;
     if (!level_orientation_from_goal_yaw(goal_orientation, desired_level_orientation)) {
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid goal quaternion; RPM=0");
       return;
     }
+    const Eigen::Matrix3d desired_level_rotation =
+      desired_level_orientation.toRotationMatrix();
+    const double desired_yaw =
+      std::atan2(desired_level_rotation(1, 0), desired_level_rotation(0, 0));
+    if (!std::isfinite(desired_yaw)) {
+      publish_zero_rpm();
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid goal yaw; RPM=0");
+      return;
+    }
 
-    // 检查 5：把 Odom 机体系（base_link）的 twist.linear 旋转到世界系，
-    // 取其 z 分量作为世界系垂直速度。这一步对应 AI_CONTEXT 里特别强调的
-    // “Odom twist 在机体系，不能直接当世界系 vz 用”警告。
+    // Convert the complete Odom linear velocity from base_link to map before
+    // using any x/y/z component in position feedback.
     const Eigen::Vector3d velocity_body(
       odometry.twist.twist.linear.x, odometry.twist.twist.linear.y,
       odometry.twist.twist.linear.z);
-    double vertical_velocity_world = 0.0;
-    if (!world_vertical_velocity_from_body(
-        current_orientation, velocity_body, vertical_velocity_world))
+    Eigen::Vector3d velocity_world;
+    if (!world_velocity_from_body(current_orientation, velocity_body, velocity_world))
     {
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid odometry state; RPM=0");
       return;
     }
 
-    // ===== 组装 HoverControllerInput，这里是 ROS 数据真正注入算法层的入口 =====
-    // 目标 x/y（goal_pose.position.x/y）在这里被明确忽略，不赋值给任何字段，
-    // 这就是 README/AI_CONTEXT 中反复提到的当前限制的具体代码体现。
-    HoverControllerInput input;
-    input.desired_altitude = goal_pose.position.z;
-    input.desired_orientation_body_to_world = desired_level_orientation;
-    input.current_altitude = current_pose.position.z;
-    input.current_vertical_velocity_world = vertical_velocity_world;
+    PositionControllerInput input;
+    input.desired_position_world = Eigen::Vector3d(
+      goal_pose.position.x, goal_pose.position.y, goal_pose.position.z);
+    input.desired_yaw = desired_yaw;
+    input.current_position_world = Eigen::Vector3d(
+      current_pose.position.x, current_pose.position.y, current_pose.position.z);
+    input.current_velocity_world = velocity_world;
     input.current_orientation_body_to_world = current_orientation;
     input.current_angular_velocity_body = Eigen::Vector3d(
       odometry.twist.twist.angular.x, odometry.twist.twist.angular.y,
       odometry.twist.twist.angular.z);
-    // 真正的控制计算全部发生在这一行：依次调用 AltitudeController、
-    // AttitudeController、MotorMixer，即之前分析过的整条链路。
-    const HoverControllerResult result = hover_controller_->compute(input);
+    const PositionControllerResult result = position_controller_->compute(input);
     if (!result.valid) {
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid control result; RPM=0");
@@ -236,14 +257,20 @@ private:
     motor_rpm_publisher_->publish(message);
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 1000,
-      "hover target_z=%.3f current_z=%.3f world_vz=%.3f thrust=%.3f "
+      "position target=[%.3f, %.3f, %.3f] current=[%.3f, %.3f, %.3f] "
+      "world_v=[%.3f, %.3f, %.3f] a_xy=[%.3f, %.3f] thrust=%.3f "
       "rpm=[%.1f, %.1f, %.1f, %.1f] saturated=%s",
-      input.desired_altitude, input.current_altitude, input.current_vertical_velocity_world,
-      result.collective_thrust, result.motor_rpm[0], result.motor_rpm[1], result.motor_rpm[2],
-      result.motor_rpm[3], result.saturated ? "true" : "false");
+      input.desired_position_world.x(), input.desired_position_world.y(),
+      input.desired_position_world.z(), input.current_position_world.x(),
+      input.current_position_world.y(), input.current_position_world.z(),
+      input.current_velocity_world.x(), input.current_velocity_world.y(),
+      input.current_velocity_world.z(), result.desired_horizontal_acceleration_world.x(),
+      result.desired_horizontal_acceleration_world.y(), result.collective_thrust,
+      result.motor_rpm[0], result.motor_rpm[1], result.motor_rpm[2], result.motor_rpm[3],
+      result.saturated ? "true" : "false");
   }
 
-  std::unique_ptr<HoverController> hover_controller_;
+  std::unique_ptr<PositionController> position_controller_;
   double odometry_timeout_{0.2};
   std::string supported_goal_frame_{"map"};
   std::optional<geometry_msgs::msg::PoseStamped> latest_goal_;

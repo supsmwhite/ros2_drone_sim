@@ -12,6 +12,7 @@ namespace
 {
 
 constexpr double kHoverRpm = 10818.9;
+constexpr double kTolerance = 1.0e-10;
 
 Eigen::Quaterniond rotation(const Eigen::Vector3d & axis, const double angle)
 {
@@ -155,6 +156,47 @@ TEST(HoverConversions, HorizontalBodyZEqualsWorldZ)
   ASSERT_TRUE(drone_controller::world_vertical_velocity_from_body(
       Eigen::Quaterniond::Identity(), Eigen::Vector3d(1.0, 2.0, 3.0), world_vz));
   EXPECT_DOUBLE_EQ(world_vz, 3.0);
+}
+
+TEST(HoverConversions, IdentityOrientationPreservesCompleteVelocity)
+{
+  Eigen::Vector3d velocity_world;
+  const Eigen::Vector3d velocity_body(1.0, -2.0, 3.0);
+  ASSERT_TRUE(drone_controller::world_velocity_from_body(
+      Eigen::Quaterniond::Identity(), velocity_body, velocity_world));
+  EXPECT_TRUE(velocity_world.isApprox(velocity_body, kTolerance));
+}
+
+TEST(HoverConversions, PitchRotatesBodyXIntoWorldZ)
+{
+  Eigen::Vector3d velocity_world;
+  const Eigen::Quaterniond orientation = rotation(Eigen::Vector3d::UnitY(), 0.5);
+  ASSERT_TRUE(drone_controller::world_velocity_from_body(
+      orientation, Eigen::Vector3d(2.0, 0.0, 0.0), velocity_world));
+  EXPECT_NEAR(velocity_world.x(), 2.0 * std::cos(0.5), kTolerance);
+  EXPECT_NEAR(velocity_world.y(), 0.0, kTolerance);
+  EXPECT_NEAR(velocity_world.z(), -2.0 * std::sin(0.5), kTolerance);
+}
+
+TEST(HoverConversions, YawRotatesBodyXYIntoWorldXY)
+{
+  Eigen::Vector3d velocity_world;
+  const Eigen::Quaterniond orientation =
+    rotation(Eigen::Vector3d::UnitZ(), std::acos(-1.0) / 2.0);
+  ASSERT_TRUE(drone_controller::world_velocity_from_body(
+      orientation, Eigen::Vector3d(2.0, 3.0, 0.0), velocity_world));
+  EXPECT_NEAR(velocity_world.x(), -3.0, kTolerance);
+  EXPECT_NEAR(velocity_world.y(), 2.0, kTolerance);
+  EXPECT_NEAR(velocity_world.z(), 0.0, kTolerance);
+}
+
+TEST(HoverConversions, CompleteVelocityRejectsInvalidQuaternion)
+{
+  Eigen::Quaterniond invalid;
+  invalid.coeffs().setZero();
+  Eigen::Vector3d velocity_world;
+  EXPECT_FALSE(drone_controller::world_velocity_from_body(
+      invalid, Eigen::Vector3d::Ones(), velocity_world));
 }
 
 TEST(HoverConversions, TiltedVelocityRequiresFullRotation)

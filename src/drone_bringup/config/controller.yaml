@@ -9,12 +9,12 @@ position_controller_node:
     gravity: 9.80665
 
     # Horizontal position/velocity control in map/ENU. max_tilt_angle is in rad.
-    horizontal_position_kp_x: 0.1
-    horizontal_position_kp_y: 0.1
-    horizontal_velocity_kd_x: 0.5
-    horizontal_velocity_kd_y: 0.5
-    max_horizontal_acceleration: 0.05
-    max_tilt_angle: 0.02
+    horizontal_position_kp_x: 0.4
+    horizontal_position_kp_y: 0.4
+    horizontal_velocity_kd_x: 1.2
+    horizontal_velocity_kd_y: 1.2
+    max_horizontal_acceleration: 0.4
+    max_tilt_angle: 0.08
 
     altitude_kp: 3.0
     vertical_velocity_kd: 3.5
@@ -28,8 +28,8 @@ position_controller_node:
     attitude_kp_roll: 4.0
     attitude_kp_pitch: 4.0
     attitude_kp_yaw: 1.0
-    angular_rate_kd_roll: 0.20
-    angular_rate_kd_pitch: 0.20
+    angular_rate_kd_roll: 0.35
+    angular_rate_kd_pitch: 0.35
     angular_rate_kd_yaw: 0.40
     max_torque_roll: 1.0
     max_torque_pitch: 1.0

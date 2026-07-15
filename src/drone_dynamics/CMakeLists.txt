@@ -43,10 +43,20 @@ target_link_libraries(quadrotor_dynamics_node quadrotor_model Eigen3::Eigen)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  find_package(drone_controller REQUIRED)
 
   ament_add_gtest(test_quadrotor_model test/test_quadrotor_model.cpp)
   target_compile_options(test_quadrotor_model PRIVATE -Wall -Wextra -Wpedantic)
   target_link_libraries(test_quadrotor_model quadrotor_model Eigen3::Eigen)
+
+  ament_add_gtest(test_attitude_closed_loop test/test_attitude_closed_loop.cpp)
+  target_compile_options(test_attitude_closed_loop PRIVATE -Wall -Wextra -Wpedantic)
+  target_link_libraries(
+    test_attitude_closed_loop
+    quadrotor_model
+    drone_controller::attitude_controller
+    drone_controller::motor_mixer
+    Eigen3::Eigen)
 endif()
 
 install(

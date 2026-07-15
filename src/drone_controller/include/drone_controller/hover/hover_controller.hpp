@@ -74,8 +74,13 @@ private:
 // Pure conversion helpers used by the ROS node and unit tests.
 // 两个纯函数，是 ROS 层数据与本包算法输入之间的“适配器”，不依赖 ROS2，可独立测试。
 
-// 把 Odom 里机体系（base_link）的线速度旋转到世界系（map），取其 z 分量，
-// 因为 Odom 约定 twist.linear 表达在 base_link 中，不能直接当作世界系 vz 使用。
+// 把 Odom 里机体系（base_link）的完整线速度旋转到世界系（map）。
+bool world_velocity_from_body(
+  const Eigen::Quaterniond & orientation_body_to_world,
+  const Eigen::Vector3d & velocity_body,
+  Eigen::Vector3d & velocity_world);
+
+// 完整转换后仅返回世界系 z 分量，保留给现有高度控制调用和测试。
 bool world_vertical_velocity_from_body(
   const Eigen::Quaterniond & orientation_body_to_world,
   const Eigen::Vector3d & velocity_body,

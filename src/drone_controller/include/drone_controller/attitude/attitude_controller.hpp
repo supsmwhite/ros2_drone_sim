@@ -12,7 +12,7 @@ namespace drone_controller
 struct AttitudeControllerParameters
 {
   Eigen::Vector3d attitude_kp{4.0, 4.0, 2.0};      // [roll,pitch,yaw] 姿态误差的比例增益。
-  Eigen::Vector3d angular_rate_kd{0.20, 0.20, 0.10}; // [roll,pitch,yaw] 角速度误差（阻尼）增益。
+  Eigen::Vector3d angular_rate_kd{0.35, 0.35, 0.10}; // [roll,pitch,yaw] 角速度误差（阻尼）增益。
   Eigen::Vector3d max_torque{1.0, 1.0, 0.5};       // [roll,pitch,yaw] 输出力矩上限 (N*m)，逐轴限幅。
 };
 

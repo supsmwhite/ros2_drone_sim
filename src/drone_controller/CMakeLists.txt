@@ -61,6 +61,16 @@ target_compile_options(hover_controller PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(
   hover_controller PUBLIC altitude_controller attitude_controller motor_mixer Eigen3::Eigen)
 
+add_library(position_controller src/position_controller.cpp)
+target_include_directories(position_controller
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_options(position_controller PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(
+  position_controller PUBLIC horizontal_position_controller hover_controller Eigen3::Eigen)
+
 add_executable(position_controller_node src/position_controller_node.cpp)
 target_compile_options(position_controller_node PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(position_controller_node
@@ -69,7 +79,7 @@ ament_target_dependencies(position_controller_node
   nav_msgs
   rclcpp
 )
-target_link_libraries(position_controller_node hover_controller Eigen3::Eigen)
+target_link_libraries(position_controller_node position_controller Eigen3::Eigen)
 
 install(
   DIRECTORY include/
@@ -78,7 +88,7 @@ install(
 
 install(
   TARGETS motor_mixer attitude_controller altitude_controller
-    horizontal_position_controller hover_controller
+    horizontal_position_controller hover_controller position_controller
     position_controller_node
   EXPORT export_controller_algorithms
   ARCHIVE DESTINATION lib
@@ -112,6 +122,10 @@ if(BUILD_TESTING)
   target_link_libraries(
     test_horizontal_position_controller horizontal_position_controller Eigen3::Eigen)
   target_compile_options(test_horizontal_position_controller PRIVATE -Wall -Wextra -Wpedantic)
+
+  ament_add_gtest(test_position_controller test/test_position_controller.cpp)
+  target_link_libraries(test_position_controller position_controller Eigen3::Eigen)
+  target_compile_options(test_position_controller PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 ament_package()

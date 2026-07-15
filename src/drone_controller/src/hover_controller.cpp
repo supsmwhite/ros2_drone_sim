@@ -115,13 +115,12 @@ HoverControllerResult HoverController::compute(const HoverControllerInput & inpu
   return result;
 }
 
-// 把 Odom 中机体系（base_link）的线速度旋转到世界系（map），取其 z 分量，
-// 供 AltitudeController 作为 current_vertical_velocity 使用。
+// 把 Odom 中机体系（base_link）的完整线速度旋转到世界系（map）。
 // 公式：velocity_world = orientation_body_to_world * velocity_body。
-bool world_vertical_velocity_from_body(
+bool world_velocity_from_body(
   const Eigen::Quaterniond & orientation_body_to_world,
   const Eigen::Vector3d & velocity_body,
-  double & vertical_velocity_world)
+  Eigen::Vector3d & velocity_world)
 {
   if (!velocity_body.array().isFinite().all()) {
     return false;
@@ -130,8 +129,20 @@ bool world_vertical_velocity_from_body(
   if (!normalize_quaternion(orientation)) {
     return false;
   }
-  const Eigen::Vector3d velocity_world = orientation * velocity_body;
+  velocity_world = orientation * velocity_body;
   if (!velocity_world.array().isFinite().all()) {
+    return false;
+  }
+  return true;
+}
+
+bool world_vertical_velocity_from_body(
+  const Eigen::Quaterniond & orientation_body_to_world,
+  const Eigen::Vector3d & velocity_body,
+  double & vertical_velocity_world)
+{
+  Eigen::Vector3d velocity_world;
+  if (!world_velocity_from_body(orientation_body_to_world, velocity_body, velocity_world)) {
     return false;
   }
   vertical_velocity_world = velocity_world.z();

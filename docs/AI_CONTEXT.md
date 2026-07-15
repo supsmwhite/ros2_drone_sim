@@ -411,11 +411,14 @@ F4 = (T - tx/a - ty/a + tz/b) / 4
 - 高度控制器；
 - 水平位置控制纯算法；
 - HoverController；
-- 高度和 yaw ROS2 闭环；
+- PositionController、完整 Odom 速度转换和 ROS2 x/y/z/yaw 闭环；
+- roll/pitch `Kd=0.35` 姿态稳定性修复；
+- 使用真实控制器、Mixer、电机响应和刚体动力学的完整动态闭环测试；
+- 已通过真实运行验收的单目标三维位置控制参数；
 - MotorRPM watchdog；
 - 当前文档整理结果。
 
-`PositionController`、完整 Odom 速度转换和 ROS2 x/y 接入已提交在当前调试分支；本阶段在其上完成姿态稳定性修复和三维运行验收。
+以上能力构成当前 `main` 稳定基线；轨迹、多目标点、地图、规划和避障不在该基线中。
 
 开始任何新任务前，应重新执行：
 

@@ -296,6 +296,7 @@ class TestTrajectoryMissionEndToEnd(unittest.TestCase):
             self.assertEqual(observed_segments, EXPECTED_SEGMENTS, summary)
             self.assertTrue(all(speed > 0.10 for speed in intermediate_speeds), summary)
             self.assertLess(max_position_step, MAX_SETPOINT_POSITION_STEP, summary)
+            self.assertLess(max_tracking_error, 0.10, summary)
             self.assertLess(max_reference_speed, MAX_REFERENCE_SPEED_LIMIT, summary)
             self.assertLess(
                 max_reference_acceleration, MAX_REFERENCE_ACCELERATION_LIMIT, summary)

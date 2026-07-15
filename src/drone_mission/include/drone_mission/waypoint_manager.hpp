@@ -44,6 +44,8 @@ public:
 
   WaypointManagerOutput update(const VehicleState & state, double dt);
 
+  void reset_acceptance_progress();
+
   const Waypoint & current_waypoint() const;
   std::size_t current_index() const;
   bool mission_complete() const;

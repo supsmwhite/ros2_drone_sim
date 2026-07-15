@@ -166,6 +166,7 @@ private:
       odometry_timeout_;
     if (!odometry_fresh) {
       if (!odometry_stale_) {
+        manager_->reset_acceptance_progress();
         RCLCPP_WARN(get_logger(), "odometry stale; waypoint progression paused");
         odometry_stale_ = true;
       }
@@ -179,6 +180,7 @@ private:
     VehicleState state;
     if (!vehicle_state_from_odometry(*latest_odometry_, state)) {
       if (!invalid_odometry_logged_) {
+        manager_->reset_acceptance_progress();
         RCLCPP_WARN(get_logger(), "invalid odometry; waypoint progression paused");
         invalid_odometry_logged_ = true;
       }

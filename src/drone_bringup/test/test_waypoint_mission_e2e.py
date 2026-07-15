@@ -24,12 +24,31 @@ from std_msgs.msg import Bool, UInt32
 
 
 EXPECTED_INDICES = [0, 1, 2, 3, 4]
-FINAL_TARGET = (0.0, 0.0, 1.5)
+EXPECTED_GOALS = [
+    (0.0, 0.0, 1.5, 0.0),
+    (2.0, 0.0, 1.5, 0.0),
+    (2.0, 1.5, 2.0, math.pi / 2.0),
+    (0.0, 1.5, 1.5, math.pi),
+    (0.0, 0.0, 1.5, 0.0),
+]
+FINAL_TARGET = EXPECTED_GOALS[-1][:3]
 MISSION_TIMEOUT = 100.0
 DISCOVERY_TIMEOUT = 8.0
 POST_COMPLETE_OBSERVATION = 2.0
 FINAL_POSITION_TOLERANCE = 0.20
 FINAL_SPEED_TOLERANCE = 0.15
+GOAL_TOLERANCE = 1.0e-6
+
+
+def shortest_yaw_error(target, current):
+    return math.remainder(target - current, 2.0 * math.pi)
+
+
+def goals_match(actual, expected, tolerance=GOAL_TOLERANCE):
+    return (
+        all(abs(actual[index] - expected[index]) <= tolerance for index in range(3))
+        and abs(shortest_yaw_error(expected[3], actual[3])) <= tolerance
+    )
 
 
 def quaternion_yaw(quaternion):
@@ -72,6 +91,7 @@ class TestWaypointMissionEndToEnd(unittest.TestCase):
         node = rclpy.create_node('waypoint_mission_e2e_test')
         test_start = time.monotonic()
         observed_indices = []
+        observed_goal_sequence = []
         switch_times = []
         complete_time = None
         latest_position = None
@@ -102,8 +122,12 @@ class TestWaypointMissionEndToEnd(unittest.TestCase):
 
         def on_goal(message):
             nonlocal latest_goal, goal_samples, goal_samples_after_complete
+            if message.header.frame_id != 'map':
+                health_errors.append(
+                    f'invalid /drone/goal frame: {message.header.frame_id!r}')
+                return
             try:
-                quaternion_yaw(message.pose.orientation)
+                yaw = quaternion_yaw(message.pose.orientation)
             except ValueError as error:
                 health_errors.append(f'invalid goal quaternion: {error}')
                 return
@@ -115,6 +139,16 @@ class TestWaypointMissionEndToEnd(unittest.TestCase):
             if not all(math.isfinite(value) for value in values):
                 health_errors.append('non-finite value in /drone/goal')
                 return
+            goal = (*values, yaw)
+            if (not observed_goal_sequence or
+                    not goals_match(goal, observed_goal_sequence[-1])):
+                observed_goal_sequence.append(goal)
+                sequence_index = len(observed_goal_sequence) - 1
+                if (sequence_index >= len(EXPECTED_GOALS) or
+                        not goals_match(goal, EXPECTED_GOALS[sequence_index])):
+                    health_errors.append(
+                        'goal sequence skipped, regressed, or contained an unexpected target: '
+                        f'{observed_goal_sequence}')
             latest_goal = message
             goal_samples += 1
             if complete_time is not None:
@@ -171,7 +205,7 @@ class TestWaypointMissionEndToEnd(unittest.TestCase):
                 self.fail(
                     f'mission ROS graph was not ready; nodes={sorted(node.get_node_names())}, '
                     f'indices={observed_indices}, odom_samples={odom_samples}, '
-                    f'goal_samples={goal_samples}')
+                    f'goal_sequence={observed_goal_sequence}, goal_samples={goal_samples}')
 
             mission_deadline = test_start + MISSION_TIMEOUT
             while time.monotonic() < mission_deadline and complete_time is None:
@@ -213,6 +247,7 @@ class TestWaypointMissionEndToEnd(unittest.TestCase):
             summary = (
                 'waypoint_mission_e2e: '
                 f'indices={observed_indices} '
+                f'goals={observed_goal_sequence} '
                 f'switch_times={[round(value, 3) for value in switch_times]} '
                 f'mission_complete_time={complete_time - test_start:.3f}s '
                 f'final_position={latest_position} final_error={final_error:.6f} '
@@ -223,13 +258,17 @@ class TestWaypointMissionEndToEnd(unittest.TestCase):
             print(summary, flush=True)
 
             metrics = (
-                f'indices={observed_indices}, switch_times={switch_times}, '
+                f'indices={observed_indices}, goals={observed_goal_sequence}, '
+                f'switch_times={switch_times}, '
                 f'final_position={latest_position}, final_error={final_error:.6f}, '
                 f'final_speed={latest_speed:.6f}, odom_samples={odom_samples}, '
                 f'goal_samples={goal_samples}, '
                 f'goal_samples_after_complete={goal_samples_after_complete}'
             )
             self.assertEqual(observed_indices, EXPECTED_INDICES, metrics)
+            self.assertEqual(len(observed_goal_sequence), len(EXPECTED_GOALS), metrics)
+            for actual, expected in zip(observed_goal_sequence, EXPECTED_GOALS):
+                self.assertTrue(goals_match(actual, expected), metrics)
             self.assertLess(final_error, FINAL_POSITION_TOLERANCE, metrics)
             self.assertLess(latest_speed, FINAL_SPEED_TOLERANCE, metrics)
             self.assertGreater(odom_samples, 500, metrics)

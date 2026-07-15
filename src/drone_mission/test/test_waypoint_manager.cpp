@@ -137,6 +137,20 @@ TEST(WaypointManager, LeavingAcceptanceResetsHoldTimer)
   EXPECT_EQ(manager.current_index(), 1U);
 }
 
+TEST(WaypointManager, ExplicitResetBreaksContinuousAcceptance)
+{
+  auto manager = manager_with({waypoint(0.0, 0.0, 1.0), waypoint(1.0, 0.0, 1.0)});
+  const VehicleState state = settled_at(manager.current_waypoint());
+  manager.update(state, 0.6);
+
+  manager.reset_acceptance_progress();
+
+  EXPECT_FALSE(manager.update(state, 0.9).waypoint_accepted);
+  EXPECT_EQ(manager.current_index(), 0U);
+  EXPECT_TRUE(manager.update(state, 0.1).waypoint_accepted);
+  EXPECT_EQ(manager.current_index(), 1U);
+}
+
 TEST(WaypointManager, WaypointsAdvanceSequentiallyWithoutSkipping)
 {
   const std::vector<Waypoint> targets{
@@ -170,6 +184,21 @@ TEST(WaypointManager, FinalWaypointCompletesAndRetainsFinalGoal)
   EXPECT_EQ(after_completion.current_index, 1U);
   EXPECT_TRUE(after_completion.current_waypoint.position_world.isApprox(final.position_world));
   EXPECT_DOUBLE_EQ(after_completion.current_waypoint.yaw, final.yaw);
+}
+
+TEST(WaypointManager, ExplicitResetDoesNotChangeCompletedMission)
+{
+  const auto final = waypoint(1.0, 2.0, 3.0, 0.5);
+  auto manager = manager_with({final});
+  manager.update(settled_at(final), 1.0);
+  ASSERT_TRUE(manager.mission_complete());
+
+  manager.reset_acceptance_progress();
+
+  EXPECT_TRUE(manager.mission_complete());
+  EXPECT_EQ(manager.current_index(), 0U);
+  EXPECT_TRUE(manager.current_waypoint().position_world.isApprox(final.position_world));
+  EXPECT_DOUBLE_EQ(manager.current_waypoint().yaw, final.yaw);
 }
 
 TEST(WaypointManager, YawWrapUsesShortestAngularError)

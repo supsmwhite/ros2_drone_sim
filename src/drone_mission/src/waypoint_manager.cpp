@@ -94,6 +94,11 @@ WaypointManagerOutput WaypointManager::update(const VehicleState & state, double
   return output;
 }
 
+void WaypointManager::reset_acceptance_progress()
+{
+  stable_duration_ = 0.0;
+}
+
 const Waypoint & WaypointManager::current_waypoint() const
 {
   return waypoints_.at(current_index_);

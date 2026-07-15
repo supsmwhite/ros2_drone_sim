@@ -29,6 +29,10 @@ POSITION_TOLERANCE = 0.30
 HORIZONTAL_SPEED_TOLERANCE = 0.15
 VERTICAL_SPEED_TOLERANCE = 0.10
 STABLE_DURATION = 2.0
+POST_STABLE_OBSERVATION = 3.0
+FINAL_POSITION_TOLERANCE = 0.10
+FINAL_HORIZONTAL_SPEED_TOLERANCE = 0.08
+FINAL_VERTICAL_SPEED_TOLERANCE = 0.05
 DISCOVERY_TIMEOUT = 8.0
 FLIGHT_TIMEOUT = 40.0
 GOAL_PUBLISH_DURATION = 1.0
@@ -115,7 +119,9 @@ class TestSingleGoalEndToEnd(unittest.TestCase):
         first_goal_publish_time = None
         first_position_tolerance_time = None
         stable_start_time = None
-        stable_end_time = None
+        acceptance_time = None
+        observation_end_time = None
+        post_stable_deadline = None
         latest_position = None
         latest_velocity_world = None
         latest_position_error = math.inf
@@ -125,8 +131,11 @@ class TestSingleGoalEndToEnd(unittest.TestCase):
         last_rpm_reception_time = None
         odom_samples = 0
         rpm_samples = 0
-        minimum_rpm = math.inf
-        maximum_rpm = -math.inf
+        minimum_rpm_all = math.inf
+        maximum_rpm_all = -math.inf
+        minimum_rpm_after_grace = math.inf
+        maximum_rpm_after_grace = -math.inf
+        rpm_samples_after_grace = 0
         health_errors = []
 
         def on_odometry(message):
@@ -163,7 +172,10 @@ class TestSingleGoalEndToEnd(unittest.TestCase):
             latest_vertical_speed = abs(velocity_world[2])
 
         def on_motor_rpm(message):
-            nonlocal last_rpm_reception_time, rpm_samples, minimum_rpm, maximum_rpm
+            nonlocal last_rpm_reception_time, rpm_samples
+            nonlocal minimum_rpm_all, maximum_rpm_all
+            nonlocal minimum_rpm_after_grace, maximum_rpm_after_grace
+            nonlocal rpm_samples_after_grace
             rpm_samples += 1
             now = time.monotonic()
             last_rpm_reception_time = now
@@ -176,10 +188,13 @@ class TestSingleGoalEndToEnd(unittest.TestCase):
             if not all(math.isfinite(value) for value in values):
                 health_errors.append('non-finite value in /drone/motor_rpm_cmd')
                 return
-            minimum_rpm = min(minimum_rpm, *values)
-            maximum_rpm = max(maximum_rpm, *values)
+            minimum_rpm_all = min(minimum_rpm_all, *values)
+            maximum_rpm_all = max(maximum_rpm_all, *values)
             if (first_goal_publish_time is not None and
                     now - first_goal_publish_time >= RPM_STARTUP_GRACE):
+                rpm_samples_after_grace += 1
+                minimum_rpm_after_grace = min(minimum_rpm_after_grace, *values)
+                maximum_rpm_after_grace = max(maximum_rpm_after_grace, *values)
                 if any(value <= RPM_LOWER_BOUND + RPM_BOUNDARY_EPSILON for value in values):
                     health_errors.append(
                         f'zero/boundary RPM after startup grace at t='
@@ -252,57 +267,102 @@ class TestSingleGoalEndToEnd(unittest.TestCase):
                 )
                 if within_position and first_position_tolerance_time is None:
                     first_position_tolerance_time = now
-                if stable:
-                    if stable_start_time is None:
-                        stable_start_time = now
-                    if now - stable_start_time >= STABLE_DURATION:
-                        stable_end_time = now
-                        break
+                if acceptance_time is None:
+                    if stable:
+                        if stable_start_time is None:
+                            stable_start_time = now
+                        if now - stable_start_time >= STABLE_DURATION:
+                            acceptance_time = now
+                            post_stable_deadline = now + POST_STABLE_OBSERVATION
+                    else:
+                        stable_start_time = None
                 else:
-                    stable_start_time = None
+                    if not stable:
+                        elapsed_observation = now - acceptance_time
+                        self.fail(
+                            'vehicle left the stable acceptance region during '
+                            'post-stable observation; '
+                            f'position error={latest_position_error:.6f}, '
+                            f'horizontal speed={latest_horizontal_speed:.6f}, '
+                            f'vertical speed={latest_vertical_speed:.6f}, '
+                            f'elapsed observation time={elapsed_observation:.3f}s')
+                    if now >= post_stable_deadline:
+                        observation_end_time = now
+                        break
 
-            stable_hold = (
-                stable_end_time - stable_start_time
-                if stable_end_time is not None and stable_start_time is not None else 0.0)
+            total_stable_hold = (
+                observation_end_time - stable_start_time
+                if observation_end_time is not None and stable_start_time is not None else 0.0)
             first_position_text = (
                 f'{first_position_tolerance_time - first_goal_publish_time:.3f}s'
                 if first_position_tolerance_time is not None else 'n/a')
             stable_start_text = (
                 f'{stable_start_time - first_goal_publish_time:.3f}s'
                 if stable_start_time is not None else 'n/a')
+            acceptance_text = (
+                f'{acceptance_time - first_goal_publish_time:.3f}s'
+                if acceptance_time is not None else 'n/a')
+            observation_end_text = (
+                f'{observation_end_time - first_goal_publish_time:.3f}s'
+                if observation_end_time is not None else 'n/a')
             summary = (
                 'single_goal_e2e: '
                 f'target={list(TARGET)} '
-                f'reached={stable_end_time is not None} '
+                f'reached={observation_end_time is not None} '
                 f'first_position_tolerance_time={first_position_text} '
-                f'stable_time={stable_start_text} '
-                f'final_position={latest_position} '
-                f'final_error={latest_position_error:.6f} '
-                f'final_velocity_world={latest_velocity_world} '
-                f'stable_hold={stable_hold:.3f}s '
-                f'rpm_range=[{minimum_rpm:.3f}, {maximum_rpm:.3f}] '
-                f'odom_samples={odom_samples} rpm_samples={rpm_samples}'
+                f'stable_start_time={stable_start_text} '
+                f'acceptance_time={acceptance_text} '
+                f'observation_end_time={observation_end_text} '
+                f'post_stable_observation={POST_STABLE_OBSERVATION:.3f}s '
+                f'total_stable_hold={total_stable_hold:.3f}s '
+                f'observation_end_position={latest_position} '
+                f'observation_end_error={latest_position_error:.6f} '
+                f'observation_end_velocity_world={latest_velocity_world} '
+                f'rpm_range_all=[{minimum_rpm_all:.3f}, {maximum_rpm_all:.3f}] '
+                f'rpm_range_after_grace=['
+                f'{minimum_rpm_after_grace:.3f}, {maximum_rpm_after_grace:.3f}] '
+                f'odom_samples={odom_samples} rpm_samples={rpm_samples} '
+                f'rpm_samples_after_grace={rpm_samples_after_grace}'
             )
             print(summary, flush=True)
 
             failure_metrics = (
-                f'final position error={latest_position_error:.6f}, '
-                f'final horizontal speed={latest_horizontal_speed:.6f}, '
-                f'final vertical speed={latest_vertical_speed:.6f}, '
-                f'rpm range=[{minimum_rpm:.3f}, {maximum_rpm:.3f}], '
+                f'observation end position error={latest_position_error:.6f}, '
+                f'observation end horizontal speed={latest_horizontal_speed:.6f}, '
+                f'observation end vertical speed={latest_vertical_speed:.6f}, '
+                f'rpm range all=[{minimum_rpm_all:.3f}, {maximum_rpm_all:.3f}], '
+                f'rpm range after grace=['
+                f'{minimum_rpm_after_grace:.3f}, {maximum_rpm_after_grace:.3f}], '
                 f'odom samples={odom_samples}, rpm samples={rpm_samples}'
             )
             self.assertIsNotNone(
-                stable_end_time,
-                f'target was not reached and stable within {FLIGHT_TIMEOUT:.1f}s; '
+                acceptance_time,
+                f'target was not accepted within {FLIGHT_TIMEOUT:.1f}s; '
+                + failure_metrics)
+            self.assertIsNotNone(
+                observation_end_time,
+                f'post-stable observation did not finish within {FLIGHT_TIMEOUT:.1f}s; '
                 + failure_metrics)
             self.assertGreater(odom_samples, MIN_ODOM_SAMPLES, failure_metrics)
             self.assertGreater(rpm_samples, MIN_RPM_SAMPLES, failure_metrics)
-            self.assertLess(latest_position_error, POSITION_TOLERANCE, failure_metrics)
+            self.assertGreater(rpm_samples_after_grace, 0, failure_metrics)
+            self.assertGreater(
+                minimum_rpm_after_grace,
+                RPM_LOWER_BOUND + RPM_BOUNDARY_EPSILON,
+                failure_metrics)
             self.assertLess(
-                latest_horizontal_speed, HORIZONTAL_SPEED_TOLERANCE, failure_metrics)
-            self.assertLess(latest_vertical_speed, VERTICAL_SPEED_TOLERANCE, failure_metrics)
-            self.assertGreaterEqual(stable_hold, STABLE_DURATION, failure_metrics)
+                maximum_rpm_after_grace,
+                RPM_UPPER_BOUND - RPM_BOUNDARY_EPSILON,
+                failure_metrics)
+            self.assertLess(latest_position_error, FINAL_POSITION_TOLERANCE, failure_metrics)
+            self.assertLess(
+                latest_horizontal_speed, FINAL_HORIZONTAL_SPEED_TOLERANCE, failure_metrics)
+            self.assertLess(
+                latest_vertical_speed, FINAL_VERTICAL_SPEED_TOLERANCE, failure_metrics)
+            self.assertGreaterEqual(
+                total_stable_hold,
+                STABLE_DURATION + POST_STABLE_OBSERVATION,
+                failure_metrics)
             self.assertFalse(health_errors, '; '.join(health_errors))
         finally:
             node.destroy_subscription(odom_subscription)

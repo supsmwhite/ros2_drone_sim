@@ -1,0 +1,16 @@
+static_environment_node:
+  ros__parameters:
+    frame_id: map
+
+    # [xmin, xmax, ymin, ymax, zmin, zmax]
+    workspace: [-1.0, 5.0, -1.0, 4.0, -0.5, 3.5]
+
+    # Flat [center_x, center_y, center_z, size_x, size_y, size_z] groups.
+    obstacles:
+      [
+        2.0, 1.0, 1.25, 0.6, 1.8, 2.5,
+        3.5, 2.5, 1.0, 0.8, 0.8, 2.0
+      ]
+
+    safety_radius: 0.25
+    odometry_timeout: 0.25

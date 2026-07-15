@@ -22,7 +22,7 @@ struct PositionControllerInput
 {
   Eigen::Vector3d desired_position_world{Eigen::Vector3d::Zero()};
   Eigen::Vector3d desired_velocity_world{Eigen::Vector3d::Zero()};
-  double desired_vertical_acceleration{0.0};
+  Eigen::Vector3d desired_acceleration_world{Eigen::Vector3d::Zero()};
   double desired_yaw{0.0};
 
   Eigen::Vector3d current_position_world{Eigen::Vector3d::Zero()};

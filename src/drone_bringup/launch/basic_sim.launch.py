@@ -28,12 +28,18 @@ def generate_launch_description():
         value_type=str,
     )
     use_rviz = LaunchConfiguration('use_rviz')
+    setpoint_source = LaunchConfiguration('setpoint_source')
 
     return LaunchDescription([
         DeclareLaunchArgument(
             'use_rviz',
             default_value='true',
             description='Start RViz2 with the drone simulation configuration.',
+        ),
+        DeclareLaunchArgument(
+            'setpoint_source',
+            default_value='pose_goal',
+            description='Controller input source: pose_goal or trajectory.',
         ),
         Node(
             package='drone_dynamics',
@@ -47,7 +53,7 @@ def generate_launch_description():
             executable='position_controller_node',
             name='position_controller_node',
             output='screen',
-            parameters=[controller_parameters],
+            parameters=[controller_parameters, {'setpoint_source': setpoint_source}],
         ),
         Node(
             package='robot_state_publisher',

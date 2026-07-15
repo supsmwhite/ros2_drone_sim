@@ -10,6 +10,7 @@
 
 #include "drone_controller/position/position_controller.hpp"
 #include "drone_msgs/msg/motor_rpm.hpp"
+#include "drone_msgs/msg/trajectory_setpoint.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -29,21 +30,34 @@ public:
     const double control_frequency = declare_parameter<double>("control_frequency", 100.0);
     odometry_timeout_ = declare_parameter<double>("odometry_timeout", 0.2);
     supported_goal_frame_ = declare_parameter<std::string>("supported_goal_frame", "map");
+    setpoint_source_ = declare_parameter<std::string>("setpoint_source", "pose_goal");
+    trajectory_setpoint_timeout_ =
+      declare_parameter<double>("trajectory_setpoint_timeout", 0.2);
     if (!std::isfinite(control_frequency) || control_frequency <= 0.0 ||
       !std::isfinite(odometry_timeout_) || odometry_timeout_ <= 0.0 ||
-      supported_goal_frame_.empty())
+      supported_goal_frame_.empty() ||
+      !std::isfinite(trajectory_setpoint_timeout_) || trajectory_setpoint_timeout_ <= 0.0 ||
+      (setpoint_source_ != "pose_goal" && setpoint_source_ != "trajectory"))
     {
       throw std::invalid_argument("Invalid controller loop parameters");
     }
 
     position_controller_ = std::make_unique<PositionController>(read_position_parameters());
-    // 订阅 /drone/goal：回调只做最简单的缓存，不在回调里做任何计算，
-    // 真正的处理集中在 control_step() 中按固定频率执行。
-    goal_subscription_ = create_subscription<geometry_msgs::msg::PoseStamped>(
-      "/drone/goal", 10,
-      [this](const geometry_msgs::msg::PoseStamped::SharedPtr message) {
-        latest_goal_ = *message;
-      });
+    if (setpoint_source_ == "pose_goal") {
+      goal_subscription_ = create_subscription<geometry_msgs::msg::PoseStamped>(
+        "/drone/goal", 10,
+        [this](const geometry_msgs::msg::PoseStamped::SharedPtr message) {
+          latest_goal_ = *message;
+        });
+    } else {
+      trajectory_setpoint_subscription_ =
+        create_subscription<drone_msgs::msg::TrajectorySetpoint>(
+        "/drone/trajectory_setpoint", 10,
+        [this](const drone_msgs::msg::TrajectorySetpoint::SharedPtr message) {
+          latest_trajectory_setpoint_ = *message;
+          latest_trajectory_setpoint_reception_time_ = now();
+        });
+    }
     // 订阅 /drone/odom：除了缓存消息本身，还记录接收时刻，用于后续判断
     // Odom 是否过期（watchdog 的一部分）。
     odometry_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
@@ -64,8 +78,8 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "3D position controller started at %.1f Hz (odom timeout %.3f s); waiting for a map goal",
-      control_frequency, odometry_timeout_);
+      "3D position controller started at %.1f Hz (source=%s, odom timeout %.3f s)",
+      control_frequency, setpoint_source_.c_str(), odometry_timeout_);
   }
 
 private:
@@ -154,12 +168,29 @@ private:
   // 只有全部通过才会真正调用 PositionController::compute()。
   void control_step()
   {
-    // 检查 1：尚未收到任何目标。
-    if (!latest_goal_) {
+    // 检查 1：尚未收到当前模式所需的 setpoint，或者轨迹 setpoint 已超时。
+    if (setpoint_source_ == "pose_goal" && !latest_goal_) {
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Waiting for /drone/goal; RPM=0");
       return;
     }
+    if (setpoint_source_ == "trajectory") {
+      if (!latest_trajectory_setpoint_ || !latest_trajectory_setpoint_reception_time_) {
+        publish_zero_rpm();
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 1000, "Waiting for /drone/trajectory_setpoint; RPM=0");
+        return;
+      }
+      const double setpoint_age = (now() - *latest_trajectory_setpoint_reception_time_).seconds();
+      if (!std::isfinite(setpoint_age) || setpoint_age > trajectory_setpoint_timeout_) {
+        publish_zero_rpm();
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 1000,
+          "Trajectory setpoint stale (%.3f s); RPM=0", setpoint_age);
+        return;
+      }
+    }
+
     // 检查 2：尚未收到任何 Odom。
     if (!latest_odometry_ || !latest_odometry_reception_time_) {
       publish_zero_rpm();
@@ -176,40 +207,62 @@ private:
       return;
     }
 
-    // 检查 4：目标 frame 合法性。空字符串按 map 处理，非空且不等于 supported_goal_frame_
-    // （默认 "map"）时拒绝执行。
-    const std::string & frame = latest_goal_->header.frame_id;
+    Eigen::Vector3d desired_position_world;
+    Eigen::Vector3d desired_velocity_world{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d desired_acceleration_world{Eigen::Vector3d::Zero()};
+    double desired_yaw = 0.0;
+    const std::string & frame = setpoint_source_ == "pose_goal" ?
+      latest_goal_->header.frame_id : latest_trajectory_setpoint_->header.frame_id;
     if (!frame.empty() && frame != supported_goal_frame_) {
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(
-        get_logger(), *get_clock(), 1000, "Unsupported goal frame '%s'; RPM=0", frame.c_str());
+        get_logger(), *get_clock(), 1000, "Unsupported setpoint frame '%s'; RPM=0", frame.c_str());
+      return;
+    }
+
+    if (setpoint_source_ == "pose_goal") {
+      const auto & goal_pose = latest_goal_->pose;
+      const Eigen::Quaterniond goal_orientation(
+        goal_pose.orientation.w, goal_pose.orientation.x,
+        goal_pose.orientation.y, goal_pose.orientation.z);
+      Eigen::Quaterniond desired_level_orientation;
+      if (!level_orientation_from_goal_yaw(goal_orientation, desired_level_orientation)) {
+        publish_zero_rpm();
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid goal quaternion; RPM=0");
+        return;
+      }
+      const Eigen::Matrix3d desired_level_rotation =
+        desired_level_orientation.toRotationMatrix();
+      desired_yaw =
+        std::atan2(desired_level_rotation(1, 0), desired_level_rotation(0, 0));
+      desired_position_world = Eigen::Vector3d(
+        goal_pose.position.x, goal_pose.position.y, goal_pose.position.z);
+    } else {
+      const auto & setpoint = *latest_trajectory_setpoint_;
+      desired_position_world = Eigen::Vector3d(
+        setpoint.position.x, setpoint.position.y, setpoint.position.z);
+      desired_velocity_world = Eigen::Vector3d(
+        setpoint.velocity.x, setpoint.velocity.y, setpoint.velocity.z);
+      desired_acceleration_world = Eigen::Vector3d(
+        setpoint.acceleration.x, setpoint.acceleration.y, setpoint.acceleration.z);
+      desired_yaw = setpoint.yaw;
+    }
+    if (!desired_position_world.allFinite() || !desired_velocity_world.allFinite() ||
+      !desired_acceleration_world.allFinite() || !std::isfinite(desired_yaw))
+    {
+      publish_zero_rpm();
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid setpoint; RPM=0");
       return;
     }
 
     // ===== 以下开始把 ROS 消息转换为算法层需要的 Eigen 类型 =====
-    const auto & goal_pose = latest_goal_->pose;
     const auto & odometry = *latest_odometry_;
     const auto & current_pose = odometry.pose.pose;
     // 注意 Eigen::Quaterniond 的构造参数顺序是 (w,x,y,z)，
     // 与 ROS 消息里的 orientation 字段顺序不同，这里手动对齐。
-    const Eigen::Quaterniond goal_orientation(
-      goal_pose.orientation.w, goal_pose.orientation.x,
-      goal_pose.orientation.y, goal_pose.orientation.z);
     const Eigen::Quaterniond current_orientation(
       current_pose.orientation.w, current_pose.orientation.x,
       current_pose.orientation.y, current_pose.orientation.z);
-    // Reuse the validated goal-quaternion helper, then pass only its yaw to the
-    // position controller. Goal roll/pitch remain intentionally ignored.
-    Eigen::Quaterniond desired_level_orientation;
-    if (!level_orientation_from_goal_yaw(goal_orientation, desired_level_orientation)) {
-      publish_zero_rpm();
-      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid goal quaternion; RPM=0");
-      return;
-    }
-    const Eigen::Matrix3d desired_level_rotation =
-      desired_level_orientation.toRotationMatrix();
-    const double desired_yaw =
-      std::atan2(desired_level_rotation(1, 0), desired_level_rotation(0, 0));
     if (!std::isfinite(desired_yaw)) {
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid goal yaw; RPM=0");
@@ -230,8 +283,9 @@ private:
     }
 
     PositionControllerInput input;
-    input.desired_position_world = Eigen::Vector3d(
-      goal_pose.position.x, goal_pose.position.y, goal_pose.position.z);
+    input.desired_position_world = desired_position_world;
+    input.desired_velocity_world = desired_velocity_world;
+    input.desired_acceleration_world = desired_acceleration_world;
     input.desired_yaw = desired_yaw;
     input.current_position_world = Eigen::Vector3d(
       current_pose.position.x, current_pose.position.y, current_pose.position.z);
@@ -272,11 +326,17 @@ private:
 
   std::unique_ptr<PositionController> position_controller_;
   double odometry_timeout_{0.2};
+  double trajectory_setpoint_timeout_{0.2};
   std::string supported_goal_frame_{"map"};
+  std::string setpoint_source_{"pose_goal"};
   std::optional<geometry_msgs::msg::PoseStamped> latest_goal_;
+  std::optional<drone_msgs::msg::TrajectorySetpoint> latest_trajectory_setpoint_;
   std::optional<nav_msgs::msg::Odometry> latest_odometry_;
+  std::optional<rclcpp::Time> latest_trajectory_setpoint_reception_time_;
   std::optional<rclcpp::Time> latest_odometry_reception_time_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_subscription_;
+  rclcpp::Subscription<drone_msgs::msg::TrajectorySetpoint>::SharedPtr
+    trajectory_setpoint_subscription_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_subscription_;
   rclcpp::Publisher<drone_msgs::msg::MotorRPM>::SharedPtr motor_rpm_publisher_;
   rclcpp::TimerBase::SharedPtr control_timer_;

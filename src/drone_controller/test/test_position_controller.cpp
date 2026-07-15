@@ -75,6 +75,21 @@ TEST(PositionController, HorizontalVelocityFeedbackOpposesMotion)
   EXPECT_GT(result.desired_horizontal_acceleration_world.y(), 0.0);
 }
 
+TEST(PositionController, DesiredAccelerationFeedsHorizontalAndVerticalControllers)
+{
+  const drone_controller::PositionController controller;
+  const auto baseline = controller.compute({});
+  drone_controller::PositionControllerInput input;
+  input.desired_acceleration_world = Eigen::Vector3d(0.2, -0.1, 0.5);
+  const auto result = controller.compute(input);
+
+  ASSERT_TRUE(baseline.valid);
+  ASSERT_TRUE(result.valid);
+  EXPECT_TRUE(result.desired_horizontal_acceleration_world.isApprox(
+    input.desired_acceleration_world.head<2>(), kTolerance));
+  EXPECT_GT(result.collective_thrust, baseline.collective_thrust);
+}
+
 TEST(PositionController, HorizontalSaturationPropagates)
 {
   drone_controller::PositionControllerParameters parameters;

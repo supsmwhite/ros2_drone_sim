@@ -51,6 +51,7 @@ HorizontalPositionControllerResult HorizontalPositionController::compute(
 {
   if (!vector_is_finite(input.desired_position_world) ||
     !vector_is_finite(input.desired_velocity_world) ||
+    !vector_is_finite(input.desired_acceleration_world) ||
     !vector_is_finite(input.current_position_world) ||
     !vector_is_finite(input.current_velocity_world) ||
     !std::isfinite(input.desired_yaw))
@@ -71,7 +72,8 @@ HorizontalPositionControllerResult HorizontalPositionController::compute(
       static_cast<long double>(input.current_velocity_world[axis]);
     raw_acceleration[axis] =
       static_cast<long double>(parameters_.position_kp[axis]) * position_error +
-      static_cast<long double>(parameters_.velocity_kd[axis]) * velocity_error;
+      static_cast<long double>(parameters_.velocity_kd[axis]) * velocity_error +
+      static_cast<long double>(input.desired_acceleration_world[axis]);
   }
 
   const long double raw_norm = std::hypot(raw_acceleration[0], raw_acceleration[1]);

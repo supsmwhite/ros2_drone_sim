@@ -15,6 +15,11 @@ if(BUILD_TESTING)
     test/test_waypoint_mission_e2e.py
     TIMEOUT 120
   )
+
+  add_launch_test(
+    test/test_trajectory_mission_e2e.py
+    TIMEOUT 100
+  )
 endif()
 
 install(

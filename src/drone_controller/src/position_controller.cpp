@@ -34,6 +34,7 @@ PositionControllerResult PositionController::compute(const PositionControllerInp
   HorizontalPositionControllerInput horizontal_input;
   horizontal_input.desired_position_world = input.desired_position_world.head<2>();
   horizontal_input.desired_velocity_world = input.desired_velocity_world.head<2>();
+  horizontal_input.desired_acceleration_world = input.desired_acceleration_world.head<2>();
   horizontal_input.current_position_world = input.current_position_world.head<2>();
   horizontal_input.current_velocity_world = input.current_velocity_world.head<2>();
   horizontal_input.desired_yaw = input.desired_yaw;
@@ -54,7 +55,7 @@ PositionControllerResult PositionController::compute(const PositionControllerInp
   HoverControllerInput hover_input;
   hover_input.desired_altitude = input.desired_position_world.z();
   hover_input.desired_vertical_velocity = input.desired_velocity_world.z();
-  hover_input.desired_vertical_acceleration = input.desired_vertical_acceleration;
+  hover_input.desired_vertical_acceleration = input.desired_acceleration_world.z();
   hover_input.desired_orientation_body_to_world =
     horizontal_result.desired_orientation_body_to_world;
   hover_input.current_altitude = input.current_position_world.z();

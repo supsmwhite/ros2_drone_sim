@@ -11,6 +11,7 @@
 
   <depend>eigen</depend>
   <depend>eigen3_cmake_module</depend>
+  <depend>drone_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>rclcpp</depend>

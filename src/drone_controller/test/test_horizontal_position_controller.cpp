@@ -111,6 +111,35 @@ TEST(HorizontalPositionController, XVelocityFeedbackOpposesCurrentVelocity)
   EXPECT_GT(result.desired_acceleration_world.x(), 0.0);
 }
 
+TEST(HorizontalPositionController, AccelerationFeedforwardIsAddedAtZeroTrackingError)
+{
+  const drone_controller::HorizontalPositionController controller;
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_acceleration_world = Eigen::Vector2d(0.3, -0.2);
+  const auto result = controller.compute(input);
+
+  ASSERT_TRUE(result.valid);
+  EXPECT_FALSE(result.saturated);
+  EXPECT_TRUE(result.desired_acceleration_world.isApprox(
+    input.desired_acceleration_world, kTolerance));
+}
+
+TEST(HorizontalPositionController, AccelerationFeedforwardUsesExistingVectorLimit)
+{
+  drone_controller::HorizontalPositionControllerParameters parameters;
+  parameters.max_horizontal_acceleration = 0.5;
+  const drone_controller::HorizontalPositionController controller(parameters);
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_acceleration_world = Eigen::Vector2d(3.0, 4.0);
+  const auto result = controller.compute(input);
+
+  ASSERT_TRUE(result.valid);
+  EXPECT_TRUE(result.saturated);
+  EXPECT_NEAR(result.desired_acceleration_world.norm(), 0.5, kTolerance);
+  EXPECT_NEAR(result.desired_acceleration_world.x(), 0.3, kTolerance);
+  EXPECT_NEAR(result.desired_acceleration_world.y(), 0.4, kTolerance);
+}
+
 TEST(HorizontalPositionController, YVelocityFeedbackOpposesCurrentVelocity)
 {
   const drone_controller::HorizontalPositionController controller;
@@ -200,7 +229,7 @@ TEST(HorizontalPositionController, TiltLimitBoundsDesiredBodyZ)
 TEST(HorizontalPositionController, NonFiniteInputReturnsSafeInvalidResult)
 {
   const drone_controller::HorizontalPositionController controller;
-  for (int case_index = 0; case_index < 4; ++case_index) {
+  for (int case_index = 0; case_index < 5; ++case_index) {
     drone_controller::HorizontalPositionControllerInput input;
     if (case_index == 0) {
       input.desired_yaw = std::numeric_limits<double>::quiet_NaN();
@@ -208,6 +237,8 @@ TEST(HorizontalPositionController, NonFiniteInputReturnsSafeInvalidResult)
       input.desired_position_world.x() = std::numeric_limits<double>::infinity();
     } else if (case_index == 2) {
       input.desired_velocity_world.y() = -std::numeric_limits<double>::infinity();
+    } else if (case_index == 3) {
+      input.desired_acceleration_world.x() = std::numeric_limits<double>::quiet_NaN();
     } else {
       input.current_velocity_world.x() = std::numeric_limits<double>::quiet_NaN();
     }

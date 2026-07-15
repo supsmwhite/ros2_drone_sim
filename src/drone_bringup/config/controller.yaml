@@ -3,6 +3,8 @@ position_controller_node:
     control_frequency: 100.0
     odometry_timeout: 0.2
     supported_goal_frame: map
+    setpoint_source: pose_goal
+    trajectory_setpoint_timeout: 0.2
 
     # Altitude control. z and vz inputs are expressed in map/ENU.
     mass: 1.0

@@ -21,6 +21,7 @@ struct HorizontalPositionControllerInput
 {
   Eigen::Vector2d desired_position_world{Eigen::Vector2d::Zero()};
   Eigen::Vector2d desired_velocity_world{Eigen::Vector2d::Zero()};
+  Eigen::Vector2d desired_acceleration_world{Eigen::Vector2d::Zero()};
   Eigen::Vector2d current_position_world{Eigen::Vector2d::Zero()};
   Eigen::Vector2d current_velocity_world{Eigen::Vector2d::Zero()};
   double desired_yaw{0.0};

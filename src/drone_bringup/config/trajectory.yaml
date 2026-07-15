@@ -1,0 +1,17 @@
+trajectory_mission_node:
+  ros__parameters:
+    waypoints:
+      [
+        0.0, 0.0, 1.5, 0.0,
+        2.0, 0.0, 1.5, 0.0,
+        2.0, 1.5, 2.0, 1.5707963267948966,
+        0.0, 1.5, 1.5, 3.141592653589793,
+        0.0, 0.0, 1.5, 0.0
+      ]
+    segment_durations: [6.0, 6.0, 6.0, 6.0]
+    publish_frequency: 50.0
+    odometry_timeout: 0.25
+    preparation_position_tolerance: 0.20
+    preparation_speed_tolerance: 0.15
+    preparation_hold_duration: 1.0
+    reference_path_sample_period: 0.05

@@ -10,6 +10,11 @@ if(BUILD_TESTING)
     test/test_single_goal_e2e.py
     TIMEOUT 70
   )
+
+  add_launch_test(
+    test/test_waypoint_mission_e2e.py
+    TIMEOUT 120
+  )
 endif()
 
 install(

@@ -20,11 +20,11 @@
 
 本项目是一个基于 Ubuntu 22.04 和 ROS2 Humble 的小型四旋翼无人机仿真系统。系统以四个电机目标 RPM 为动力学输入，计算无人机的位置、速度、姿态和角速度，并通过 ROS2 Topic、TF 和 RViz2 形成可观察的闭环仿真环境。
 
-核心算法与 ROS2 通信层分离，动力学、控制器、Motor Mixer、多目标点任务管理、分段五次轨迹、静态环境碰撞检查、三维栅格 A*、视线简化、安全规划轨迹生成与静态避障执行均可独立测试。
+核心算法与 ROS2 通信层分离，动力学、控制器、Motor Mixer、多目标点任务管理、分段五次轨迹、静态环境碰撞检查、三维栅格 A*、视线简化、安全规划轨迹生成、静态避障执行与有序多目标静态避障均可独立测试。
 
 ## 当前阶段
 
-动力学、高度/yaw、单目标三维位置闭环、第一版多目标点顺序飞行、连续轨迹生成与跟踪、静态三维 AABB 环境、统一碰撞查询、三维 26 邻域 A*、确定性视线简化、安全规划轨迹生成和静态避障执行均已完成。三个静态避障场景已有可复现的顺序评测、结构化指标和数据曲线。`planned_trajectory_sim.launch.py` 默认仍只显示三种路径；`static_avoidance_sim.launch.py` 显式启用规划轨迹执行，并通过真实控制和动力学闭环绕过静态障碍物。
+动力学、高度/yaw、单目标三维位置闭环、第一版多目标点顺序飞行、连续轨迹生成与跟踪、静态三维 AABB 环境、统一碰撞查询、三维 26 邻域 A*、确定性视线简化、安全规划轨迹生成、单目标静态避障和有序多目标静态避障均已完成。新任务节点从实际地面 Odom 起飞，在空中导航地板以上逐段规划，稳定到达当前目标后才切换下一目标。三个独立静态避障场景仍保留可复现评测、结构化指标和数据曲线。
 
 ## 总体方案
 
@@ -99,6 +99,19 @@ StaticEnvironment + CollisionChecker
 
 `execution_enabled=false` 时链路止于 `/drone/reference_path`，保持只显示行为；只有静态避障 Launch 显式设为 `true` 时才发布执行 setpoint。
 
+有序多目标静态避障使用一条独占执行链路：
+
+```text
+首次有效 /drone/odom
+  → 原地垂直起飞到 z=1.5 m（使用原环境与 0.35 m 有效半径检查）
+  → 从稳定后的实际 Odom 规划当前目标
+  → AStarPlanner → PathSimplifier → PlannedTrajectoryBuilder
+  → /drone/trajectory_setpoint → PositionController → 动力学
+  → 目标处停稳 1.0 s → 从新的实际 Odom 规划下一目标
+```
+
+`multi_goal_static_avoidance_node` 直接组合已有三个纯算法类，不同时启动 `astar_planner_node`、`planned_trajectory_node`、固定轨迹任务或 waypoint 任务。地面只用于动力学接触与起飞；A* 空中导航工作空间的安全最低高度为 `0.50 m`，不会从地面状态直接开始规划。
+
 节点将 Odom 的完整机体系线速度旋转到世界系后用于 x/y/z 反馈。目标 roll/pitch 仍被忽略，只使用目标四元数中的 yaw；期望 roll/pitch 由水平位置控制器生成。
 
 ### 最终目标链路
@@ -147,6 +160,8 @@ Motor Mixer 与四电机 RPM
 - `planned_trajectory_node` 的起点准备、稳态时钟执行、Odom 超时暂停、结束保持和段/完成状态发布；
 - `static_avoidance_sim.launch.py` 的唯一 A*→规划轨迹→控制器→动力学链路，以及独立 Domain 99 真实端到端安全回归；
 - 三个独立规划配置和 `tools/evaluate_static_avoidance.py` 顺序评测工具；每个场景使用独立 ROS Domain，保存 JSON、CSV、XY 路径、位置跟踪、跟踪误差和净空曲线，不加入默认 `colcon test`；
+- `multi_goal_static_avoidance_node` 的首次 Odom 起飞检查、导航地板、有序逐段规划、目标停稳切换、Odom 超时暂停和最终持续保持；
+- `multi_goal_static_avoidance_sim.launch.py` 的唯一多目标规划执行链路，以及独立 Domain 113 三目标真实闭环安全回归；
 - MotorRPM 命令超时保护；
 - Xacro 四旋翼模型、robot_state_publisher 和 RViz2 基础可视化；
 - `basic_sim.launch.py` 一键启动动力学、控制器、机器人模型发布和 RViz2；`mission_sim.launch.py` 启动离散顺序任务，`trajectory_sim.launch.py` 启动连续轨迹任务，`environment_sim.launch.py` 启动静态环境监测，`planning_sim.launch.py` 再增加一次性 A* 规划与路径显示。
@@ -178,10 +193,12 @@ Motor Mixer 与四电机 RPM
 | A 默认侧向 | `(8,5,1.5)` | `40 / 11.978138` | `5 / 11.175430` | `31.929800 / 1.00` | `0.534070 / 0.346694` | `0.031085 / 0.168657` | `0.005925 / 0.001458` |
 | B 水平终点 | `(8,6.5,1.5)` | `40 / 11.771031` | `4 / 10.903096` | `31.151703 / 1.00` | `0.536058 / 0.187298` | `0.029715 / 0.224399` | `0.004722 / 0.001580` |
 | C 三维高度 | `(8,5,4.0)` | `36 / 11.382612` | `3 / 10.310132` | `29.457521 / 1.00` | `0.540075 / 0.146427` | `0.030504 / 0.314797` | `0.001930 / 0.000818` |
+
+- Domain 113 有序多目标回归从实际地面 Odom 原地起飞，依次到达 P1 `(4,0,1.5)`、P2 `(8,5,1.5)`、P3 `(4,6.5,3.5)`；目标索引严格为 `0→1→2`，已访问计数严格为 `0→1→2→3`，每段均从稳定后的实际 Odom 重新规划。三段最大同期跟踪误差分别为 `0.016959/0.007322/0.008700 m`，实际最小采样净空 `0.147244 m`，最终误差 `0.001617 m`、最终速度 `0.000730 m/s`；全程无碰撞、无非有限值，控制器日志未出现 `saturated=true`，完成后消息流和最终 setpoint 继续保持至少 `3.0 s`；
 - RViz2 人工运行已确认三维工作空间边界、两个原始障碍物和透明安全膨胀区域可见，无人机模型与环境处于同一 `map` 坐标系；初始位置的碰撞状态为 `false`；
 - RViz2 显示无人机模型、TF、历史 Path 和目标 Pose；
 - 控制器退出后约 `0.30 s` 触发 MotorRPM watchdog，目标转速归零；控制器重启并重新发送目标后闭环恢复；
-- 当前工作区最近一次完整测试结果为 `204 tests, 0 errors, 0 failures, 0 skipped`。
+- 当前工作区最近一次完整测试结果为 `209 tests, 0 errors, 0 failures, 0 skipped`。
 
 ## 待完成场景
 
@@ -314,6 +331,16 @@ python3 tools/evaluate_static_avoidance.py
 ```
 
 评测工具为三个场景分别使用 Domain `110/111/112`，逐一启动并关闭完整 Launch，在 `results/static_avoidance/<scenario_name>/` 保存 `metrics.json`、`trajectory.csv`、`xy_path.png`、`position_tracking.png`、`tracking_error.png` 和 `clearance.png`。它是较长的实验工作流，不属于默认 `colcon test`；Domain 99 端到端测试仍是快速、确定性的核心安全回归。
+
+启动有序多目标静态避障（默认包含 RViz2）：
+
+```bash
+ros2 launch drone_bringup multi_goal_static_avoidance_sim.launch.py
+```
+
+默认任务配置 `multi_goal_mission.yaml` 依次包含 `(4,0,1.5)`、`(8,5,1.5)`、`(4,6.5,3.5)` 和 `(0,4,1.5)` 四个零 yaw 目标；可用 `mission_config:=<绝对路径>` 载入独立任务 YAML。节点启动时一次性读取目标列表，以首次有效 Odom 的 x/y 为起飞锚点，先发布 `z=1.5 m` 的静止 setpoint；位置与速度连续稳定 `1.0 s` 后，才从当时实际 Odom 规划 P1。每个目标同样采用“到达、停稳、切换”语义，Odom 无效或超时会暂停当前轨迹时钟，最终持续保持最后目标。任务状态可通过 `/drone/multi_goal/current_goal_index`、`current_segment`、`complete`、`success` 和 `visited_goals` 五个 Topic 观察。
+
+导航地板 `0.50 m` 是规划阶段的安全球心最低高度，与动力学地面接触不是同一概念：起飞竖直段单独使用原始环境检查，空中各段使用原始 workspace 最低 z 加 `0.35 m` 有效半径得到的安全地板。多目标任务专用配置采用 `nominal_speed=0.25 m/s` 且保持 `max_reference_acceleration=0.35 m/s²`；真实首段在 `0.35` 和 `0.30 m/s` 下均无法通过同一动态约束，而 `0.25 m/s` 可行。原有单目标 `planned_trajectory.yaml` 的 `0.35 m/s`、控制器、动力学、基础安全半径、规划裕量和 A* 分辨率均未改变。
 
 常用检查：
 

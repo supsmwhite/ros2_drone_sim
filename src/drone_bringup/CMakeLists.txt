@@ -40,6 +40,11 @@ if(BUILD_TESTING)
     test/test_static_avoidance_e2e.py
     TIMEOUT 80
   )
+
+  add_launch_test(
+    test/test_multi_goal_static_avoidance_e2e.py
+    TIMEOUT 140
+  )
 endif()
 
 install(

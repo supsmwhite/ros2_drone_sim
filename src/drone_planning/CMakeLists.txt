@@ -85,6 +85,17 @@ ament_target_dependencies(
 target_link_libraries(
   planned_trajectory_node planned_trajectory_builder Eigen3::Eigen)
 
+add_executable(
+  multi_goal_static_avoidance_node src/multi_goal_static_avoidance_node.cpp)
+target_compile_options(
+  multi_goal_static_avoidance_node PRIVATE -Wall -Wextra -Wpedantic)
+ament_target_dependencies(
+  multi_goal_static_avoidance_node
+  drone_msgs geometry_msgs nav_msgs rclcpp std_msgs)
+target_link_libraries(
+  multi_goal_static_avoidance_node
+  planned_trajectory_builder astar_planner Eigen3::Eigen)
+
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_collision_checker test/test_collision_checker.cpp)
@@ -112,6 +123,7 @@ install(
   TARGETS static_environment collision_checker astar_planner path_simplifier
     planned_trajectory_builder
     static_environment_node astar_planner_node planned_trajectory_node
+    multi_goal_static_avoidance_node
   EXPORT export_drone_planning
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib

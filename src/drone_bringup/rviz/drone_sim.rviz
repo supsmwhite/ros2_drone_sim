@@ -155,6 +155,34 @@ Visualization Manager:
       Name: Static Environment
       Namespaces: {}
       Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 255; 220; 40
+      Enabled: true
+      Head Diameter: 0.06
+      Head Length: 0.08
+      Length: 0.3
+      Line Style: Lines
+      Line Width: 0.05
+      Name: A* Planned Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 220; 40
+      Pose Style: None
+      Radius: 0.03
+      Shaft Diameter: 0.02
+      Shaft Length: 0.08
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/planned_path
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 35; 38; 45

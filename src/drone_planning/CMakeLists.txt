@@ -11,6 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(ament_cmake REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -34,22 +35,42 @@ target_include_directories(collision_checker
 target_compile_options(collision_checker PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(collision_checker static_environment Eigen3::Eigen)
 
+add_library(astar_planner src/astar_planner.cpp)
+target_include_directories(astar_planner
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_options(astar_planner PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(astar_planner collision_checker Eigen3::Eigen)
+
 add_executable(static_environment_node src/static_environment_node.cpp)
 target_compile_options(static_environment_node PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(
   static_environment_node nav_msgs rclcpp std_msgs visualization_msgs)
 target_link_libraries(static_environment_node collision_checker Eigen3::Eigen)
 
+add_executable(astar_planner_node src/astar_planner_node.cpp)
+target_compile_options(astar_planner_node PRIVATE -Wall -Wextra -Wpedantic)
+ament_target_dependencies(
+  astar_planner_node geometry_msgs nav_msgs rclcpp std_msgs)
+target_link_libraries(astar_planner_node astar_planner Eigen3::Eigen)
+
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_collision_checker test/test_collision_checker.cpp)
   target_compile_options(test_collision_checker PRIVATE -Wall -Wextra -Wpedantic)
   target_link_libraries(test_collision_checker collision_checker Eigen3::Eigen)
+
+  ament_add_gtest(test_astar_planner test/test_astar_planner.cpp)
+  target_compile_options(test_astar_planner PRIVATE -Wall -Wextra -Wpedantic)
+  target_link_libraries(test_astar_planner astar_planner Eigen3::Eigen)
 endif()
 
 install(DIRECTORY include/ DESTINATION include)
 install(
-  TARGETS static_environment collision_checker static_environment_node
+  TARGETS static_environment collision_checker astar_planner
+    static_environment_node astar_planner_node
   EXPORT export_drone_planning
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib

@@ -23,7 +23,8 @@ bool finite_positive(double value)
 
 PiecewiseQuinticTrajectory::PiecewiseQuinticTrajectory(
   std::vector<TrajectoryWaypoint> waypoints,
-  std::vector<double> segment_durations)
+  std::vector<double> segment_durations,
+  double intermediate_velocity_scale)
 : waypoints_(std::move(waypoints))
 {
   if (waypoints_.size() < 2U) {
@@ -42,6 +43,11 @@ PiecewiseQuinticTrajectory::PiecewiseQuinticTrajectory(
       throw std::invalid_argument("all segment durations must be finite and positive");
     }
   }
+  if (!std::isfinite(intermediate_velocity_scale) ||
+    intermediate_velocity_scale < 0.0 || intermediate_velocity_scale > 1.0)
+  {
+    throw std::invalid_argument("intermediate velocity scale must be finite and in [0, 1]");
+  }
 
   std::vector<Eigen::Vector3d> waypoint_velocities(
     waypoints_.size(), Eigen::Vector3d::Zero());
@@ -52,7 +58,8 @@ PiecewiseQuinticTrajectory::PiecewiseQuinticTrajectory(
     const Eigen::Vector3d outgoing =
       (waypoints_[index + 1U].position_world - waypoints_[index].position_world) /
       segment_durations[index];
-    waypoint_velocities[index] = 0.5 * (incoming + outgoing);
+    waypoint_velocities[index] =
+      intermediate_velocity_scale * 0.5 * (incoming + outgoing);
   }
 
   std::vector<double> unwrapped_yaw(waypoints_.size(), waypoints_.front().yaw);

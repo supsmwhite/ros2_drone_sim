@@ -49,6 +49,26 @@ def inside_closed_box(point, lower, upper):
     return all(lower[index] <= point[index] <= upper[index] for index in range(3))
 
 
+def segment_intersects_closed_box(start, end, lower, upper):
+    interval_min = 0.0
+    interval_max = 1.0
+    for index in range(3):
+        delta = end[index] - start[index]
+        if delta == 0.0:
+            if start[index] < lower[index] or start[index] > upper[index]:
+                return False
+            continue
+        axis_min = (lower[index] - start[index]) / delta
+        axis_max = (upper[index] - start[index]) / delta
+        if axis_min > axis_max:
+            axis_min, axis_max = axis_max, axis_min
+        interval_min = max(interval_min, axis_min)
+        interval_max = min(interval_max, axis_max)
+        if interval_min > interval_max:
+            return False
+    return True
+
+
 @pytest.mark.launch_test
 @launch_testing.markers.keep_alive
 def generate_test_description():
@@ -69,6 +89,18 @@ def generate_test_description():
 
 class TestStaticAvoidanceEndToEnd(unittest.TestCase):
 
+    def test_closed_box_segment_helper(self):
+        lower = (1.0, 2.0, 3.0)
+        upper = (2.0, 4.0, 6.0)
+        self.assertTrue(segment_intersects_closed_box(
+            (0.0, 3.0, 4.0), (3.0, 3.0, 4.0), lower, upper))
+        self.assertTrue(segment_intersects_closed_box(
+            (0.0, 1.0, 2.0), (1.0, 2.0, 3.0), lower, upper))
+        self.assertFalse(segment_intersects_closed_box(
+            (0.0, 1.0, 4.0), (3.0, 1.0, 4.0), lower, upper))
+        self.assertFalse(segment_intersects_closed_box(
+            (0.0, 3.0, 7.0), (3.0, 3.0, 7.0), lower, upper))
+
     def test_planned_trajectory_executes_safely(self, proc_output):
         rclpy.init()
         node = rclpy.create_node('static_avoidance_e2e_test')
@@ -82,6 +114,7 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
         mission_complete_time = None
         latest_setpoint = None
         latest_position = None
+        previous_odom_position = None
         latest_speed = math.inf
         last_odom_time = None
         last_setpoint_time = None
@@ -158,7 +191,7 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
         def on_odometry(message):
             nonlocal latest_position, latest_speed, last_odom_time, odom_samples
             nonlocal odom_after_complete, max_tracking_error
-            nonlocal minimum_sampled_clearance
+            nonlocal minimum_sampled_clearance, previous_odom_position
             pose = message.pose.pose
             twist = message.twist.twist
             values = (
@@ -169,6 +202,7 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
                 twist.angular.x, twist.angular.y, twist.angular.z,
             )
             if not all(math.isfinite(value) for value in values):
+                previous_odom_position = None
                 health_errors.append('non-finite odometry')
                 return
             position = values[0:3]
@@ -182,6 +216,12 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
                 if inside_closed_box(position, lower, upper):
                     health_errors.append(
                         f'actual Odom entered base-inflated obstacle at {position}')
+                if (previous_odom_position is not None and
+                        segment_intersects_closed_box(
+                            previous_odom_position, position, lower, upper)):
+                    health_errors.append(
+                        'actual Odom segment intersected base-inflated obstacle: '
+                        f'{previous_odom_position} -> {position}')
                 minimum_sampled_clearance = min(
                     minimum_sampled_clearance,
                     distance_to_box(position, lower, upper),
@@ -197,6 +237,7 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
                     max_tracking_error,
                     norm3(tuple(position[index] - reference[index] for index in range(3))),
                 )
+            previous_odom_position = position
 
         def on_motor_rpm(message):
             nonlocal last_rpm_time, rpm_samples, rpm_after_complete
@@ -302,6 +343,21 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
             self.assertLess(now - last_odom_time, 1.0)
             self.assertLess(now - last_setpoint_time, 1.0)
             self.assertLess(now - last_rpm_time, 1.0)
+            final_setpoint_position = (
+                latest_setpoint.position.x,
+                latest_setpoint.position.y,
+                latest_setpoint.position.z,
+            )
+            final_setpoint_velocity = (
+                latest_setpoint.velocity.x,
+                latest_setpoint.velocity.y,
+                latest_setpoint.velocity.z,
+            )
+            final_setpoint_acceleration = (
+                latest_setpoint.acceleration.x,
+                latest_setpoint.acceleration.y,
+                latest_setpoint.acceleration.z,
+            )
             final_error = norm3(tuple(
                 latest_position[index] - FINAL_TARGET[index] for index in range(3)))
             controller_output = b''.join(event.text for event in proc_output)
@@ -329,8 +385,18 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
             self.assertIsNotNone(trajectory_start_time, summary)
             self.assertEqual(observed_segments, EXPECTED_SEGMENTS, summary)
             self.assertLess(max_tracking_error, 0.10, summary)
-            self.assertGreater(minimum_sampled_clearance, 0.0, summary)
+            self.assertGreater(minimum_sampled_clearance, 0.05, summary)
             self.assertEqual(saturation_true_count, 0, summary)
+            self.assertEqual(latest_setpoint.header.frame_id, 'map', summary)
+            self.assertLess(
+                norm3(tuple(
+                    final_setpoint_position[index] - FINAL_TARGET[index]
+                    for index in range(3))),
+                1.0e-9,
+                summary,
+            )
+            self.assertLess(norm3(final_setpoint_velocity), 1.0e-9, summary)
+            self.assertLess(norm3(final_setpoint_acceleration), 1.0e-9, summary)
             self.assertLess(final_error, 0.20, summary)
             self.assertLess(latest_speed, 0.15, summary)
             self.assertGreater(setpoints_after_complete, 100, summary)

@@ -4,3 +4,4 @@ astar_planner_node:
     goal: [8.0, 5.0, 1.5]
     resolution: 0.25
     max_grid_nodes: 200000
+    planning_margin: 0.10

@@ -95,6 +95,14 @@ public:
     const auto obstacle_values =
       declare_parameter<std::vector<double>>("obstacles", std::vector<double>{});
     const double safety_radius = declare_parameter<double>("safety_radius", 0.25);
+    const double planning_margin = declare_parameter<double>("planning_margin", 0.10);
+    if (!std::isfinite(planning_margin) || planning_margin < 0.0) {
+      throw std::invalid_argument("planning_margin must be finite and non-negative");
+    }
+    const double effective_planning_radius = safety_radius + planning_margin;
+    if (!std::isfinite(effective_planning_radius)) {
+      throw std::invalid_argument("effective planning radius must be finite");
+    }
     const Eigen::Vector3d start = parse_point(
       declare_parameter<std::vector<double>>("start", std::vector<double>{}), "start");
     const Eigen::Vector3d goal = parse_point(
@@ -118,7 +126,7 @@ public:
     AStarPlanner planner(
       CollisionChecker(
         StaticEnvironment(parse_workspace(workspace_values), parse_obstacles(obstacle_values)),
-        safety_radius),
+        effective_planning_radius),
       resolution, max_grid_nodes);
     const auto planning_start = std::chrono::steady_clock::now();
     const AStarResult result = planner.plan(start, goal);
@@ -155,14 +163,18 @@ public:
       RCLCPP_INFO(
         get_logger(),
         "planning succeeded: time=%.3f ms path_nodes=%zu path_length=%.6f m "
-        "expanded_nodes=%zu",
-        planning_time_ms, result.path_world.size(), result.path_length, result.expanded_nodes);
+        "expanded_nodes=%zu base_safety_radius=%.3f m planning_margin=%.3f m "
+        "effective_planning_radius=%.3f m",
+        planning_time_ms, result.path_world.size(), result.path_length, result.expanded_nodes,
+        safety_radius, planning_margin, effective_planning_radius);
     } else {
       RCLCPP_ERROR(
         get_logger(),
         "planning failed: status=%s time=%.3f ms path_nodes=0 path_length=0.000000 m "
-        "expanded_nodes=%zu",
-        status_name(result.status), planning_time_ms, result.expanded_nodes);
+        "expanded_nodes=%zu base_safety_radius=%.3f m planning_margin=%.3f m "
+        "effective_planning_radius=%.3f m",
+        status_name(result.status), planning_time_ms, result.expanded_nodes,
+        safety_radius, planning_margin, effective_planning_radius);
     }
   }
 

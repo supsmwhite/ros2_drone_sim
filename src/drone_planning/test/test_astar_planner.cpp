@@ -35,7 +35,7 @@ CollisionChecker default_checker()
         box(2.1, 2.9, -0.5, 2.5, 0.0, 3.0),
         box(5.6, 6.4, 2.5, 5.5, 0.0, 3.0),
       }),
-    0.25);
+    0.35);
 }
 
 void expect_safe_path(

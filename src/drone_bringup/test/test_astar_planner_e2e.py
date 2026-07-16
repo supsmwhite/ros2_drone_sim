@@ -23,9 +23,9 @@ from std_msgs.msg import Bool, UInt32
 START = (0.0, 0.0, 1.5)
 GOAL = (8.0, 5.0, 1.5)
 RESOLUTION = 0.25
-INFLATED_OBSTACLES = [
-    ((1.85, -0.75, -0.25), (3.15, 2.75, 3.25)),
-    ((5.35, 2.25, -0.25), (6.65, 5.75, 3.25)),
+EFFECTIVE_INFLATED_OBSTACLES = [
+    ((1.75, -0.85, -0.35), (3.25, 2.85, 3.35)),
+    ((5.25, 2.15, -0.35), (6.75, 5.85, 3.35)),
 ]
 
 
@@ -159,7 +159,7 @@ class TestAStarPlannerEndToEnd(unittest.TestCase):
                 if index != 0 and index != len(points) - 2:
                     self.assertLessEqual(
                         step, math.sqrt(3.0) * RESOLUTION + 1.0e-9)
-                for box_min, box_max in INFLATED_OBSTACLES:
+                for box_min, box_max in EFFECTIVE_INFLATED_OBSTACLES:
                     self.assertFalse(
                         segment_intersects_closed_box(
                             segment_start, segment_end, box_min, box_max),

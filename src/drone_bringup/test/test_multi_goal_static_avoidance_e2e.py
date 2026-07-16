@@ -23,9 +23,10 @@ from std_msgs.msg import Bool, UInt32
 
 
 TARGETS = (
-    (4.2, 2.5, 1.5),
-    (7.4, 0.0, 1.5),
-    (12.0, 2.7, 1.5),
+    (3.6, 3.1, 1.5),
+    (7.85, 3.1, 2.5),
+    (9.85, 0.6, 3.25),
+    (12.1, 0.85, 1.5),
 )
 TAKEOFF_ANCHOR = (0.0, 0.0, 1.5)
 NAVIGATION_FLOOR = 0.50
@@ -33,11 +34,12 @@ DISCOVERY_TIMEOUT = 8.0
 MISSION_TIMEOUT = 105.0
 POST_COMPLETE_OBSERVATION = 3.0
 BASE_INFLATED_OBSTACLES = (
-    ((2.15, -2.75, -0.25), (3.45, 1.75, 4.95)),
-    ((5.55, 0.75, -0.25), (6.85, 6.75, 4.95)),
-    ((5.55, -2.75, -0.25), (6.85, -0.95, 4.95)),
-    ((8.95, -2.75, -0.25), (10.25, 1.75, 4.95)),
-    ((8.95, 3.75, -0.25), (10.25, 6.75, 4.95)),
+    ((1.95, -2.75, -0.25), (3.25, 1.75, 4.95)),
+    ((3.95, 1.55, -0.25), (5.25, 6.75, 4.95)),
+    ((6.05, -1.05, -0.25), (7.35, 2.65, 4.95)),
+    ((8.25, 0.75, -0.25), (9.55, 6.75, 4.95)),
+    ((10.05, -1.75, -0.25), (11.35, 0.05, 4.95)),
+    ((10.05, 1.45, -0.25), (11.35, 4.45, 4.95)),
 )
 
 
@@ -468,15 +470,15 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
             )
             print(summary, flush=True)
 
-            self.assertEqual(observed_goal_indices, [0, 1, 2], summary)
-            self.assertEqual(observed_visited_counts, [0, 1, 2, 3], summary)
-            self.assertEqual(len(planned_paths), 3, summary)
-            self.assertEqual(len(simplified_paths), 3, summary)
-            self.assertEqual(len(reference_paths), 3, summary)
-            self.assertEqual(len(planning_start_errors), 3, summary)
+            self.assertEqual(observed_goal_indices, [0, 1, 2, 3], summary)
+            self.assertEqual(observed_visited_counts, [0, 1, 2, 3, 4], summary)
+            self.assertEqual(len(planned_paths), 4, summary)
+            self.assertEqual(len(simplified_paths), 4, summary)
+            self.assertEqual(len(reference_paths), 4, summary)
+            self.assertEqual(len(planning_start_errors), 4, summary)
             self.assertTrue(all(value < 0.05 for value in planning_start_errors), summary)
             self.assertGreater(takeoff_anchor_setpoints, 100, summary)
-            self.assertEqual(len(goal_acceptance_errors), 3, summary)
+            self.assertEqual(len(goal_acceptance_errors), 4, summary)
             self.assertTrue(all(value < 0.20 for value in goal_acceptance_errors), summary)
             self.assertTrue(all(value < 0.15 for value in goal_acceptance_speeds), summary)
             self.assertTrue(all(value < 0.10 for value in maximum_tracking_errors), summary)

@@ -1,105 +1,102 @@
-[INFO] [launch]: All log files can be found below /home/peter/.ros/log/2026-07-16-23-26-46-685332-peter-acer-99552
+[INFO] [launch]: All log files can be found below /home/peter/.ros/log/2026-07-17-00-29-14-898827-peter-acer-103476
 [INFO] [launch]: Default logging verbosity is set to INFO
-[INFO] [quadrotor_dynamics_node-1]: process started with pid [99565]
-[INFO] [position_controller_node-2]: process started with pid [99567]
-[INFO] [robot_state_publisher-3]: process started with pid [99569]
-[INFO] [static_environment_node-4]: process started with pid [99571]
-[INFO] [astar_planner_node-5]: process started with pid [99573]
-[INFO] [planned_trajectory_node-6]: process started with pid [99575]
-[static_environment_node-4] [INFO] [1784215606.789241224] [static_environment_node]: static environment started with 5 obstacles and safety radius 0.250 m
-[position_controller_node-2] [INFO] [1784215606.791036815] [position_controller_node]: 3D position controller started at 100.0 Hz (source=trajectory, odom timeout 0.200 s)
-[robot_state_publisher-3] [INFO] [1784215606.792007063] [robot_state_publisher]: got segment base_link
-[robot_state_publisher-3] [INFO] [1784215606.792066827] [robot_state_publisher]: got segment front_marker_link
-[robot_state_publisher-3] [INFO] [1784215606.792073662] [robot_state_publisher]: got segment m1_arm_link
-[robot_state_publisher-3] [INFO] [1784215606.792077955] [robot_state_publisher]: got segment m1_motor_link
-[robot_state_publisher-3] [INFO] [1784215606.792081988] [robot_state_publisher]: got segment m1_rotor_link
-[robot_state_publisher-3] [INFO] [1784215606.792086007] [robot_state_publisher]: got segment m2_arm_link
-[robot_state_publisher-3] [INFO] [1784215606.792088609] [robot_state_publisher]: got segment m2_motor_link
-[robot_state_publisher-3] [INFO] [1784215606.792090937] [robot_state_publisher]: got segment m2_rotor_link
-[robot_state_publisher-3] [INFO] [1784215606.792093175] [robot_state_publisher]: got segment m3_arm_link
-[robot_state_publisher-3] [INFO] [1784215606.792095451] [robot_state_publisher]: got segment m3_motor_link
-[robot_state_publisher-3] [INFO] [1784215606.792097801] [robot_state_publisher]: got segment m3_rotor_link
-[robot_state_publisher-3] [INFO] [1784215606.792100068] [robot_state_publisher]: got segment m4_arm_link
-[robot_state_publisher-3] [INFO] [1784215606.792102285] [robot_state_publisher]: got segment m4_motor_link
-[robot_state_publisher-3] [INFO] [1784215606.792104640] [robot_state_publisher]: got segment m4_rotor_link
-[quadrotor_dynamics_node-1] [INFO] [1784215606.797184214] [quadrotor_dynamics_node]: Dynamics started at 200.0 Hz; nominal steady-state hover RPM is 10818.9; ground contact is enabled at z=0.000 m; motor command watchdog is enabled (0.300 s)
-[planned_trajectory_node-6] [INFO] [1784215606.799654724] [planned_trajectory_node]: planned trajectory node waiting for raw path; effective planning radius 0.350 m; execution enabled
-[position_controller_node-2] [WARN] [1784215606.801144619] [position_controller_node]: Waiting for /drone/trajectory_setpoint; RPM=0
-[astar_planner_node-5] [INFO] [1784215607.265312555] [astar_planner_node]: planning succeeded: time=476.114 ms path_nodes=51 path_length=14.624585 m expanded_nodes=4862 base_safety_radius=0.250 m planning_margin=0.100 m effective_planning_radius=0.350 m
-[planned_trajectory_node-6] [INFO] [1784215607.290427269] [planned_trajectory_node]: planned trajectory generated: raw_points=51 simplified_points=7 raw_length=14.624585 m simplified_length=14.022856 m velocity_scale=1.00 duration=40.065302 s max_speed=0.548638 m/s max_acceleration=0.178899 m/s^2 validation_samples=2005
-[position_controller_node-2] [INFO] [1784215607.291198083] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 0.000] world_v=[0.000, 0.000, 0.000] a_xy=[0.000, 0.000] thrust=14.307 rpm=[13067.5, 13067.5, 13067.5, 13067.5] saturated=false
-[position_controller_node-2] [INFO] [1784215608.291200644] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 0.710] world_v=[0.000, 0.000, 0.873] a_xy=[0.000, 0.000] thrust=9.122 rpm=[10434.5, 10434.5, 10434.5, 10434.5] saturated=false
-[position_controller_node-2] [INFO] [1784215609.291204409] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.265] world_v=[0.000, 0.000, 0.300] a_xy=[0.000, 0.000] thrust=9.460 rpm=[10626.0, 10626.0, 10626.0, 10626.0] saturated=false
-[position_controller_node-2] [INFO] [1784215610.291287429] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.436] world_v=[0.000, 0.000, 0.084] a_xy=[0.000, 0.000] thrust=9.705 rpm=[10762.6, 10762.6, 10762.6, 10762.6] saturated=false
-[planned_trajectory_node-6] [INFO] [1784215610.859685463] [planned_trajectory_node]: takeoff preparation complete
-[planned_trajectory_node-6] [INFO] [1784215610.859749275] [planned_trajectory_node]: planned trajectory execution started
-[position_controller_node-2] [INFO] [1784215611.301165535] [position_controller_node]: position target=[0.001, 0.002, 1.500] current=[0.001, 0.001, 1.483] world_v=[0.006, 0.010, 0.023] a_xy=[0.045, 0.071] thrust=9.783 rpm=[10797.7, 10804.0, 10813.8, 10807.5] saturated=false
-[position_controller_node-2] [INFO] [1784215612.311114649] [position_controller_node]: position target=[0.042, 0.066, 1.503] current=[0.039, 0.060, 1.498] world_v=[0.079, 0.121, 0.012] a_xy=[0.099, 0.146] thrust=9.807 rpm=[10825.0, 10820.5, 10813.6, 10818.1] saturated=false
-[position_controller_node-2] [INFO] [1784215613.311202362] [position_controller_node]: position target=[0.174, 0.262, 1.512] current=[0.170, 0.257, 1.511] world_v=[0.184, 0.269, 0.014] a_xy=[0.105, 0.136] thrust=9.812 rpm=[10825.9, 10822.5, 10818.1, 10821.5] saturated=false
-[position_controller_node-2] [INFO] [1784215614.321124231] [position_controller_node]: position target=[0.413, 0.598, 1.527] current=[0.408, 0.592, 1.527] world_v=[0.283, 0.385, 0.018] a_xy=[0.081, 0.076] thrust=9.811 rpm=[10818.7, 10821.3, 10823.6, 10821.1] saturated=false
-[position_controller_node-2] [INFO] [1784215615.321200776] [position_controller_node]: position target=[0.728, 1.005, 1.546] current=[0.726, 1.005, 1.546] world_v=[0.347, 0.427, 0.020] a_xy=[0.041, -0.007] thrust=9.807 rpm=[10817.2, 10819.5, 10821.0, 10818.7] saturated=false
-[position_controller_node-2] [INFO] [1784215616.331268557] [position_controller_node]: position target=[1.087, 1.413, 1.566] current=[1.092, 1.423, 1.566] world_v=[0.369, 0.387, 0.018] a_xy=[-0.003, -0.083] thrust=9.803 rpm=[10817.7, 10816.1, 10816.6, 10818.2] saturated=false
-[position_controller_node-2] [INFO] [1784215617.341062158] [position_controller_node]: position target=[1.456, 1.755, 1.582] current=[1.460, 1.764, 1.582] world_v=[0.353, 0.282, 0.014] a_xy=[-0.031, -0.125] thrust=9.802 rpm=[10815.6, 10817.4, 10817.6, 10815.8] saturated=false
-[position_controller_node-2] [INFO] [1784215618.341161829] [position_controller_node]: position target=[1.792, 1.975, 1.593] current=[1.796, 1.983, 1.593] world_v=[0.318, 0.160, 0.009] a_xy=[-0.034, -0.103] thrust=9.803 rpm=[10815.1, 10817.3, 10818.6, 10816.4] saturated=false
-[position_controller_node-2] [INFO] [1784215619.351090530] [position_controller_node]: position target=[2.097, 2.099, 1.600] current=[2.102, 2.102, 1.600] world_v=[0.294, 0.094, 0.006] a_xy=[0.002, 0.007] thrust=9.807 rpm=[10820.7, 10818.7, 10817.4, 10819.4] saturated=false
-[planned_trajectory_node-6] [INFO] [1784215619.359463328] [planned_trajectory_node]: planned trajectory switched to segment 1
-[position_controller_node-2] [INFO] [1784215620.351095839] [position_controller_node]: position target=[2.405, 2.189, 1.605] current=[2.406, 2.189, 1.605] world_v=[0.324, 0.070, 0.004] a_xy=[0.052, -0.058] thrust=9.803 rpm=[10817.9, 10813.2, 10816.1, 10820.7] saturated=false
-[position_controller_node-2] [INFO] [1784215621.360984514] [position_controller_node]: position target=[2.765, 2.226, 1.607] current=[2.760, 2.226, 1.607] world_v=[0.375, 0.000, -0.000] a_xy=[0.037, -0.076] thrust=9.804 rpm=[10816.8, 10819.0, 10817.6, 10815.4] saturated=false
-[position_controller_node-2] [INFO] [1784215622.370849110] [position_controller_node]: position target=[3.151, 2.189, 1.605] current=[3.152, 2.189, 1.605] world_v=[0.393, -0.072, -0.003] a_xy=[-0.010, -0.061] thrust=9.806 rpm=[10818.5, 10817.0, 10818.5, 10820.1] saturated=false
-[position_controller_node-2] [INFO] [1784215623.370919090] [position_controller_node]: position target=[3.531, 2.092, 1.602] current=[3.536, 2.090, 1.602] world_v=[0.367, -0.122, -0.003] a_xy=[-0.048, -0.033] thrust=9.808 rpm=[10819.6, 10819.1, 10820.1, 10820.5] saturated=false
-[position_controller_node-2] [INFO] [1784215624.370925135] [position_controller_node]: position target=[3.872, 1.958, 1.600] current=[3.877, 1.955, 1.600] world_v=[0.316, -0.144, -0.001] a_xy=[-0.045, -0.007] thrust=9.809 rpm=[10820.0, 10819.5, 10820.0, 10820.5] saturated=false
-[planned_trajectory_node-6] [INFO] [1784215625.119259349] [planned_trajectory_node]: planned trajectory switched to segment 2
-[position_controller_node-2] [INFO] [1784215625.380728956] [position_controller_node]: position target=[4.180, 1.810, 1.600] current=[4.180, 1.808, 1.600] world_v=[0.293, -0.149, 0.000] a_xy=[-0.026, -0.065] thrust=9.807 rpm=[10791.6, 10816.1, 10846.3, 10821.7] saturated=false
-[position_controller_node-2] [INFO] [1784215626.380783613] [position_controller_node]: position target=[4.451, 1.607, 1.600] current=[4.452, 1.611, 1.600] world_v=[0.245, -0.258, -0.000] a_xy=[-0.057, -0.127] thrust=9.808 rpm=[10822.3, 10821.3, 10816.8, 10817.8] saturated=false
-[position_controller_node-2] [INFO] [1784215627.390730962] [position_controller_node]: position target=[4.672, 1.296, 1.600] current=[4.674, 1.296, 1.600] world_v=[0.202, -0.349, 0.000] a_xy=[-0.012, -0.020] thrust=9.807 rpm=[10819.0, 10817.5, 10818.9, 10820.4] saturated=false
-[position_controller_node-2] [INFO] [1784215628.390879648] [position_controller_node]: position target=[4.880, 0.960, 1.600] current=[4.878, 0.953, 1.600] world_v=[0.216, -0.313, -0.000] a_xy=[0.045, 0.108] thrust=9.807 rpm=[10822.6, 10819.1, 10816.0, 10819.5] saturated=false
-[position_controller_node-2] [INFO] [1784215629.400649874] [position_controller_node]: position target=[5.130, 0.710, 1.600] current=[5.124, 0.700, 1.600] world_v=[0.273, -0.182, 0.000] a_xy=[0.057, 0.128] thrust=9.808 rpm=[10821.1, 10821.6, 10818.0, 10817.6] saturated=false
-[planned_trajectory_node-6] [INFO] [1784215630.179180266] [planned_trajectory_node]: planned trajectory switched to segment 3
-[position_controller_node-2] [INFO] [1784215630.400681860] [position_controller_node]: position target=[5.422, 0.570, 1.600] current=[5.418, 0.566, 1.600] world_v=[0.303, -0.115, 0.000] a_xy=[0.018, 0.005] thrust=9.807 rpm=[10832.2, 10822.4, 10805.7, 10815.5] saturated=false
-[position_controller_node-2] [INFO] [1784215631.410672058] [position_controller_node]: position target=[5.740, 0.461, 1.600] current=[5.740, 0.459, 1.600] world_v=[0.340, -0.090, -0.000] a_xy=[0.049, 0.047] thrust=9.807 rpm=[10818.3, 10817.0, 10819.9, 10821.2] saturated=false
-[position_controller_node-2] [INFO] [1784215632.410919385] [position_controller_node]: position target=[6.103, 0.397, 1.600] current=[6.103, 0.396, 1.600] world_v=[0.383, -0.034, 0.000] a_xy=[0.025, 0.063] thrust=9.807 rpm=[10821.7, 10818.4, 10816.5, 10819.7] saturated=false
-[position_controller_node-2] [INFO] [1784215633.420598415] [position_controller_node]: position target=[6.499, 0.395, 1.600] current=[6.498, 0.393, 1.600] world_v=[0.391, 0.029, 0.000] a_xy=[-0.018, 0.060] thrust=9.807 rpm=[10817.7, 10819.5, 10820.5, 10818.6] saturated=false
-[position_controller_node-2] [INFO] [1784215634.430689977] [position_controller_node]: position target=[6.874, 0.451, 1.600] current=[6.879, 0.451, 1.600] world_v=[0.358, 0.082, -0.000] a_xy=[-0.048, 0.041] thrust=9.807 rpm=[10819.9, 10819.4, 10818.2, 10818.7] saturated=false
-[position_controller_node-2] [INFO] [1784215635.430732145] [position_controller_node]: position target=[7.209, 0.549, 1.600] current=[7.214, 0.551, 1.600] world_v=[0.313, 0.112, 0.000] a_xy=[-0.029, 0.012] thrust=9.807 rpm=[10819.8, 10818.8, 10818.2, 10819.2] saturated=false
-[planned_trajectory_node-6] [INFO] [1784215635.879055728] [planned_trajectory_node]: planned trajectory switched to segment 4
-[position_controller_node-2] [INFO] [1784215636.440547735] [position_controller_node]: position target=[7.523, 0.668, 1.600] current=[7.522, 0.669, 1.600] world_v=[0.300, 0.129, 0.000] a_xy=[-0.024, 0.064] thrust=9.808 rpm=[10818.0, 10814.3, 10821.7, 10825.4] saturated=false
-[position_controller_node-2] [INFO] [1784215637.440573070] [position_controller_node]: position target=[7.808, 0.839, 1.601] current=[7.808, 0.836, 1.601] world_v=[0.268, 0.211, 0.002] a_xy=[-0.036, 0.093] thrust=9.809 rpm=[10818.5, 10820.2, 10821.8, 10820.1] saturated=false
-[position_controller_node-2] [INFO] [1784215638.440617647] [position_controller_node]: position target=[8.059, 1.093, 1.604] current=[8.059, 1.090, 1.604] world_v=[0.237, 0.291, 0.003] a_xy=[-0.019, 0.053] thrust=9.807 rpm=[10817.5, 10819.2, 10820.6, 10818.9] saturated=false
-[position_controller_node-2] [INFO] [1784215639.450746492] [position_controller_node]: position target=[8.292, 1.399, 1.607] current=[8.292, 1.402, 1.607] world_v=[0.230, 0.316, 0.002] a_xy=[0.009, -0.016] thrust=9.805 rpm=[10819.2, 10817.0, 10816.5, 10818.7] saturated=false
-[position_controller_node-2] [INFO] [1784215640.460424638] [position_controller_node]: position target=[8.536, 1.700, 1.608] current=[8.532, 1.705, 1.608] world_v=[0.250, 0.274, -0.001] a_xy=[0.033, -0.072] thrust=9.803 rpm=[10815.8, 10817.9, 10818.6, 10816.5] saturated=false
-[position_controller_node-2] [INFO] [1784215641.460515149] [position_controller_node]: position target=[8.803, 1.934, 1.605] current=[8.799, 1.940, 1.605] world_v=[0.285, 0.195, -0.004] a_xy=[0.034, -0.076] thrust=9.804 rpm=[10815.8, 10817.4, 10819.0, 10817.4] saturated=false
-[planned_trajectory_node-6] [INFO] [1784215642.458966118] [planned_trajectory_node]: planned trajectory switched to segment 5
-[position_controller_node-2] [INFO] [1784215642.470560848] [position_controller_node]: position target=[9.100, 2.100, 1.600] current=[9.100, 2.104, 1.600] world_v=[0.307, 0.143, -0.006] a_xy=[-0.003, 0.006] thrust=9.807 rpm=[10820.6, 10818.7, 10817.6, 10819.5] saturated=false
-[position_controller_node-2] [INFO] [1784215643.480447321] [position_controller_node]: position target=[9.429, 2.250, 1.593] current=[9.425, 2.249, 1.593] world_v=[0.353, 0.141, -0.009] a_xy=[0.092, -0.012] thrust=9.802 rpm=[10815.0, 10815.7, 10817.8, 10817.1] saturated=false
-[position_controller_node-2] [INFO] [1784215644.480493378] [position_controller_node]: position target=[9.832, 2.384, 1.582] current=[9.825, 2.383, 1.582] world_v=[0.449, 0.124, -0.014] a_xy=[0.092, -0.022] thrust=9.802 rpm=[10814.3, 10818.0, 10818.1, 10814.3] saturated=false
-[position_controller_node-2] [INFO] [1784215645.490450982] [position_controller_node]: position target=[10.319, 2.496, 1.566] current=[10.319, 2.496, 1.565] world_v=[0.521, 0.100, -0.018] a_xy=[0.034, -0.026] thrust=9.804 rpm=[10819.2, 10815.8, 10815.8, 10819.2] saturated=false
-[position_controller_node-2] [INFO] [1784215646.490538983] [position_controller_node]: position target=[10.843, 2.583, 1.546] current=[10.848, 2.583, 1.546] world_v=[0.524, 0.073, -0.020] a_xy=[-0.045, -0.027] thrust=9.808 rpm=[10820.0, 10818.8, 10818.8, 10820.1] saturated=false
-[position_controller_node-2] [INFO] [1784215647.490682395] [position_controller_node]: position target=[11.330, 2.643, 1.527] current=[11.340, 2.643, 1.527] world_v=[0.447, 0.047, -0.018] a_xy=[-0.121, -0.024] thrust=9.812 rpm=[10821.2, 10822.0, 10822.2, 10821.3] saturated=false
-[position_controller_node-2] [INFO] [1784215648.500400331] [position_controller_node]: position target=[11.713, 2.679, 1.512] current=[11.722, 2.679, 1.512] world_v=[0.302, 0.025, -0.012] a_xy=[-0.168, -0.019] thrust=9.814 rpm=[10823.6, 10822.9, 10822.8, 10823.6] saturated=false
-[position_controller_node-2] [INFO] [1784215649.500491806] [position_controller_node]: position target=[11.930, 2.696, 1.503] current=[11.938, 2.695, 1.503] world_v=[0.133, 0.009, -0.006] a_xy=[-0.156, -0.012] thrust=9.814 rpm=[10823.3, 10823.1, 10823.1, 10823.2] saturated=false
-[position_controller_node-2] [INFO] [1784215650.510605765] [position_controller_node]: position target=[11.998, 2.700, 1.500] current=[12.001, 2.699, 1.500] world_v=[0.007, 0.000, -0.001] a_xy=[-0.060, -0.003] thrust=9.809 rpm=[10820.1, 10820.9, 10820.8, 10820.1] saturated=false
-[planned_trajectory_node-6] [INFO] [1784215650.938885469] [planned_trajectory_node]: planned trajectory complete; holding final setpoint
-[position_controller_node-2] [INFO] [1784215651.520377639] [position_controller_node]: position target=[12.000, 2.700, 1.500] current=[11.996, 2.699, 1.500] world_v=[-0.004, 0.000, -0.000] a_xy=[0.007, 0.000] thrust=9.807 rpm=[10819.9, 10818.1, 10818.0, 10819.8] saturated=false
-[position_controller_node-2] [INFO] [1784215652.530534594] [position_controller_node]: position target=[12.000, 2.700, 1.500] current=[11.994, 2.699, 1.500] world_v=[0.000, 0.000, -0.000] a_xy=[0.002, 0.000] thrust=9.807 rpm=[10819.2, 10818.7, 10818.7, 10819.2] saturated=false
-[position_controller_node-2] [INFO] [1784215653.530617098] [position_controller_node]: position target=[12.000, 2.700, 1.500] current=[11.995, 2.699, 1.500] world_v=[0.001, 0.000, -0.000] a_xy=[0.000, -0.000] thrust=9.807 rpm=[10818.9, 10819.0, 10819.0, 10818.9] saturated=false
+[INFO] [quadrotor_dynamics_node-1]: process started with pid [103489]
+[INFO] [position_controller_node-2]: process started with pid [103491]
+[INFO] [robot_state_publisher-3]: process started with pid [103493]
+[INFO] [static_environment_node-4]: process started with pid [103495]
+[INFO] [astar_planner_node-5]: process started with pid [103497]
+[INFO] [planned_trajectory_node-6]: process started with pid [103499]
+[planned_trajectory_node-6] [INFO] [1784219355.002785781] [planned_trajectory_node]: planned trajectory node waiting for raw path; effective planning radius 0.350 m; execution enabled
+[position_controller_node-2] [INFO] [1784219355.004394010] [position_controller_node]: 3D position controller started at 100.0 Hz (source=trajectory, odom timeout 0.200 s)
+[quadrotor_dynamics_node-1] [INFO] [1784219355.004615816] [quadrotor_dynamics_node]: Dynamics started at 200.0 Hz; nominal steady-state hover RPM is 10818.9; ground contact is enabled at z=0.000 m; motor command watchdog is enabled (0.300 s)
+[static_environment_node-4] [INFO] [1784219355.004633759] [static_environment_node]: static environment started with 6 obstacles and safety radius 0.250 m
+[robot_state_publisher-3] [INFO] [1784219355.009098144] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-3] [INFO] [1784219355.009192054] [robot_state_publisher]: got segment front_marker_link
+[robot_state_publisher-3] [INFO] [1784219355.009203969] [robot_state_publisher]: got segment m1_arm_link
+[robot_state_publisher-3] [INFO] [1784219355.009212387] [robot_state_publisher]: got segment m1_motor_link
+[robot_state_publisher-3] [INFO] [1784219355.009220104] [robot_state_publisher]: got segment m1_rotor_link
+[robot_state_publisher-3] [INFO] [1784219355.009227231] [robot_state_publisher]: got segment m2_arm_link
+[robot_state_publisher-3] [INFO] [1784219355.009233847] [robot_state_publisher]: got segment m2_motor_link
+[robot_state_publisher-3] [INFO] [1784219355.009240620] [robot_state_publisher]: got segment m2_rotor_link
+[robot_state_publisher-3] [INFO] [1784219355.009247307] [robot_state_publisher]: got segment m3_arm_link
+[robot_state_publisher-3] [INFO] [1784219355.009253984] [robot_state_publisher]: got segment m3_motor_link
+[robot_state_publisher-3] [INFO] [1784219355.009260754] [robot_state_publisher]: got segment m3_rotor_link
+[robot_state_publisher-3] [INFO] [1784219355.009267304] [robot_state_publisher]: got segment m4_arm_link
+[robot_state_publisher-3] [INFO] [1784219355.009273923] [robot_state_publisher]: got segment m4_motor_link
+[robot_state_publisher-3] [INFO] [1784219355.009280539] [robot_state_publisher]: got segment m4_rotor_link
+[position_controller_node-2] [WARN] [1784219355.014511193] [position_controller_node]: Waiting for /drone/trajectory_setpoint; RPM=0
+[astar_planner_node-5] [INFO] [1784219355.782228613] [astar_planner_node]: planning succeeded: time=783.063 ms path_nodes=55 path_length=16.069147 m expanded_nodes=7680 base_safety_radius=0.250 m planning_margin=0.100 m effective_planning_radius=0.350 m
+[planned_trajectory_node-6] [INFO] [1784219355.811611063] [planned_trajectory_node]: planned trajectory generated: raw_points=55 simplified_points=8 raw_length=16.069147 m simplified_length=15.216305 m velocity_scale=1.00 duration=43.877966 s max_speed=0.552505 m/s max_acceleration=0.321714 m/s^2 validation_samples=2195
+[position_controller_node-2] [INFO] [1784219355.814563990] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 0.000] world_v=[0.000, 0.000, 0.000] a_xy=[0.000, 0.000] thrust=14.307 rpm=[13067.5, 13067.5, 13067.5, 13067.5] saturated=false
+[position_controller_node-2] [INFO] [1784219356.814899890] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 0.711] world_v=[0.000, 0.000, 0.876] a_xy=[0.000, 0.000] thrust=9.106 rpm=[10425.4, 10425.4, 10425.4, 10425.4] saturated=false
+[position_controller_node-2] [INFO] [1784219357.824654139] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.269] world_v=[0.000, 0.000, 0.295] a_xy=[0.000, 0.000] thrust=9.467 rpm=[10629.9, 10629.9, 10629.9, 10629.9] saturated=false
+[position_controller_node-2] [INFO] [1784219358.834611621] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.437] world_v=[0.000, 0.000, 0.082] a_xy=[0.000, 0.000] thrust=9.709 rpm=[10764.7, 10764.7, 10764.7, 10764.7] saturated=false
+[planned_trajectory_node-6] [INFO] [1784219359.343084691] [planned_trajectory_node]: takeoff preparation complete
+[planned_trajectory_node-6] [INFO] [1784219359.343184040] [planned_trajectory_node]: planned trajectory execution started
+[position_controller_node-2] [INFO] [1784219359.834828981] [position_controller_node]: position target=[0.002, 0.003, 1.500] current=[0.001, 0.002, 1.483] world_v=[0.009, 0.016, 0.023] a_xy=[0.048, 0.089] thrust=9.784 rpm=[10792.6, 10802.2, 10820.6, 10810.9] saturated=false
+[position_controller_node-2] [INFO] [1784219360.835051208] [position_controller_node]: position target=[0.046, 0.084, 1.504] current=[0.042, 0.077, 1.499] world_v=[0.083, 0.149, 0.013] a_xy=[0.099, 0.168] thrust=9.809 rpm=[10828.8, 10822.6, 10811.2, 10817.5] saturated=false
+[position_controller_node-2] [INFO] [1784219361.844718395] [position_controller_node]: position target=[0.184, 0.323, 1.515] current=[0.178, 0.314, 1.513] world_v=[0.187, 0.316, 0.016] a_xy=[0.101, 0.146] thrust=9.813 rpm=[10819.5, 10822.2, 10825.5, 10822.9] saturated=false
+[position_controller_node-2] [INFO] [1784219362.854591353] [position_controller_node]: position target=[0.418, 0.698, 1.532] current=[0.416, 0.698, 1.532] world_v=[0.278, 0.430, 0.020] a_xy=[0.070, 0.060] thrust=9.809 rpm=[10823.0, 10820.4, 10817.8, 10820.4] saturated=false
+[position_controller_node-2] [INFO] [1784219363.854645237] [position_controller_node]: position target=[0.723, 1.140, 1.553] current=[0.725, 1.146, 1.553] world_v=[0.332, 0.450, 0.021] a_xy=[0.028, -0.039] thrust=9.805 rpm=[10819.4, 10817.3, 10816.7, 10818.8] saturated=false
+[position_controller_node-2] [INFO] [1784219364.854696135] [position_controller_node]: position target=[1.062, 1.554, 1.572] current=[1.067, 1.566, 1.572] world_v=[0.345, 0.375, 0.018] a_xy=[-0.011, -0.118] thrust=9.802 rpm=[10816.4, 10815.1, 10816.7, 10818.0] saturated=false
+[position_controller_node-2] [INFO] [1784219365.864555687] [position_controller_node]: position target=[1.403, 1.868, 1.587] current=[1.406, 1.879, 1.587] world_v=[0.323, 0.240, 0.012] a_xy=[-0.032, -0.142] thrust=9.802 rpm=[10815.1, 10817.0, 10817.5, 10815.6] saturated=false
+[position_controller_node-2] [INFO] [1784219366.864669460] [position_controller_node]: position target=[1.710, 2.046, 1.597] current=[1.713, 2.053, 1.597] world_v=[0.293, 0.119, 0.007] a_xy=[-0.019, -0.069] thrust=9.804 rpm=[10814.5, 10817.2, 10820.5, 10817.8] saturated=false
+[planned_trajectory_node-6] [INFO] [1784219367.362969243] [planned_trajectory_node]: planned trajectory switched to segment 1
+[position_controller_node-2] [INFO] [1784219367.874613897] [position_controller_node]: position target=[2.003, 2.153, 1.603] current=[2.006, 2.154, 1.603] world_v=[0.303, 0.089, 0.005] a_xy=[0.074, -0.050] thrust=9.803 rpm=[10829.1, 10832.9, 10805.0, 10801.2] saturated=false
+[position_controller_node-2] [INFO] [1784219368.874704026] [position_controller_node]: position target=[2.352, 2.209, 1.606] current=[2.351, 2.210, 1.606] world_v=[0.389, 0.015, 0.001] a_xy=[0.072, -0.093] thrust=9.803 rpm=[10816.2, 10810.4, 10817.5, 10823.2] saturated=false
+[position_controller_node-2] [INFO] [1784219369.884558629] [position_controller_node]: position target=[2.772, 2.176, 1.605] current=[2.770, 2.178, 1.605] world_v=[0.425, -0.076, -0.003] a_xy=[-0.023, -0.075] thrust=9.805 rpm=[10818.1, 10818.8, 10818.3, 10817.6] saturated=false
+[position_controller_node-2] [INFO] [1784219370.884601071] [position_controller_node]: position target=[3.168, 2.070, 1.602] current=[3.172, 2.069, 1.602] world_v=[0.364, -0.134, -0.003] a_xy=[-0.105, -0.033] thrust=9.809 rpm=[10820.2, 10821.9, 10820.3, 10818.7] saturated=false
+[position_controller_node-2] [INFO] [1784219371.894610226] [position_controller_node]: position target=[3.475, 1.927, 1.600] current=[3.483, 1.923, 1.600] world_v=[0.256, -0.151, -0.001] a_xy=[-0.079, 0.000] thrust=9.809 rpm=[10819.4, 10820.5, 10821.0, 10819.9] saturated=false
+[planned_trajectory_node-6] [INFO] [1784219372.402871508] [planned_trajectory_node]: planned trajectory switched to segment 2
+[position_controller_node-2] [INFO] [1784219372.894651549] [position_controller_node]: position target=[3.698, 1.765, 1.600] current=[3.706, 1.765, 1.600] world_v=[0.154, -0.201, -0.000] a_xy=[-0.274, -0.201] thrust=9.813 rpm=[10927.4, 10788.9, 10716.3, 10855.8] saturated=false
+[position_controller_node-2] [INFO] [1784219373.894711079] [position_controller_node]: position target=[3.777, 1.490, 1.600] current=[3.776, 1.488, 1.600] world_v=[0.074, -0.303, -0.000] a_xy=[0.214, 0.077] thrust=9.809 rpm=[10820.0, 10817.7, 10820.3, 10822.1] saturated=false
+[planned_trajectory_node-6] [INFO] [1784219374.403060276] [planned_trajectory_node]: planned trajectory switched to segment 3
+[position_controller_node-2] [INFO] [1784219374.904555407] [position_controller_node]: position target=[3.938, 1.217, 1.600] current=[3.931, 1.214, 1.600] world_v=[0.179, -0.262, -0.000] a_xy=[-0.002, -0.020] thrust=9.807 rpm=[10729.8, 10856.6, 10907.6, 10781.1] saturated=false
+[position_controller_node-2] [INFO] [1784219375.904611488] [position_controller_node]: position target=[4.113, 0.940, 1.600] current=[4.109, 0.939, 1.600] world_v=[0.178, -0.290, 0.000] a_xy=[0.004, -0.036] thrust=9.807 rpm=[10839.5, 10813.1, 10798.4, 10824.9] saturated=false
+[position_controller_node-2] [INFO] [1784219376.914683387] [position_controller_node]: position target=[4.292, 0.630, 1.600] current=[4.291, 0.628, 1.600] world_v=[0.184, -0.326, 0.000] a_xy=[0.007, -0.031] thrust=9.807 rpm=[10816.5, 10817.6, 10821.5, 10820.4] saturated=false
+[position_controller_node-2] [INFO] [1784219377.924521977] [position_controller_node]: position target=[4.484, 0.284, 1.600] current=[4.482, 0.285, 1.600] world_v=[0.194, -0.351, 0.000] a_xy=[0.012, -0.015] thrust=9.807 rpm=[10818.7, 10820.9, 10819.2, 10817.0] saturated=false
+[position_controller_node-2] [INFO] [1784219378.934594737] [position_controller_node]: position target=[4.684, -0.071, 1.600] current=[4.684, -0.074, 1.600] world_v=[0.207, -0.355, -0.000] a_xy=[0.015, 0.011] thrust=9.807 rpm=[10819.2, 10817.2, 10818.7, 10820.7] saturated=false
+[position_controller_node-2] [INFO] [1784219379.934716178] [position_controller_node]: position target=[4.898, -0.416, 1.600] current=[4.899, -0.421, 1.600] world_v=[0.223, -0.334, -0.000] a_xy=[0.017, 0.036] thrust=9.807 rpm=[10819.3, 10817.6, 10818.7, 10820.4] saturated=false
+[position_controller_node-2] [INFO] [1784219380.944581439] [position_controller_node]: position target=[5.135, -0.735, 1.600] current=[5.133, -0.737, 1.600] world_v=[0.241, -0.289, -0.000] a_xy=[0.018, 0.056] thrust=9.807 rpm=[10818.5, 10820.3, 10819.6, 10817.8] saturated=false
+[position_controller_node-2] [INFO] [1784219381.954651062] [position_controller_node]: position target=[5.385, -0.994, 1.600] current=[5.386, -0.998, 1.600] world_v=[0.259, -0.228, 0.000] a_xy=[0.016, 0.065] thrust=9.807 rpm=[10820.1, 10818.1, 10818.1, 10820.0] saturated=false
+[position_controller_node-2] [INFO] [1784219382.964441431] [position_controller_node]: position target=[5.656, -1.194, 1.600] current=[5.655, -1.195, 1.600] world_v=[0.273, -0.164, 0.000] a_xy=[0.013, 0.057] thrust=9.807 rpm=[10818.4, 10820.3, 10819.7, 10817.8] saturated=false
+[position_controller_node-2] [INFO] [1784219383.964445882] [position_controller_node]: position target=[5.934, -1.334, 1.600] current=[5.933, -1.334, 1.600] world_v=[0.283, -0.117, 0.000] a_xy=[0.005, 0.026] thrust=9.807 rpm=[10818.8, 10820.5, 10819.2, 10817.5] saturated=false
+[planned_trajectory_node-6] [INFO] [1784219384.562784362] [planned_trajectory_node]: planned trajectory switched to segment 4
+[position_controller_node-2] [INFO] [1784219384.964493277] [position_controller_node]: position target=[6.219, -1.444, 1.600] current=[6.218, -1.443, 1.600] world_v=[0.290, -0.101, -0.000] a_xy=[0.040, 0.056] thrust=9.807 rpm=[10813.0, 10818.9, 10825.1, 10819.2] saturated=false
+[position_controller_node-2] [INFO] [1784219385.974564943] [position_controller_node]: position target=[6.537, -1.504, 1.600] current=[6.537, -1.506, 1.600] world_v=[0.345, -0.015, 0.000] a_xy=[0.057, 0.106] thrust=9.807 rpm=[10827.6, 10820.2, 10811.1, 10818.6] saturated=false
+[position_controller_node-2] [INFO] [1784219386.984487847] [position_controller_node]: position target=[6.913, -1.466, 1.600] current=[6.910, -1.469, 1.600] world_v=[0.387, 0.083, 0.000] a_xy=[0.013, 0.073] thrust=9.807 rpm=[10816.3, 10819.4, 10821.9, 10818.9] saturated=false
+[position_controller_node-2] [INFO] [1784219387.994669054] [position_controller_node]: position target=[7.297, -1.357, 1.600] current=[7.301, -1.355, 1.600] world_v=[0.377, 0.132, -0.000] a_xy=[-0.038, 0.014] thrust=9.807 rpm=[10819.4, 10818.8, 10818.6, 10819.2] saturated=false
+[position_controller_node-2] [INFO] [1784219389.004390471] [position_controller_node]: position target=[7.657, -1.224, 1.600] current=[7.660, -1.220, 1.600] world_v=[0.332, 0.129, -0.000] a_xy=[-0.039, -0.016] thrust=9.807 rpm=[10816.4, 10819.9, 10821.6, 10818.1] saturated=false
+[planned_trajectory_node-6] [INFO] [1784219389.602821529] [planned_trajectory_node]: planned trajectory switched to segment 5
+[position_controller_node-2] [INFO] [1784219390.004527146] [position_controller_node]: position target=[7.979, -1.100, 1.600] current=[7.979, -1.097, 1.600] world_v=[0.315, 0.124, 0.000] a_xy=[-0.007, 0.025] thrust=9.808 rpm=[10817.2, 10819.7, 10822.1, 10819.7] saturated=false
+[position_controller_node-2] [INFO] [1784219391.014617781] [position_controller_node]: position target=[8.289, -0.956, 1.601] current=[8.291, -0.955, 1.601] world_v=[0.301, 0.163, 0.002] a_xy=[-0.020, 0.051] thrust=9.809 rpm=[10821.1, 10822.6, 10819.3, 10817.8] saturated=false
+[position_controller_node-2] [INFO] [1784219392.014644350] [position_controller_node]: position target=[8.581, -0.766, 1.604] current=[8.583, -0.766, 1.604] world_v=[0.282, 0.214, 0.004] a_xy=[-0.017, 0.043] thrust=9.808 rpm=[10821.8, 10819.4, 10817.4, 10819.8] saturated=false
+[position_controller_node-2] [INFO] [1784219393.024381420] [position_controller_node]: position target=[8.861, -0.530, 1.608] current=[8.860, -0.531, 1.608] world_v=[0.269, 0.247, 0.004] a_xy=[-0.005, 0.016] thrust=9.806 rpm=[10816.9, 10818.9, 10820.1, 10818.2] saturated=false
+[position_controller_node-2] [INFO] [1784219394.034480012] [position_controller_node]: position target=[9.131, -0.281, 1.612] current=[9.131, -0.278, 1.612] world_v=[0.270, 0.248, 0.002] a_xy=[0.007, -0.018] thrust=9.804 rpm=[10818.8, 10816.7, 10815.9, 10818.1] saturated=false
+[position_controller_node-2] [INFO] [1784219395.034719561] [position_controller_node]: position target=[9.406, -0.047, 1.613] current=[9.406, -0.042, 1.613] world_v=[0.282, 0.220, -0.001] a_xy=[0.017, -0.042] thrust=9.803 rpm=[10817.9, 10815.6, 10815.6, 10817.9] saturated=false
+[position_controller_node-2] [INFO] [1784219396.044354676] [position_controller_node]: position target=[9.703, 0.155, 1.609] current=[9.700, 0.158, 1.609] world_v=[0.301, 0.174, -0.005] a_xy=[0.019, -0.045] thrust=9.803 rpm=[10815.4, 10817.2, 10818.2, 10816.3] saturated=false
+[position_controller_node-2] [INFO] [1784219397.044439382] [position_controller_node]: position target=[10.011, 0.311, 1.602] current=[10.009, 0.312, 1.602] world_v=[0.315, 0.139, -0.008] a_xy=[0.006, -0.013] thrust=9.805 rpm=[10816.5, 10818.0, 10820.1, 10818.6] saturated=false
+[planned_trajectory_node-6] [INFO] [1784219397.342664872] [planned_trajectory_node]: planned trajectory switched to segment 6
+[position_controller_node-2] [INFO] [1784219398.044478899] [position_controller_node]: position target=[10.339, 0.450, 1.593] current=[10.335, 0.449, 1.593] world_v=[0.358, 0.138, -0.012] a_xy=[0.125, -0.001] thrust=9.797 rpm=[10821.1, 10800.6, 10805.9, 10826.5] saturated=false
+[position_controller_node-2] [INFO] [1784219399.054560027] [position_controller_node]: position target=[10.765, 0.586, 1.575] current=[10.762, 0.586, 1.575] world_v=[0.485, 0.131, -0.023] a_xy=[0.092, -0.017] thrust=9.799 rpm=[10816.5, 10813.2, 10812.4, 10815.7] saturated=false
+[position_controller_node-2] [INFO] [1784219400.054756872] [position_controller_node]: position target=[11.274, 0.705, 1.549] current=[11.277, 0.706, 1.548] world_v=[0.521, 0.107, -0.028] a_xy=[-0.056, -0.034] thrust=9.808 rpm=[10819.1, 10819.5, 10819.8, 10819.3] saturated=false
+[position_controller_node-2] [INFO] [1784219401.064514432] [position_controller_node]: position target=[11.747, 0.794, 1.522] current=[11.754, 0.795, 1.521] world_v=[0.399, 0.067, -0.023] a_xy=[-0.204, -0.044] thrust=9.819 rpm=[10826.7, 10825.3, 10825.1, 10826.5] saturated=false
+[position_controller_node-2] [INFO] [1784219402.074440199] [position_controller_node]: position target=[12.028, 0.839, 1.504] current=[12.043, 0.841, 1.504] world_v=[0.167, 0.025, -0.010] a_xy=[-0.233, -0.037] thrust=9.823 rpm=[10824.0, 10831.4, 10832.2, 10824.9] saturated=false
+[position_controller_node-2] [INFO] [1784219403.074626042] [position_controller_node]: position target=[12.100, 0.850, 1.500] current=[12.107, 0.850, 1.500] world_v=[-0.010, -0.001, 0.000] a_xy=[-0.040, -0.005] thrust=9.809 rpm=[10819.9, 10820.7, 10820.7, 10819.8] saturated=false
+[planned_trajectory_node-6] [INFO] [1784219403.222681353] [planned_trajectory_node]: planned trajectory complete; holding final setpoint
+[position_controller_node-2] [INFO] [1784219404.084426497] [position_controller_node]: position target=[12.100, 0.850, 1.500] current=[12.096, 0.848, 1.500] world_v=[-0.006, -0.001, -0.000] a_xy=[0.009, 0.001] thrust=9.807 rpm=[10832.3, 10808.9, 10805.7, 10829.1] saturated=false
+[position_controller_node-2] [INFO] [1784219405.094490223] [position_controller_node]: position target=[12.100, 0.850, 1.500] current=[12.094, 0.848, 1.500] world_v=[0.000, 0.000, -0.000] a_xy=[0.002, 0.000] thrust=9.807 rpm=[10815.6, 10821.5, 10822.3, 10816.4] saturated=false
+[position_controller_node-2] [INFO] [1784219406.104258075] [position_controller_node]: position target=[12.100, 0.850, 1.500] current=[12.095, 0.849, 1.500] world_v=[0.001, 0.000, -0.000] a_xy=[0.000, -0.000] thrust=9.807 rpm=[10819.3, 10818.7, 10818.6, 10819.2] saturated=false
 [WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
-[INFO] [planned_trajectory_node-6]: sending signal 'SIGINT' to process[planned_trajectory_node-6]
-[INFO] [astar_planner_node-5]: sending signal 'SIGINT' to process[astar_planner_node-5]
-[INFO] [static_environment_node-4]: sending signal 'SIGINT' to process[static_environment_node-4]
-[INFO] [robot_state_publisher-3]: sending signal 'SIGINT' to process[robot_state_publisher-3]
-[INFO] [position_controller_node-2]: sending signal 'SIGINT' to process[position_controller_node-2]
-[INFO] [quadrotor_dynamics_node-1]: sending signal 'SIGINT' to process[quadrotor_dynamics_node-1]
-[ERROR] [static_environment_node-4]: process has died [pid 99571, exit code -2, cmd '/home/peter/ros2_drone_sim/install/drone_planning/lib/drone_planning/static_environment_node --ros-args -r __node:=static_environment_node --params-file /home/peter/ros2_drone_sim/install/drone_bringup/share/drone_bringup/config/environment.yaml'].
-[position_controller_node-2] [INFO] [1784215653.944935462] [rclcpp]: signal_handler(SIGINT/SIGTERM)
-[ERROR] [robot_state_publisher-3]: process has died [pid 99569, exit code -2, cmd '/opt/ros/humble/lib/robot_state_publisher/robot_state_publisher --ros-args -r __node:=robot_state_publisher --params-file /tmp/launch_params_ngfh8wh_'].
-[ERROR] [position_controller_node-2]: process has died [pid 99567, exit code -2, cmd '/home/peter/ros2_drone_sim/install/drone_controller/lib/drone_controller/position_controller_node --ros-args -r __node:=position_controller_node --params-file /home/peter/ros2_drone_sim/install/drone_bringup/share/drone_bringup/config/controller.yaml --params-file /tmp/launch_params_cgsf4qdu'].
-[astar_planner_node-5] [INFO] [1784215653.944934132] [rclcpp]: signal_handler(SIGINT/SIGTERM)
-[robot_state_publisher-3] [INFO] [1784215653.944935535] [rclcpp]: signal_handler(SIGINT/SIGTERM)
-[ERROR] [quadrotor_dynamics_node-1]: process has died [pid 99565, exit code -2, cmd '/home/peter/ros2_drone_sim/install/drone_dynamics/lib/drone_dynamics/quadrotor_dynamics_node --ros-args -r __node:=quadrotor_dynamics_node --params-file /home/peter/ros2_drone_sim/install/drone_bringup/share/drone_bringup/config/dynamics.yaml'].
-[planned_trajectory_node-6] [INFO] [1784215653.944942201] [rclcpp]: signal_handler(SIGINT/SIGTERM)
-[static_environment_node-4] [INFO] [1784215653.944937498] [rclcpp]: signal_handler(SIGINT/SIGTERM)
-[quadrotor_dynamics_node-1] [INFO] [1784215653.945355150] [rclcpp]: signal_handler(SIGINT/SIGTERM)
-[planned_trajectory_node-6] [INFO] [1784215653.953557554] [rclcpp]: signal_handler(SIGINT/SIGTERM)
-[astar_planner_node-5] [INFO] [1784215653.955976619] [rclcpp]: signal_handler(SIGINT/SIGTERM)
-[INFO] [astar_planner_node-5]: process has finished cleanly [pid 99573]
-[INFO] [planned_trajectory_node-6]: process has finished cleanly [pid 99575]
+[static_environment_node-4] [INFO] [1784219406.230167245] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[position_controller_node-2] [INFO] [1784219406.230161792] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[planned_trajectory_node-6] [INFO] [1784219406.230200304] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[quadrotor_dynamics_node-1] [INFO] [1784219406.230202391] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[astar_planner_node-5] [INFO] [1784219406.230206971] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-3] [INFO] [1784219406.230394194] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [astar_planner_node-5]: process has finished cleanly [pid 103497]
+[INFO] [position_controller_node-2]: process has finished cleanly [pid 103491]
+[INFO] [static_environment_node-4]: process has finished cleanly [pid 103495]
+[INFO] [planned_trajectory_node-6]: process has finished cleanly [pid 103499]
+[INFO] [quadrotor_dynamics_node-1]: process has finished cleanly [pid 103489]
+[INFO] [robot_state_publisher-3]: process has finished cleanly [pid 103493]

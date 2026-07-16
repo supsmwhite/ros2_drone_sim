@@ -35,6 +35,11 @@ if(BUILD_TESTING)
     test/test_planned_trajectory_e2e.py
     TIMEOUT 40
   )
+
+  add_launch_test(
+    test/test_static_avoidance_e2e.py
+    TIMEOUT 80
+  )
 endif()
 
 install(

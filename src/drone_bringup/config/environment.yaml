@@ -1,0 +1,22 @@
+static_environment_node:
+  ros__parameters:
+    frame_id: map
+
+    # [xmin, xmax, ymin, ymax, zmin, zmax]
+    workspace: [-1.0, 9.0, -2.5, 7.5, -0.5, 5.0]
+
+    # Each group is [center_x, center_y, center_z, size_x, size_y, size_z].
+    # These offset wall obstacles block the next planning scenario's direct path
+    # while leaving broad passages around them and above them.
+    obstacles:
+      [
+        2.5, 1.0, 1.5, 0.8, 3.0, 3.0,
+        6.0, 4.0, 1.5, 0.8, 3.0, 3.0
+      ]
+
+    safety_radius: 0.25
+    odometry_timeout: 0.25
+
+    # Next-stage planning contract (not planner parameters):
+    # start = (0.0, 0.0, 1.5), goal = (8.0, 5.0, 1.5)
+    # suggested grid resolution = 0.25 m

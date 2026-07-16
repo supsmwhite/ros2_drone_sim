@@ -208,5 +208,22 @@ TEST(CollisionChecker, PlanningDemoHasBlockedDirectPathAndKnownSafeDetour)
   EXPECT_TRUE(checker.point_in_collision(Eigen::Vector3d(6.0, 4.0, 1.5)));
 }
 
+TEST(CollisionChecker, StaticAvoidanceEvaluationGoalsArePlanningSafe)
+{
+  const CollisionChecker checker(
+    StaticEnvironment(
+      box(-1.0, 9.0, -2.5, 7.5, -0.5, 5.0),
+      {
+        box(2.1, 2.9, -0.5, 2.5, 0.0, 3.0),
+        box(5.6, 6.4, 2.5, 5.5, 0.0, 3.0),
+      }),
+    0.35);
+
+  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(0.0, 0.0, 1.5)));
+  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(8.0, 5.0, 1.5)));
+  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(8.0, 6.5, 1.5)));
+  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(8.0, 5.0, 4.0)));
+}
+
 }  // namespace
 }  // namespace drone_planning

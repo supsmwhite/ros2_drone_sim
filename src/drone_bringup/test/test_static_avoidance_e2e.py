@@ -22,14 +22,17 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, UInt32
 
 
-FINAL_TARGET = (8.0, 5.0, 1.5)
-EXPECTED_SEGMENTS = [0, 1, 2, 3]
+FINAL_TARGET = (12.0, 2.7, 1.5)
+EXPECTED_SEGMENTS = [0, 1, 2, 3, 4, 5]
 DISCOVERY_TIMEOUT = 8.0
-MISSION_TIMEOUT = 55.0
+MISSION_TIMEOUT = 70.0
 POST_COMPLETE_OBSERVATION = 3.0
 BASE_INFLATED_OBSTACLES = (
-    ((1.85, -0.75, -0.25), (3.15, 2.75, 3.25)),
-    ((5.35, 2.25, -0.25), (6.65, 5.75, 3.25)),
+    ((2.15, -2.75, -0.25), (3.45, 1.75, 4.95)),
+    ((5.55, 0.75, -0.25), (6.85, 6.75, 4.95)),
+    ((5.55, -2.75, -0.25), (6.85, -0.95, 4.95)),
+    ((8.95, -2.75, -0.25), (10.25, 1.75, 4.95)),
+    ((8.95, 3.75, -0.25), (10.25, 6.75, 4.95)),
 )
 
 

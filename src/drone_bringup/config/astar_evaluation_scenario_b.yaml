@@ -5,6 +5,6 @@
 astar_planner_node:
   ros__parameters:
     start: [0.0, 0.0, 1.5]
-    goal: [8.0, 6.5, 1.5]
+    goal: [12.0, 3.2, 1.5]
     resolution: 0.25
     max_grid_nodes: 200000

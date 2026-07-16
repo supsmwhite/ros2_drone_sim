@@ -3,20 +3,24 @@
     frame_id: map
 
     # [xmin, xmax, ymin, ymax, zmin, zmax]
-    workspace: [-1.0, 9.0, -2.5, 7.5, -0.5, 5.0]
+    workspace: [-1.0, 13.0, -2.5, 6.5, -0.5, 5.0]
 
     # Each group is [center_x, center_y, center_z, size_x, size_y, size_z].
-    # These offset wall obstacles block the next planning scenario's direct path
-    # while leaving broad passages around them and above them.
+    # Five full-height wall sections form three barriers: an upper bypass,
+    # a narrow middle channel, and a second upper channel. Boundary-connected
+    # sections prevent one peripheral route from bypassing the complete set.
     obstacles:
       [
-        2.5, 1.0, 1.5, 0.8, 3.0, 3.0,
-        6.0, 4.0, 1.5, 0.8, 3.0, 3.0
+        2.8, -0.5, 2.35, 0.8, 4.0, 4.7,
+        6.2, 3.75, 2.35, 0.8, 5.5, 4.7,
+        6.2, -1.85, 2.35, 0.8, 1.3, 4.7,
+        9.6, -0.5, 2.35, 0.8, 4.0, 4.7,
+        9.6, 5.25, 2.35, 0.8, 2.5, 4.7
       ]
 
     safety_radius: 0.25
     odometry_timeout: 0.25
 
-    # Next-stage planning contract (not planner parameters):
-    # start = (0.0, 0.0, 1.5), goal = (8.0, 5.0, 1.5)
-    # suggested grid resolution = 0.25 m
+    # Default planning contract (not planner parameters):
+    # start = (0.0, 0.0, 1.5), goal = (12.0, 2.7, 1.5)
+    # grid resolution = 0.25 m, effective planning radius = 0.35 m

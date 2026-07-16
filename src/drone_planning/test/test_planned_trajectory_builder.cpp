@@ -24,9 +24,12 @@ CollisionChecker default_checker()
 {
   return CollisionChecker(
     StaticEnvironment(
-      box(-1.0, 9.0, -2.5, 7.5, -0.5, 5.0),
-      {box(2.1, 2.9, -0.5, 2.5, 0.0, 3.0),
-        box(5.6, 6.4, 2.5, 5.5, 0.0, 3.0)}),
+      box(-1.0, 13.0, -2.5, 6.5, -0.5, 5.0),
+      {box(2.4, 3.2, -2.5, 1.5, 0.0, 4.7),
+        box(5.8, 6.6, 1.0, 6.5, 0.0, 4.7),
+        box(5.8, 6.6, -2.5, -1.2, 0.0, 4.7),
+        box(9.2, 10.0, -2.5, 1.5, 0.0, 4.7),
+        box(9.2, 10.0, 4.0, 6.5, 0.0, 4.7)}),
     0.35);
 }
 
@@ -34,9 +37,12 @@ CollisionChecker navigation_floor_checker()
 {
   return CollisionChecker(
     StaticEnvironment(
-      box(-1.0, 9.0, -2.5, 7.5, 0.15, 5.0),
-      {box(2.1, 2.9, -0.5, 2.5, 0.0, 3.0),
-        box(5.6, 6.4, 2.5, 5.5, 0.0, 3.0)}),
+      box(-1.0, 13.0, -2.5, 6.5, 0.15, 5.0),
+      {box(2.4, 3.2, -2.5, 1.5, 0.0, 4.7),
+        box(5.8, 6.6, 1.0, 6.5, 0.0, 4.7),
+        box(5.8, 6.6, -2.5, -1.2, 0.0, 4.7),
+        box(9.2, 10.0, -2.5, 1.5, 0.0, 4.7),
+        box(9.2, 10.0, 4.0, 6.5, 0.0, 4.7)}),
     0.35);
 }
 
@@ -44,7 +50,7 @@ std::vector<Eigen::Vector3d> default_raw_path()
 {
   const auto checker = default_checker();
   const auto result = AStarPlanner(checker, 0.25, 200000U).plan(
-    Eigen::Vector3d(0.0, 0.0, 1.5), Eigen::Vector3d(8.0, 5.0, 1.5));
+    Eigen::Vector3d(0.0, 0.0, 1.5), Eigen::Vector3d(12.0, 2.7, 1.5));
   EXPECT_TRUE(result.success());
   return result.path_world;
 }
@@ -111,7 +117,7 @@ TEST(PlannedTrajectoryBuilder, MultiGoalFirstSegmentUsesBoundedMissionSpeed)
   const auto checker = navigation_floor_checker();
   EXPECT_DOUBLE_EQ(checker.safe_workspace().min_corner.z(), 0.50);
   const auto astar_result = AStarPlanner(checker, 0.25, 200000U).plan(
-    Eigen::Vector3d(0.0, 0.0, 1.469), Eigen::Vector3d(4.0, 0.0, 1.5));
+    Eigen::Vector3d(0.0, 0.0, 1.469), Eigen::Vector3d(4.2, 2.5, 1.5));
   ASSERT_TRUE(astar_result.success());
   PlannedTrajectoryParameters parameters;
   parameters.nominal_speed = 0.25;
@@ -127,10 +133,9 @@ TEST(PlannedTrajectoryBuilder, DefaultOrderedMultiGoalSegmentsAllValidate)
   PlannedTrajectoryParameters parameters;
   parameters.nominal_speed = 0.25;
   const std::vector<Eigen::Vector3d> goals{
-    Eigen::Vector3d(4.0, 0.0, 1.5),
-    Eigen::Vector3d(8.0, 5.0, 1.5),
-    Eigen::Vector3d(4.0, 6.5, 3.5),
-    Eigen::Vector3d(0.0, 4.0, 1.5)};
+    Eigen::Vector3d(4.2, 2.5, 1.5),
+    Eigen::Vector3d(7.4, 0.0, 1.5),
+    Eigen::Vector3d(12.0, 2.7, 1.5)};
   Eigen::Vector3d start(0.0, 0.0, 1.469);
   for (const auto & goal : goals) {
     const auto astar_result =

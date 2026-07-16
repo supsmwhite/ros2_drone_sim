@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include <Eigen/Geometry>
 #include <gtest/gtest.h>
 
 #include "drone_mission/piecewise_quintic_trajectory.hpp"
@@ -62,6 +63,40 @@ TEST(PiecewiseQuinticTrajectory, IntermediateWaypointHasSharedNonzeroVelocity)
   EXPECT_TRUE(boundary.acceleration_world.isZero(kTolerance));
 }
 
+TEST(PiecewiseQuinticTrajectory, DefaultVelocityScaleMatchesExplicitOneExactly)
+{
+  const drone_mission::PiecewiseQuinticTrajectory implicit(
+    representative_waypoints(), {4.0, 5.0});
+  const drone_mission::PiecewiseQuinticTrajectory explicit_one(
+    representative_waypoints(), {4.0, 5.0}, 1.0);
+  for (double time = 0.0; time <= implicit.total_duration(); time += 0.05) {
+    const auto first = implicit.sample(time);
+    const auto second = explicit_one.sample(time);
+    EXPECT_TRUE(first.position_world.isApprox(second.position_world, 0.0));
+    EXPECT_TRUE(first.velocity_world.isApprox(second.velocity_world, 0.0));
+    EXPECT_TRUE(first.acceleration_world.isApprox(second.acceleration_world, 0.0));
+    EXPECT_DOUBLE_EQ(first.yaw, second.yaw);
+  }
+}
+
+TEST(PiecewiseQuinticTrajectory, ZeroScaleStopsAtWaypointAndStaysOnEachLineSegment)
+{
+  const auto waypoints = representative_waypoints();
+  const drone_mission::PiecewiseQuinticTrajectory trajectory(
+    waypoints, {4.0, 5.0}, 0.0);
+  const auto boundary = trajectory.sample(4.0);
+  EXPECT_TRUE(boundary.velocity_world.isZero(kTolerance));
+  EXPECT_TRUE(boundary.acceleration_world.isZero(kTolerance));
+
+  for (double time = 0.0; time <= trajectory.total_duration(); time += 0.02) {
+    const auto sample = trajectory.sample(time);
+    const std::size_t segment = sample.segment_index;
+    const Eigen::Vector3d start = waypoints[segment].position_world;
+    const Eigen::Vector3d delta = waypoints[segment + 1U].position_world - start;
+    EXPECT_LT(delta.cross(sample.position_world - start).norm(), 1.0e-9);
+  }
+}
+
 TEST(PiecewiseQuinticTrajectory, SegmentJunctionIsC2Continuous)
 {
   const drone_mission::PiecewiseQuinticTrajectory trajectory(
@@ -79,6 +114,24 @@ TEST(PiecewiseQuinticTrajectory, SegmentJunctionIsC2Continuous)
   EXPECT_LT((after.acceleration_world - at.acceleration_world).norm(), 1.0e-5);
   EXPECT_LT(std::abs(before.yaw - at.yaw), 1.0e-5);
   EXPECT_LT(std::abs(after.yaw - at.yaw), 1.0e-5);
+}
+
+TEST(PiecewiseQuinticTrajectory, EveryVelocityScaleKeepsC2Continuity)
+{
+  constexpr double epsilon = 1.0e-6;
+  for (const double scale : {0.0, 0.25, 0.5, 0.75, 1.0}) {
+    const drone_mission::PiecewiseQuinticTrajectory trajectory(
+      representative_waypoints(), {4.0, 5.0}, scale);
+    const auto before = trajectory.sample(4.0 - epsilon);
+    const auto at = trajectory.sample(4.0);
+    const auto after = trajectory.sample(4.0 + epsilon);
+    EXPECT_LT((before.position_world - at.position_world).norm(), 1.0e-5);
+    EXPECT_LT((after.position_world - at.position_world).norm(), 1.0e-5);
+    EXPECT_LT((before.velocity_world - at.velocity_world).norm(), 1.0e-5);
+    EXPECT_LT((after.velocity_world - at.velocity_world).norm(), 1.0e-5);
+    EXPECT_LT((before.acceleration_world - at.acceleration_world).norm(), 1.0e-5);
+    EXPECT_LT((after.acceleration_world - at.acceleration_world).norm(), 1.0e-5);
+  }
 }
 
 TEST(PiecewiseQuinticTrajectory, YawWrapUsesShortestContinuousDirection)
@@ -124,6 +177,16 @@ TEST(PiecewiseQuinticTrajectory, InvalidConfigurationIsRejected)
     {waypoint(0.0, 0.0, 0.0), waypoint(1.0, 0.0, 0.0)}, {1.0});
   EXPECT_THROW(
     trajectory.sample(std::numeric_limits<double>::infinity()), std::invalid_argument);
+  for (const double invalid_scale : {
+      -0.01, 1.01, std::numeric_limits<double>::quiet_NaN(),
+      std::numeric_limits<double>::infinity()})
+  {
+    EXPECT_THROW(
+      drone_mission::PiecewiseQuinticTrajectory(
+        {waypoint(0.0, 0.0, 0.0), waypoint(1.0, 0.0, 0.0)},
+        {1.0}, invalid_scale),
+      std::invalid_argument);
+  }
 }
 
 TEST(PiecewiseQuinticTrajectory, SamplingAfterEndHoldsFinalState)

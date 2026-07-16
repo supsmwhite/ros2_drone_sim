@@ -30,6 +30,11 @@ if(BUILD_TESTING)
     test/test_astar_planner_e2e.py
     TIMEOUT 40
   )
+
+  add_launch_test(
+    test/test_planned_trajectory_e2e.py
+    TIMEOUT 40
+  )
 endif()
 
 install(

@@ -31,7 +31,8 @@ class PiecewiseQuinticTrajectory
 public:
   PiecewiseQuinticTrajectory(
     std::vector<TrajectoryWaypoint> waypoints,
-    std::vector<double> segment_durations);
+    std::vector<double> segment_durations,
+    double intermediate_velocity_scale = 1.0);
 
   TrajectorySample sample(double elapsed_time) const;
   std::size_t segment_count() const;

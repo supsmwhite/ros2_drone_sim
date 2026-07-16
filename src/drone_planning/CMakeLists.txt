@@ -10,6 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(ament_cmake REQUIRED)
 find_package(drone_mission REQUIRED)
+find_package(drone_msgs REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -80,7 +81,7 @@ target_link_libraries(astar_planner_node astar_planner Eigen3::Eigen)
 add_executable(planned_trajectory_node src/planned_trajectory_node.cpp)
 target_compile_options(planned_trajectory_node PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(
-  planned_trajectory_node geometry_msgs nav_msgs rclcpp std_msgs)
+  planned_trajectory_node drone_msgs geometry_msgs nav_msgs rclcpp std_msgs)
 target_link_libraries(
   planned_trajectory_node planned_trajectory_builder Eigen3::Eigen)
 
@@ -118,5 +119,5 @@ install(
 )
 
 ament_export_targets(export_drone_planning HAS_LIBRARY_TARGET)
-ament_export_dependencies(drone_mission eigen3_cmake_module Eigen3)
+ament_export_dependencies(drone_mission drone_msgs eigen3_cmake_module Eigen3)
 ament_package()

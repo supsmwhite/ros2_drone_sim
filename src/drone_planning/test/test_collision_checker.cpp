@@ -181,5 +181,32 @@ TEST(CollisionChecker, NonFiniteSegmentIsInCollision)
     Eigen::Vector3d(std::numeric_limits<double>::quiet_NaN(), 1.0, 1.0)));
 }
 
+TEST(CollisionChecker, PlanningDemoHasBlockedDirectPathAndKnownSafeDetour)
+{
+  const CollisionChecker checker(
+    StaticEnvironment(
+      box(-1.0, 9.0, -2.5, 7.5, -0.5, 5.0),
+      {
+        box(2.1, 2.9, -0.5, 2.5, 0.0, 3.0),
+        box(5.6, 6.4, 2.5, 5.5, 0.0, 3.0),
+      }),
+    0.25);
+  const Eigen::Vector3d start(0.0, 0.0, 1.5);
+  const Eigen::Vector3d goal(8.0, 5.0, 1.5);
+  const Eigen::Vector3d climb_end(1.5, 0.0, 3.75);
+  const Eigen::Vector3d overflight_end(7.0, 5.0, 3.75);
+
+  EXPECT_FALSE(checker.point_in_collision(start));
+  EXPECT_FALSE(checker.point_in_collision(goal));
+  EXPECT_TRUE(checker.segment_in_collision(start, goal));
+
+  EXPECT_FALSE(checker.segment_in_collision(start, climb_end));
+  EXPECT_FALSE(checker.segment_in_collision(climb_end, overflight_end));
+  EXPECT_FALSE(checker.segment_in_collision(overflight_end, goal));
+
+  EXPECT_TRUE(checker.point_in_collision(Eigen::Vector3d(2.5, 1.0, 1.5)));
+  EXPECT_TRUE(checker.point_in_collision(Eigen::Vector3d(6.0, 4.0, 1.5)));
+}
+
 }  // namespace
 }  // namespace drone_planning

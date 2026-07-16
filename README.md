@@ -24,7 +24,7 @@
 
 ## 当前阶段
 
-动力学、高度/yaw、单目标三维位置闭环、第一版多目标点顺序飞行、连续轨迹生成与跟踪、静态三维 AABB 环境、统一碰撞查询、三维 26 邻域 A*、确定性视线简化、安全规划轨迹生成和静态避障执行均已完成。`planned_trajectory_sim.launch.py` 默认仍只显示三种路径；`static_avoidance_sim.launch.py` 显式启用规划轨迹执行，并通过真实控制和动力学闭环绕过静态障碍物。
+动力学、高度/yaw、单目标三维位置闭环、第一版多目标点顺序飞行、连续轨迹生成与跟踪、静态三维 AABB 环境、统一碰撞查询、三维 26 邻域 A*、确定性视线简化、安全规划轨迹生成和静态避障执行均已完成。三个静态避障场景已有可复现的顺序评测、结构化指标和数据曲线。`planned_trajectory_sim.launch.py` 默认仍只显示三种路径；`static_avoidance_sim.launch.py` 显式启用规划轨迹执行，并通过真实控制和动力学闭环绕过静态障碍物。
 
 ## 总体方案
 
@@ -146,6 +146,7 @@ Motor Mixer 与四电机 RPM
 - `/drone/simplified_path`、安全 `/drone/reference_path` 和轨迹生成指标的 transient-local 发布，以及独立 Domain 98 集成测试；
 - `planned_trajectory_node` 的起点准备、稳态时钟执行、Odom 超时暂停、结束保持和段/完成状态发布；
 - `static_avoidance_sim.launch.py` 的唯一 A*→规划轨迹→控制器→动力学链路，以及独立 Domain 99 真实端到端安全回归；
+- 三个独立规划配置和 `tools/evaluate_static_avoidance.py` 顺序评测工具；每个场景使用独立 ROS Domain，保存 JSON、CSV、XY 路径、位置跟踪、跟踪误差和净空曲线，不加入默认 `colcon test`；
 - MotorRPM 命令超时保护；
 - Xacro 四旋翼模型、robot_state_publisher 和 RViz2 基础可视化；
 - `basic_sim.launch.py` 一键启动动力学、控制器、机器人模型发布和 RViz2；`mission_sim.launch.py` 启动离散顺序任务，`trajectory_sim.launch.py` 启动连续轨迹任务，`environment_sim.launch.py` 启动静态环境监测，`planning_sim.launch.py` 再增加一次性 A* 规划与路径显示。
@@ -170,16 +171,23 @@ Motor Mixer 与四电机 RPM
 - 用户已在 RViz2 中人工确认黄色 A* 原始栅格路径、粉色视线简化折线和蓝色连续参考轨迹能够同时显示；蓝色连续参考轨迹整体平滑，符合当前路径轨迹化预期。视觉观察不用于精确测量安全距离，几何安全仍以自动碰撞验证为依据；
 - Domain 99 静态避障执行回归中，无人机先在 `(0,0,1.5)` 稳定，再按 `0→1→2→3` 执行规划轨迹并到达 `(8,5,1.5)`；采样最大跟踪误差 `0.030705 m`、对基础 `0.25 m` 膨胀障碍物的最小采样净空 `0.168625 m`、最终误差 `0.005969 m`、最终速度 `0.001466 m/s`，完成后继续保持至少 `3.0 s`，控制器日志未出现饱和；
 - 用户已在 RViz2 中观察静态避障完整执行，整体运动和绕障效果符合预期。精确碰撞净空、跟踪误差和最终误差仍以自动回归指标为准；
+- 静态避障多场景评测结果如下。三场景均为 start `(0,0,1.5)`，实际 Odom 点和连续线段均未进入基础 `0.25 m` 膨胀障碍物，环境碰撞为 false，控制器 `saturated=true` 次数为 0：
+
+| 场景 | goal | 原始路径（点 / m） | 简化路径（点 / m） | 轨迹（s / scale） | 参考峰值（m/s / m/s²） | 最大跟踪误差 / 最小净空（m） | 最终误差 / 速度（m / m/s） |
+|---|---|---:|---:|---:|---:|---:|---:|
+| A 默认侧向 | `(8,5,1.5)` | `40 / 11.978138` | `5 / 11.175430` | `31.929800 / 1.00` | `0.534070 / 0.346694` | `0.031085 / 0.168657` | `0.005925 / 0.001458` |
+| B 水平终点 | `(8,6.5,1.5)` | `40 / 11.771031` | `4 / 10.903096` | `31.151703 / 1.00` | `0.536058 / 0.187298` | `0.029715 / 0.224399` | `0.004722 / 0.001580` |
+| C 三维高度 | `(8,5,4.0)` | `36 / 11.382612` | `3 / 10.310132` | `29.457521 / 1.00` | `0.540075 / 0.146427` | `0.030504 / 0.314797` | `0.001930 / 0.000818` |
 - RViz2 人工运行已确认三维工作空间边界、两个原始障碍物和透明安全膨胀区域可见，无人机模型与环境处于同一 `map` 坐标系；初始位置的碰撞状态为 `false`；
 - RViz2 显示无人机模型、TF、历史 Path 和目标 Pose；
 - 控制器退出后约 `0.30 s` 触发 MotorRPM watchdog，目标转速归零；控制器重启并重新发送目标后闭环恢复；
-- 当前工作区最近一次完整测试结果为 `203 tests, 0 errors, 0 failures, 0 skipped`。
+- 当前工作区最近一次完整测试结果为 `204 tests, 0 errors, 0 failures, 0 skipped`。
 
 ## 待完成场景
 
-- 局部规划、动态障碍与在线重规划；
+- 实验结果整理与最终项目报告；
 - 长时间、扰动和极限工况稳定性验证；
-- 飞行数据曲线、指标分析和最终实验整理。
+- 局部规划、动态障碍与在线重规划属于可选扩展，不作为当前主线必做内容。
 
 `/drone/path` 是动力学实际状态的历史位姿；`/drone/planned_path` 是 A* 原始栅格路径；`/drone/simplified_path` 是视线简化折线；`/drone/reference_path` 是连续参考轨迹。四者用途不同；只显示 Launch 不驱动无人机，静态避障 Launch 才启用规划轨迹执行。
 
@@ -296,6 +304,16 @@ ros2 launch drone_bringup static_avoidance_sim.launch.py
 ```
 
 该 Launch 不包含固定五点的 `trajectory_sim.launch.py`，而是直接启动动力学、轨迹模式控制器、robot_state_publisher、可选 RViz2、静态环境、A* 和启用执行的 `planned_trajectory_node`。无人机先持续跟踪规划起点；位置误差 `<0.20 m`、线速度 `<0.15 m/s` 连续保持 `1.0 s` 后才启动轨迹时钟。Odom 无效或超过 `0.25 s` 时轨迹时间暂停，结束后持续发布最终位置与零速度、零加速度。执行状态通过 `/drone/planned_trajectory/current_segment` 和 `/drone/planned_trajectory/complete` 发布。
+
+`static_avoidance_sim.launch.py` 的可选 `astar_config` 参数默认仍指向 `config/astar.yaml`，因此原启动命令不变。三个评测场景分别使用 `astar_evaluation_scenario_a.yaml`、`astar_evaluation_scenario_b.yaml` 和 `astar_evaluation_scenario_c.yaml`，避免运行时改写默认配置。顺序执行完整评测：
+
+```bash
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+python3 tools/evaluate_static_avoidance.py
+```
+
+评测工具为三个场景分别使用 Domain `110/111/112`，逐一启动并关闭完整 Launch，在 `results/static_avoidance/<scenario_name>/` 保存 `metrics.json`、`trajectory.csv`、`xy_path.png`、`position_tracking.png`、`tracking_error.png` 和 `clearance.png`。它是较长的实验工作流，不属于默认 `colcon test`；Domain 99 端到端测试仍是快速、确定性的核心安全回归。
 
 常用检查：
 

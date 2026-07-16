@@ -17,7 +17,7 @@ def generate_launch_description():
         bringup_share, 'config', 'controller.yaml')
     environment_parameters = os.path.join(
         bringup_share, 'config', 'environment.yaml')
-    astar_parameters = os.path.join(
+    default_astar_parameters = os.path.join(
         bringup_share, 'config', 'astar.yaml')
     trajectory_parameters = os.path.join(
         bringup_share, 'config', 'planned_trajectory.yaml')
@@ -28,12 +28,18 @@ def generate_launch_description():
         value_type=str,
     )
     use_rviz = LaunchConfiguration('use_rviz')
+    astar_config = LaunchConfiguration('astar_config')
 
     return LaunchDescription([
         DeclareLaunchArgument(
             'use_rviz',
             default_value='true',
             description='Start RViz2 with the static avoidance simulation.',
+        ),
+        DeclareLaunchArgument(
+            'astar_config',
+            default_value=default_astar_parameters,
+            description='A* planning parameter file for this simulation run.',
         ),
         Node(
             package='drone_dynamics',
@@ -79,7 +85,7 @@ def generate_launch_description():
             executable='astar_planner_node',
             name='astar_planner_node',
             output='screen',
-            parameters=[environment_parameters, astar_parameters],
+            parameters=[environment_parameters, astar_config],
         ),
         Node(
             package='drone_planning',
@@ -88,7 +94,7 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 environment_parameters,
-                astar_parameters,
+                astar_config,
                 trajectory_parameters,
                 {'execution_enabled': True},
             ],

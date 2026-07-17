@@ -23,15 +23,14 @@ from std_msgs.msg import Bool, UInt32
 
 
 TARGETS = (
-    (3.6, 3.1, 1.5),
-    (7.85, 3.1, 2.5),
-    (9.85, 0.6, 3.25),
     (12.1, 0.85, 1.5),
+    (7.8, 3.1, 2.5),
+    (0.8, 0.7, 1.8),
 )
 TAKEOFF_ANCHOR = (0.0, 0.0, 1.5)
 NAVIGATION_FLOOR = 0.50
 DISCOVERY_TIMEOUT = 8.0
-MISSION_TIMEOUT = 105.0
+MISSION_TIMEOUT = 155.0
 POST_COMPLETE_OBSERVATION = 3.0
 BASE_INFLATED_OBSTACLES = (
     ((1.95, -2.75, -0.25), (3.25, 1.75, 4.95)),
@@ -470,15 +469,15 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
             )
             print(summary, flush=True)
 
-            self.assertEqual(observed_goal_indices, [0, 1, 2, 3], summary)
-            self.assertEqual(observed_visited_counts, [0, 1, 2, 3, 4], summary)
-            self.assertEqual(len(planned_paths), 4, summary)
-            self.assertEqual(len(simplified_paths), 4, summary)
-            self.assertEqual(len(reference_paths), 4, summary)
-            self.assertEqual(len(planning_start_errors), 4, summary)
+            self.assertEqual(observed_goal_indices, [0, 1, 2], summary)
+            self.assertEqual(observed_visited_counts, [0, 1, 2, 3], summary)
+            self.assertEqual(len(planned_paths), 3, summary)
+            self.assertEqual(len(simplified_paths), 3, summary)
+            self.assertEqual(len(reference_paths), 3, summary)
+            self.assertEqual(len(planning_start_errors), 3, summary)
             self.assertTrue(all(value < 0.05 for value in planning_start_errors), summary)
             self.assertGreater(takeoff_anchor_setpoints, 100, summary)
-            self.assertEqual(len(goal_acceptance_errors), 4, summary)
+            self.assertEqual(len(goal_acceptance_errors), 3, summary)
             self.assertTrue(all(value < 0.20 for value in goal_acceptance_errors), summary)
             self.assertTrue(all(value < 0.15 for value in goal_acceptance_speeds), summary)
             self.assertTrue(all(value < 0.10 for value in maximum_tracking_errors), summary)

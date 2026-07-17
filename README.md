@@ -162,6 +162,7 @@ Motor Mixer 与四电机 RPM
 - 三个独立规划配置和 `tools/evaluate_static_avoidance.py` 顺序评测工具；每个场景使用独立 ROS Domain，保存 JSON、CSV、XY 路径、位置跟踪、跟踪误差和净空曲线，不加入默认 `colcon test`；
 - `multi_goal_static_avoidance_node` 的首次 Odom 起飞检查、导航地板、有序逐段规划、目标停稳切换、Odom 超时暂停和最终持续保持；
 - `multi_goal_static_avoidance_sim.launch.py` 的唯一多目标规划执行链路，以及独立 Domain 113 远程首目标与偏置返航真实闭环安全回归；
+- `tools/evaluate_multi_goal_mission.py` 的独立 Domain 114 完整任务评测，记录三段路径、实际/参考状态、净空、四电机 RPM、目标接受时刻和最终悬停，并生成结构化数据与报告图；
 - MotorRPM 命令超时保护；
 - Xacro 四旋翼模型、robot_state_publisher 和 RViz2 基础可视化；
 - `basic_sim.launch.py` 一键启动动力学、控制器、机器人模型发布和 RViz2；`mission_sim.launch.py` 启动离散顺序任务，`trajectory_sim.launch.py` 启动连续轨迹任务，`environment_sim.launch.py` 启动静态环境监测，`planning_sim.launch.py` 再增加一次性 A* 规划与路径显示。
@@ -190,12 +191,12 @@ Motor Mixer 与四电机 RPM
 - 用户已在 RViz2 中观察静态避障完整执行，整体运动和绕障效果符合预期。精确碰撞净空、跟踪误差和最终误差仍以自动回归指标为准；
 - 1.5 m 间距的三层地图可达性扫描共检查 231 个规则采样点，其中 51 个不在规划安全 workspace、48 个位于规划膨胀障碍物内；其余 132 个安全目标全部可达，不可达目标为 0，可达率 `100%`；
 - 默认单目标闭环由 72 个原始路径点经 3 次局部细化形成 18 点、17 段，总轨迹 `62.768339 s`，任务于 `68.757 s` 完成；最大跟踪误差 `0.030305 m`、最小基础净空 `0.089736 m`、最终误差 `0.006014 m`，无碰撞或饱和；
-- Domain 113 有序多目标回归从实际地面 Odom 原地起飞，依次执行远端 P1 `(13.2,5.5,1.5)`、中部上侧高点 P2 `(7.0,5.0,4.0)` 和起飞区偏置 P3 `(0.8,0.7,2.0)`；保守提速后的最终全量回归于 `142.175 s` 完成，三段最大跟踪误差为 `0.021435/0.028343/0.019884 m`，最小净空 `0.089752 m`，最终误差 `0.004157 m`、最终速度 `0.001689 m/s`，无碰撞、非有限值或饱和；
-- 当前远程首目标与两段偏置返航任务已由 Domain 113 闭环回归确认严格按序执行；任务结束时绿色实际 Path 仍保留从起飞点开始的 `1452` 个历史点，当前六障碍地图的定量验收以自动测试为准；
+- 最新 Domain 114 正式多目标评测从实际地面 Odom 原地起飞，依次执行 P1、P2 和 P3；Launch 后 `142.388 s` 完成，导航执行 `136.762 s`，三段从轨迹启动到目标接受分别为 `63.749/39.298/32.196 s`。最大跟踪误差 `0.027957 m`，最小基础净空 `0.089363 m`；起飞瞬态实际速度峰值 `1.016178 m/s`，三段导航实际速度峰值为 `0.559882/0.636064/0.506316 m/s`，参考速度/加速度峰值为 `0.633128 m/s`、`0.344052 m/s²`；四电机范围 `0.0–13067.5 RPM`，完成后保持 `10811.1–10827.2 RPM` 悬停；最终误差 `0.004183 m`、最终速度 `0.001692 m/s`，无碰撞、非有限值或饱和；
+- 当前远程首目标与两段偏置返航任务已由 Domain 114 正式评测确认严格按序执行；任务结束时绿色实际 Path 仍保留从起飞点开始的 `1451` 个历史点，当前六障碍地图的定量验收以自动测试和 `metrics.json` 为准；
 - RViz2 的 Orbit 焦点为 `(6.75,2.25,1.5)`、观察距离 `17.5 m`，可同时显示扩展后的完整工作空间、六个原始障碍物、透明基础安全膨胀区、无人机及四类路径；
 - RViz2 显示无人机模型、TF、历史 Path 和目标 Pose；
 - 控制器退出后约 `0.30 s` 触发 MotorRPM watchdog，目标转速归零；控制器重启并重新发送目标后闭环恢复；
-- 当前完整测试结果为 `220 tests, 0 errors, 0 failures, 0 skipped`。
+- 当前完整测试结果为 `221 tests, 0 errors, 0 failures, 0 skipped`。
 
 ## 下一阶段
 
@@ -349,7 +350,15 @@ ros2 launch drone_bringup multi_goal_static_avoidance_sim.launch.py
 
 绿色 `/drone/path` 实际轨迹默认以 `10 Hz` 采样并最多保留 `6000` 点，可覆盖约 10 分钟飞行；多目标 E2E 会验证长任务结束后首个起飞轨迹点仍然存在，防止历史缓存配置回退。
 
-RViz 默认开启绿色实际轨迹、蓝色连续参考轨迹、全部多目标 Marker 和当前目标 Pose；黄色 A* 原始路径与粉色简化折线保留为可选显示但默认关闭，避免考核演示时遮挡绿色运行轨迹。`/drone/multi_goal/goal_markers` 将未访问目标显示为黄色、当前目标显示为放大的橙红色、已完成目标显示为绿色，并附带 Pn 状态标签和任务状态文字；`/drone/multi_goal/current_goal_pose` 只表示当前多目标任务目标。两者都采用 Reliable、Transient Local、Depth 1 QoS。进入最终完成态时，节点一次性向 `/drone/planned_path`、`/drone/simplified_path` 和 `/drone/reference_path` 发布瞬态保留的空 Path，清除规划辅助线；绿色 `/drone/path` 实际历史轨迹不被清除。需要分析规划细节时可在 Displays 面板手动勾选。
+RViz 默认开启绿色实际轨迹、蓝色连续参考轨迹、全部多目标 Marker 和当前目标 Pose；黄色 A* 原始路径与粉色简化折线保留为可选显示但默认关闭，避免考核演示时遮挡绿色运行轨迹。`/drone/multi_goal/goal_markers` 将未访问目标显示为黄色、当前目标显示为放大的橙红色、已完成目标显示为绿色，并附带 Pn 状态标签和任务状态文字；`/drone/multi_goal/current_goal_pose` 只表示当前多目标任务目标。两者都采用 Reliable、Transient Local、Depth 1 QoS。状态文字以 `5 Hz` 更新：`Actual` 是最新有效 Odom 的三维实际速度模长，`Reference` 是当前连续轨迹采样的参考速度模长，`Nominal` 是轨迹分段时间计算使用的配置基线；`nominal_speed=0.35 m/s` 不表示飞行器全程恒速 `0.35 m/s`。Odom 无效或超时时 `Actual` 显示 `--`，非执行状态的 `Reference` 显示 `0.00 m/s`。进入最终完成态时，节点一次性向 `/drone/planned_path`、`/drone/simplified_path` 和 `/drone/reference_path` 发布瞬态保留的空 Path，清除规划辅助线；绿色 `/drone/path` 实际历史轨迹不被清除。需要分析规划细节时可在 Displays 面板手动勾选。
+
+完整评测默认任务：
+
+```bash
+python3 tools/evaluate_multi_goal_mission.py --timeout 200
+```
+
+工具直接读取正式 `multi_goal_mission.yaml`、`environment.yaml` 和 `dynamics.yaml`，使用 ROS Domain 114。结果保存在 `results/multi_goal_evaluation/default_mission/`：`launch.log` 是完整节点日志，`metrics.json` 是任务级和逐段指标，`trajectory.csv` 是 Odom、参考、误差、净空、状态与四电机对齐时间序列；`xy_path.png`、`position_tracking.png`、`speed_tracking.png`、`tracking_error.png`、`clearance.png`、`motor_rpm.png` 和 `mission_summary.png` 分别用于路径、位置、速度、误差、安全净空、电机和报告综合展示。
 
 导航地板 `0.50 m` 是规划阶段的安全球心最低高度，与动力学地面接触不是同一概念：起飞竖直段单独使用原始环境检查，空中各段使用原始 workspace 最低 z 加 `0.35 m` 有效半径得到的安全地板。多目标任务名义速度已由 `0.25 m/s` 保守提高到 `0.35 m/s`；同时将公共确定性时间比例候选从 `[1.0,1.25,1.5,2.0,3.0,4.0]` 细化为 `[1.0,1.05,1.10,1.15,1.20,1.25,1.5,2.0,3.0,4.0]`。最终三段选择的 duration scale 为 `1.00/1.00/1.10`，轨迹时间为 `62.754/38.316/31.213 s`；旧基线本轮复测 `183.894 s`，最终全量回归 `142.175 s`，缩短 `41.719 s`（`22.69%`）。地图、目标、`0.25 m` 基础安全半径、`0.10 m` 规划裕量、`0.35 m/s²` 最大参考加速度、控制器能力和 A* 均未修改。本轮属于统一名义速度与时间比例的保守参数优化；完整扫描摘要保存在 `results/speed_optimization/`。
 

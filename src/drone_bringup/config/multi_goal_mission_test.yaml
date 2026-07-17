@@ -18,7 +18,7 @@ multi_goal_static_avoidance_node:
     goal_hold_duration: 1.0
     resolution: 0.25
     max_grid_nodes: 200000
-    nominal_speed: 0.25
-    duration_scale_candidates: [1.0, 1.25, 1.5, 2.0, 3.0, 4.0]
+    nominal_speed: 0.35
+    duration_scale_candidates: [1.0, 1.05, 1.10, 1.15, 1.20, 1.25, 1.5, 2.0, 3.0, 4.0]
     max_refinement_iterations: 8
     max_insertions_per_refinement: 3

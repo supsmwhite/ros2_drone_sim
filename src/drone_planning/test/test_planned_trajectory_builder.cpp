@@ -49,7 +49,7 @@ CollisionChecker navigation_floor_checker()
     0.35);
 }
 
-std::vector<Eigen::Vector3d> default_raw_path()
+std::vector<Eigen::Vector3d> historical_compatibility_raw_path()
 {
   const auto checker = default_checker();
   const auto result = AStarPlanner(checker, 0.25, 200000U).plan(
@@ -95,11 +95,11 @@ void expect_valid_result(
   EXPECT_FALSE(checker.segment_in_collision(*previous, final_sample.position_world));
 }
 
-TEST(PlannedTrajectoryBuilder, DefaultAStarScenarioProducesSafeBoundedTrajectory)
+TEST(PlannedTrajectoryBuilder, HistoricalCompatibilityScenarioProducesSafeBoundedTrajectory)
 {
   const auto checker = default_checker();
   PlannedTrajectoryParameters parameters;
-  const auto raw_path = default_raw_path();
+  const auto raw_path = historical_compatibility_raw_path();
   const auto result = PlannedTrajectoryBuilder(checker, parameters).build(raw_path);
   expect_valid_result(checker, parameters, raw_path, result);
   EXPECT_LT(result.simplified_path_world.size(), raw_path.size());
@@ -201,7 +201,7 @@ TEST(PlannedTrajectoryBuilder, SyntheticCornerCutRecoversOriginalPathPoints)
 TEST(PlannedTrajectoryBuilder, RepeatedBuildIsExactlyDeterministic)
 {
   const PlannedTrajectoryBuilder builder(default_checker());
-  const auto raw_path = default_raw_path();
+  const auto raw_path = historical_compatibility_raw_path();
   const auto first = builder.build(raw_path);
   const auto second = builder.build(raw_path);
   ASSERT_TRUE(first.success);
@@ -217,38 +217,45 @@ TEST(PlannedTrajectoryBuilder, RepeatedBuildIsExactlyDeterministic)
   EXPECT_DOUBLE_EQ(first.max_reference_acceleration, second.max_reference_acceleration);
 }
 
-TEST(PlannedTrajectoryBuilder, MultiGoalFirstSegmentUsesBoundedMissionSpeed)
+TEST(PlannedTrajectoryBuilder, CurrentMultiGoalFirstSegmentUsesBoundedMissionSpeed)
 {
   const auto checker = navigation_floor_checker();
   EXPECT_DOUBLE_EQ(checker.safe_workspace().min_corner.z(), 0.50);
   const auto astar_result = AStarPlanner(checker, 0.25, 200000U).plan(
-    Eigen::Vector3d(0.0, 0.0, 1.469), Eigen::Vector3d(12.1, 1.1, 1.5));
+    Eigen::Vector3d(0.0, 0.0, 1.469), Eigen::Vector3d(13.2, 5.5, 1.5));
   ASSERT_TRUE(astar_result.success());
   PlannedTrajectoryParameters parameters;
-  parameters.nominal_speed = 0.25;
+  parameters.nominal_speed = 0.35;
   const auto trajectory_result =
     PlannedTrajectoryBuilder(checker, parameters).build(astar_result.path_world);
   expect_valid_result(checker, parameters, astar_result.path_world, trajectory_result);
   EXPECT_DOUBLE_EQ(trajectory_result.selected_velocity_scale, 1.0);
 }
 
-TEST(PlannedTrajectoryBuilder, DefaultOrderedMultiGoalSegmentsAllValidate)
+TEST(PlannedTrajectoryBuilder, CurrentOrderedMultiGoalSegmentsAllValidate)
 {
   const auto checker = navigation_floor_checker();
   PlannedTrajectoryParameters parameters;
-  parameters.nominal_speed = 0.25;
+  parameters.nominal_speed = 0.35;
   const std::vector<Eigen::Vector3d> goals{
-    Eigen::Vector3d(12.1, 1.1, 1.5),
+    Eigen::Vector3d(13.2, 5.5, 1.5),
     Eigen::Vector3d(7.0, 5.0, 4.0),
     Eigen::Vector3d(0.8, 0.7, 2.0)};
+  const std::vector<double> expected_velocity_scales{1.0, 0.25, 1.0};
+  const std::vector<double> expected_duration_scales{1.0, 1.0, 1.10};
   Eigen::Vector3d start(0.0, 0.0, 1.469);
-  for (const auto & goal : goals) {
+  for (std::size_t goal_index = 0U; goal_index < goals.size(); ++goal_index) {
+    const auto & goal = goals[goal_index];
     const auto astar_result =
       AStarPlanner(checker, 0.25, 200000U).plan(start, goal);
     ASSERT_TRUE(astar_result.success());
     const auto trajectory_result =
       PlannedTrajectoryBuilder(checker, parameters).build(astar_result.path_world);
     expect_valid_result(checker, parameters, astar_result.path_world, trajectory_result);
+    EXPECT_DOUBLE_EQ(
+      trajectory_result.selected_velocity_scale, expected_velocity_scales[goal_index]);
+    EXPECT_DOUBLE_EQ(
+      trajectory_result.selected_duration_scale, expected_duration_scales[goal_index]);
     for (double time = 0.0; time <= trajectory_result.total_duration; time += 0.02) {
       EXPECT_GT(trajectory_result.trajectory->sample(time).position_world.z(), 0.50);
     }

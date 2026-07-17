@@ -1,0 +1,59 @@
+{
+  "baseline_nominal_speed_m_s": 0.25,
+  "selected_nominal_speed_m_s": 0.35,
+  "baseline_task_completion_time_s": 183.894,
+  "selected_task_completion_time_s": 142.076,
+  "time_reduction_s": 41.818,
+  "time_reduction_percent": 22.7403,
+  "old_duration_scale_candidates": [1.0, 1.25, 1.5, 2.0, 3.0, 4.0],
+  "new_duration_scale_candidates": [1.0, 1.05, 1.1, 1.15, 1.2, 1.25, 1.5, 2.0, 3.0, 4.0],
+  "runs": [
+    {
+      "nominal_speed_m_s": 0.25,
+      "task_completion_time_s": 183.894,
+      "segments": [
+        {"trajectory_duration_s": 80.705, "raw_length_m": 20.953532, "trajectory_length_m": 20.176332, "waypoints": 15, "refinements": 2, "velocity_scale": 0.75, "duration_scale": 1.0, "maximum_reference_speed_m_s": 0.410698, "maximum_reference_acceleration_m_s2": 0.278810, "maximum_tracking_error_m": 0.013213, "minimum_clearance_m": 0.108164, "acceptance_error_m": 0.002962},
+        {"trajectory_duration_s": 53.640, "raw_length_m": 14.965229, "trajectory_length_m": 13.409934, "waypoints": 5, "refinements": 0, "velocity_scale": 0.25, "duration_scale": 1.0, "maximum_reference_speed_m_s": 0.452234, "maximum_reference_acceleration_m_s2": 0.175534, "maximum_tracking_error_m": 0.017209, "minimum_clearance_m": 0.137670, "acceptance_error_m": 0.003399},
+        {"trajectory_duration_s": 39.732, "raw_length_m": 11.236987, "trajectory_length_m": 9.933013, "waypoints": 7, "refinements": 0, "velocity_scale": 1.0, "duration_scale": 1.0, "maximum_reference_speed_m_s": 0.390723, "maximum_reference_acceleration_m_s2": 0.201044, "maximum_tracking_error_m": 0.018785, "minimum_clearance_m": 0.200970, "acceptance_error_m": 0.004225}
+      ],
+      "final_error_m": 0.002844, "final_speed_m_s": 0.001175,
+      "saturation_count": 0, "collision": false, "nonfinite": false, "passed": true
+    },
+    {
+      "nominal_speed_m_s": 0.30,
+      "task_completion_time_s": 154.963,
+      "segments": [
+        {"trajectory_duration_s": 67.391, "raw_length_m": 20.953666, "trajectory_length_m": 20.176339, "waypoints": 15, "refinements": 2, "velocity_scale": 0.75, "duration_scale": 1.0, "maximum_reference_speed_m_s": 0.492839, "maximum_reference_acceleration_m_s2": 0.343644, "maximum_tracking_error_m": 0.017793, "minimum_clearance_m": 0.106197, "acceptance_error_m": 0.002405},
+        {"trajectory_duration_s": 44.701, "raw_length_m": 14.965591, "trajectory_length_m": 13.410355, "waypoints": 5, "refinements": 0, "velocity_scale": 0.25, "duration_scale": 1.0, "maximum_reference_speed_m_s": 0.542680, "maximum_reference_acceleration_m_s2": 0.252773, "maximum_tracking_error_m": 0.021163, "minimum_clearance_m": 0.138106, "acceptance_error_m": 0.004657},
+        {"trajectory_duration_s": 33.107, "raw_length_m": 11.237686, "trajectory_length_m": 9.932084, "waypoints": 7, "refinements": 0, "velocity_scale": 1.0, "duration_scale": 1.0, "maximum_reference_speed_m_s": 0.468871, "maximum_reference_acceleration_m_s2": 0.289480, "maximum_tracking_error_m": 0.018805, "minimum_clearance_m": 0.201032, "acceptance_error_m": 0.005176}
+      ],
+      "final_error_m": 0.003801, "final_speed_m_s": 0.001546,
+      "saturation_count": 0, "collision": false, "nonfinite": false, "passed": true
+    },
+    {
+      "nominal_speed_m_s": 0.35,
+      "task_completion_time_s": 142.076,
+      "segments": [
+        {"trajectory_duration_s": 62.754, "raw_length_m": 20.953530, "trajectory_length_m": 20.176332, "waypoints": 18, "refinements": 3, "velocity_scale": 1.0, "duration_scale": 1.0, "maximum_reference_speed_m_s": 0.552488, "maximum_reference_acceleration_m_s2": 0.343598, "maximum_tracking_error_m": 0.020411, "minimum_clearance_m": 0.089752, "acceptance_error_m": 0.002406},
+        {"trajectory_duration_s": 38.316, "raw_length_m": 14.965933, "trajectory_length_m": 13.410476, "waypoints": 5, "refinements": 0, "velocity_scale": 0.25, "duration_scale": 1.0, "maximum_reference_speed_m_s": 0.633128, "maximum_reference_acceleration_m_s2": 0.344052, "maximum_tracking_error_m": 0.029921, "minimum_clearance_m": 0.138797, "acceptance_error_m": 0.005768},
+        {"trajectory_duration_s": 31.213, "raw_length_m": 11.238287, "trajectory_length_m": 9.931274, "waypoints": 7, "refinements": 0, "velocity_scale": 1.0, "duration_scale": 1.1, "maximum_reference_speed_m_s": 0.497278, "maximum_reference_acceleration_m_s2": 0.325660, "maximum_tracking_error_m": 0.022787, "minimum_clearance_m": 0.201006, "acceptance_error_m": 0.005374}
+      ],
+      "final_error_m": 0.004258, "final_speed_m_s": 0.001709,
+      "saturation_count": 0, "collision": false, "nonfinite": false, "passed": true
+    },
+    {
+      "nominal_speed_m_s": 0.40,
+      "task_completion_time_s": 149.706,
+      "duration_candidate_set": "initial coarse candidates",
+      "segments": [
+        {"trajectory_duration_s": 64.146, "duration_scale": 1.25, "velocity_scale": 0.75, "maximum_reference_speed_m_s": 0.525693, "maximum_reference_acceleration_m_s2": 0.319004, "maximum_tracking_error_m": 0.019768, "minimum_clearance_m": 0.103062},
+        {"trajectory_duration_s": 44.608, "duration_scale": 1.25, "velocity_scale": 1.0, "maximum_reference_speed_m_s": 0.506687, "maximum_reference_acceleration_m_s2": 0.343110, "maximum_tracking_error_m": 0.020100, "minimum_clearance_m": 0.101620},
+        {"trajectory_duration_s": 31.077, "duration_scale": 1.25, "velocity_scale": 1.0, "maximum_reference_speed_m_s": 0.500121, "maximum_reference_acceleration_m_s2": 0.329408, "maximum_tracking_error_m": 0.020086, "minimum_clearance_m": 0.201368}
+      ],
+      "final_error_m": 0.004293, "final_speed_m_s": 0.001724,
+      "saturation_count": 0, "collision": false, "nonfinite": false, "passed": true,
+      "selected": false,
+      "rejection_reason": "2.3% slower than the pre-refinement 0.35 run because all segments selected duration_scale=1.25"
+    }
+  ]
+}

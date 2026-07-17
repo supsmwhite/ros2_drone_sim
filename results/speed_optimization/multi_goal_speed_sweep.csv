@@ -1,0 +1,5 @@
+nominal_speed,task_completion_time_s,segment_durations_s,duration_scales,velocity_scales,max_tracking_error_m,minimum_clearance_m,final_error_m,final_speed_m_s,saturation_count,collision,nonfinite,passed,selection
+0.25,183.894,"80.705;53.640;39.732","1.00;1.00;1.00","0.75;0.25;1.00",0.018785,0.108164,0.002844,0.001175,0,false,false,true,baseline
+0.30,154.963,"67.391;44.701;33.107","1.00;1.00;1.00","0.75;0.25;1.00",0.021163,0.106197,0.003801,0.001546,0,false,false,true,accepted-candidate
+0.35,142.076,"62.754;38.316;31.213","1.00;1.00;1.10","1.00;0.25;1.00",0.029921,0.089752,0.004258,0.001709,0,false,false,true,selected-default
+0.40,149.706,"64.146;44.608;31.077","1.25;1.25;1.25","0.75;1.00;1.00",0.020100,0.101620,0.004293,0.001724,0,false,false,true,rejected-slower-than-0.35

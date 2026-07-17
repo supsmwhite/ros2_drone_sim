@@ -179,7 +179,8 @@ public:
       "velocity_scale_candidates", {1.0, 0.75, 0.5, 0.25, 0.0});
     trajectory_parameters_.duration_scale_candidates =
       declare_parameter<std::vector<double>>(
-      "duration_scale_candidates", {1.0, 1.25, 1.5, 2.0, 3.0, 4.0});
+      "duration_scale_candidates",
+      {1.0, 1.05, 1.10, 1.15, 1.20, 1.25, 1.5, 2.0, 3.0, 4.0});
     const auto max_refinement_iterations =
       declare_parameter<std::int64_t>("max_refinement_iterations", 8);
     const auto max_insertions_per_refinement =

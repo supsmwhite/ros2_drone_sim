@@ -18,6 +18,7 @@
 #include "drone_planning/astar_planner.hpp"
 #include "drone_planning/interactive_goal_editor.hpp"
 #include "drone_planning/planned_trajectory_builder.hpp"
+#include "drone_msgs/srv/execute_goal_sequence.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
 #include "interactive_markers/interactive_marker_server.hpp"
 #include "interactive_markers/menu_handler.hpp"
@@ -26,6 +27,7 @@
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/u_int32.hpp"
+#include "std_msgs/msg/u_int64.hpp"
 #include "visualization_msgs/msg/interactive_marker_feedback.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 
@@ -221,6 +223,33 @@ public:
       "/drone/interactive_goals/ready", qos);
     count_publisher_ = create_publisher<std_msgs::msg::UInt32>(
       "/drone/interactive_goals/count", qos);
+    execute_client_ = create_client<drone_msgs::srv::ExecuteGoalSequence>(
+      "/drone/interactive_goals/execute");
+    mission_active_subscription_ = create_subscription<std_msgs::msg::Bool>(
+      "/drone/interactive_mission/active", qos,
+      [this](const std_msgs::msg::Bool::SharedPtr message) {
+        execution_active_ = message->data;
+        if (execution_active_) {
+          mission_submitted_ = true;
+          status_override_ = "MISSION EXECUTION ACTIVE";
+          rebuild_candidate_marker();
+          publish_state();
+        }
+      });
+    mission_status_subscription_ = create_subscription<std_msgs::msg::String>(
+      "/drone/interactive_mission/status", qos,
+      [this](const std_msgs::msg::String::SharedPtr message) {
+        executor_status_ = message->data;
+        if (mission_submitted_) {
+          status_override_ = executor_status_;
+          publish_state();
+        }
+      });
+    mission_revision_subscription_ = create_subscription<std_msgs::msg::UInt64>(
+      "/drone/interactive_mission/draft_revision", qos,
+      [this](const std_msgs::msg::UInt64::SharedPtr message) {
+        executor_revision_ = message->data;
+      });
 
     marker_server_ = std::make_unique<interactive_markers::InteractiveMarkerServer>(
       kServerNamespace, get_node_base_interface(), get_node_clock_interface(),
@@ -275,11 +304,35 @@ private:
     menu_handler_.insert(height_menu, "2.5 m", [this](const auto &) {set_height(2.5);});
     menu_handler_.insert(height_menu, "4.0 m", [this](const auto &) {set_height(4.0);});
     menu_handler_.insert("Validate & Preview", [this](const auto &) {start_validation();});
+    menu_handler_.insert(
+      "Execute Validated Mission", [this](const auto &) {execute_validated_mission();});
     menu_handler_.insert("Print Mission YAML", [this](const auto &) {print_yaml();});
+  }
+
+  bool editor_locked() const
+  {
+    return execute_request_pending_ || mission_submitted_ || execution_active_;
+  }
+
+  bool reject_if_locked(const std::string & action)
+  {
+    if (!editor_locked()) {
+      return false;
+    }
+    status_override_ = "MISSION EXECUTION ACTIVE: " + action + " REJECTED";
+    RCLCPP_WARN(get_logger(), "%s", status_override_->c_str());
+    rebuild_candidate_marker();
+    publish_state();
+    return true;
   }
 
   void rebuild_candidate_marker()
   {
+    if (editor_locked()) {
+      marker_server_->erase(kMarkerName);
+      marker_server_->applyChanges();
+      return;
+    }
     auto marker = make_goal_candidate_marker(
       editor_.candidate(), editor_.goals().size() + 1U, editor_.state(),
       editor_.status_message(), frame_id_);
@@ -292,6 +345,12 @@ private:
   void process_feedback(
     const visualization_msgs::msg::InteractiveMarkerFeedback::ConstSharedPtr & feedback)
   {
+    if (editor_locked()) {
+      rebuild_candidate_marker();
+      publish_state();
+      return;
+    }
+    status_override_.reset();
     if (feedback->event_type == visualization_msgs::msg::InteractiveMarkerFeedback::POSE_UPDATE) {
       editor_.set_candidate(
         Eigen::Vector3d(
@@ -313,6 +372,10 @@ private:
 
   void add_goal()
   {
+    if (reject_if_locked("ADD")) {
+      return;
+    }
+    status_override_.reset();
     std::string reason;
     if (editor_.add_goal(candidate_validation(), reason)) {
       invalidate_preview_storage();
@@ -326,6 +389,10 @@ private:
 
   void undo_goal()
   {
+    if (reject_if_locked("UNDO")) {
+      return;
+    }
+    status_override_.reset();
     if (!editor_.undo_last_goal()) {
       RCLCPP_WARN(get_logger(), "Undo Last Goal ignored: goal list is empty");
     }
@@ -336,6 +403,10 @@ private:
 
   void clear_goals()
   {
+    if (reject_if_locked("CLEAR")) {
+      return;
+    }
+    status_override_.reset();
     editor_.clear_goals();
     invalidate_preview_storage();
     rebuild_candidate_marker();
@@ -344,6 +415,10 @@ private:
 
   void set_height(double height)
   {
+    if (reject_if_locked("SET HEIGHT")) {
+      return;
+    }
+    status_override_.reset();
     Eigen::Vector3d candidate = editor_.candidate();
     candidate.z() = height;
     editor_.set_candidate(candidate);
@@ -355,6 +430,10 @@ private:
 
   void start_validation()
   {
+    if (reject_if_locked("VALIDATE")) {
+      return;
+    }
+    status_override_.reset();
     if (planning_future_) {
       RCLCPP_WARN(get_logger(), "Validate & Preview ignored while a planner task is active");
       return;
@@ -455,6 +534,71 @@ private:
     publish_state();
   }
 
+  void execute_validated_mission()
+  {
+    if (reject_if_locked("EXECUTE")) {
+      return;
+    }
+    if (!editor_.preview_valid()) {
+      status_override_ = "EXECUTE REJECTED: run successful Validate & Preview first";
+      RCLCPP_WARN(get_logger(), "%s", status_override_->c_str());
+      rebuild_candidate_marker();
+      publish_state();
+      return;
+    }
+    if (!execute_client_->service_is_ready()) {
+      status_override_ = "EXECUTE REJECTED: mission executor is unavailable";
+      RCLCPP_WARN(get_logger(), "%s", status_override_->c_str());
+      rebuild_candidate_marker();
+      publish_state();
+      return;
+    }
+
+    auto request = std::make_shared<drone_msgs::srv::ExecuteGoalSequence::Request>();
+    request->goals.header.frame_id = frame_id_;
+    request->goals.header.stamp = now();
+    request->goals.poses.reserve(editor_.goals().size());
+    for (const auto & point : editor_.goals()) {
+      geometry_msgs::msg::Pose pose;
+      pose.position.x = point.x();
+      pose.position.y = point.y();
+      pose.position.z = point.z();
+      pose.orientation.w = 1.0;
+      request->goals.poses.push_back(pose);
+    }
+    request->draft_revision = editor_.draft_revision();
+    submitted_revision_ = request->draft_revision;
+    execute_request_pending_ = true;
+    status_override_ = "EXECUTION REQUEST PENDING";
+    rebuild_candidate_marker();
+    publish_state();
+
+    execute_client_->async_send_request(
+      request,
+      [this](rclcpp::Client<drone_msgs::srv::ExecuteGoalSequence>::SharedFuture future) {
+        execute_request_pending_ = false;
+        try {
+          const auto response = future.get();
+          if (!response->accepted) {
+            status_override_ = "EXECUTE REJECTED: " + response->message;
+            RCLCPP_WARN(get_logger(), "%s", status_override_->c_str());
+          } else {
+            mission_submitted_ = true;
+            status_override_ = "EXECUTION REQUEST ACCEPTED";
+            RCLCPP_INFO(
+              get_logger(), "interactive mission revision=%lu accepted by executor",
+              submitted_revision_);
+          }
+        } catch (const std::exception & error) {
+          status_override_ = "EXECUTE REJECTED: mission executor request failed";
+          RCLCPP_WARN(get_logger(), "%s", status_override_->c_str());
+          RCLCPP_DEBUG(get_logger(), "executor request error: %s", error.what());
+        }
+        rebuild_candidate_marker();
+        publish_state();
+      });
+  }
+
   void print_yaml()
   {
     if (!editor_.preview_valid()) {
@@ -481,6 +625,9 @@ private:
     visualization_msgs::msg::Marker clear;
     clear.action = visualization_msgs::msg::Marker::DELETEALL;
     array.markers.push_back(clear);
+    if (editor_locked()) {
+      return array;
+    }
     const auto stamp = now();
     for (std::size_t index = 0U; index < editor_.goals().size(); ++index) {
       const auto & point = editor_.goals()[index];
@@ -524,6 +671,9 @@ private:
     nav_msgs::msg::Path path;
     path.header.frame_id = frame_id_;
     path.header.stamp = now();
+    if (editor_locked()) {
+      return path;
+    }
     path.poses.reserve(preview_points_.size());
     for (const auto & point : preview_points_) {
       geometry_msgs::msg::PoseStamped pose;
@@ -555,7 +705,7 @@ private:
     selected_goals_publisher_->publish(goals);
     preview_path_publisher_->publish(make_preview_path());
     std_msgs::msg::String status;
-    status.data = editor_.status_message();
+    status.data = status_override_.value_or(editor_.status_message());
     status_publisher_->publish(status);
     std_msgs::msg::Bool ready;
     ready.data = editor_.preview_valid();
@@ -577,6 +727,13 @@ private:
   std::unique_ptr<CollisionChecker> collision_checker_;
   std::vector<Eigen::Vector3d> preview_points_;
   std::optional<std::future<SequencePlanResult>> planning_future_;
+  bool execute_request_pending_{false};
+  bool mission_submitted_{false};
+  bool execution_active_{false};
+  std::uint64_t submitted_revision_{0U};
+  std::uint64_t executor_revision_{0U};
+  std::string executor_status_;
+  std::optional<std::string> status_override_;
 
   std::unique_ptr<interactive_markers::InteractiveMarkerServer> marker_server_;
   interactive_markers::MenuHandler menu_handler_;
@@ -586,6 +743,10 @@ private:
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_publisher_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr ready_publisher_;
   rclcpp::Publisher<std_msgs::msg::UInt32>::SharedPtr count_publisher_;
+  rclcpp::Client<drone_msgs::srv::ExecuteGoalSequence>::SharedPtr execute_client_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr mission_active_subscription_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr mission_status_subscription_;
+  rclcpp::Subscription<std_msgs::msg::UInt64>::SharedPtr mission_revision_subscription_;
   rclcpp::TimerBase::SharedPtr future_timer_;
 };
 

@@ -126,7 +126,7 @@ add_executable(interactive_goal_editor_node src/interactive_goal_editor_node.cpp
 target_compile_options(interactive_goal_editor_node PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(
   interactive_goal_editor_node
-  geometry_msgs interactive_markers nav_msgs rclcpp std_msgs visualization_msgs)
+  drone_msgs geometry_msgs interactive_markers nav_msgs rclcpp std_msgs visualization_msgs)
 target_link_libraries(
   interactive_goal_editor_node interactive_goal_editor planned_trajectory_builder
   astar_planner Eigen3::Eigen)

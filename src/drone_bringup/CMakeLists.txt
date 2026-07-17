@@ -55,6 +55,16 @@ if(BUILD_TESTING)
     test/test_interactive_mission_service.py
     TIMEOUT 40
   )
+
+  add_launch_test(
+    test/test_interactive_goal_navigation_e2e.py
+    TIMEOUT 130
+  )
+
+  add_launch_test(
+    test/test_interactive_preflight_failure.py
+    TIMEOUT 40
+  )
 endif()
 
 install(

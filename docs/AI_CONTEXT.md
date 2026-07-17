@@ -22,12 +22,13 @@
 - `static_avoidance_sim.launch.py`：单目标闭环静态避障
 - `multi_goal_static_avoidance_sim.launch.py`：三目标闭环静态避障
 - `interactive_goal_editor_sim.launch.py`：RViz 三维有序目标编辑和完整轨迹预览；不启动飞控或动力学
+- `interactive_goal_navigation_sim.launch.py`：RViz 编辑、实际 Odom 全序列预检和交互式顺序飞行
 
 所有规划/避障 Launch 均从 `src/drone_bringup/config/environment.yaml` 读取同一地图，没有复制运行时障碍物配置。
 
 ## RViz 三维目标编辑器
 
-`interactive_goal_editor_node` 是与正式 `multi_goal_static_avoidance_node` 完全独立的只读规划工具。启动命令：
+`interactive_goal_editor_node` 负责编辑、预览和提交任务，不直接控制无人机。只读预览启动命令：
 
 ```bash
 ros2 launch drone_bringup interactive_goal_editor_sim.launch.py
@@ -35,7 +36,7 @@ ros2 launch drone_bringup interactive_goal_editor_sim.launch.py
 
 该 Launch 只包含静态环境、编辑器和 RViz，不包含控制器、动力学或默认多目标任务；节点不创建 `/drone/trajectory_setpoint` 和 `/drone/motor_rpm_cmd` Publisher。第一版预览起点固定为 `planning_start=[0.0,0.0,1.5]`，所有目标 yaw 为零。无障碍直接位置实验继续从终端发布 `/drone/goal`。
 
-活动 Interactive Marker 名为 `goal_candidate`，server update Topic 是 `/drone/interactive_goals/goal_editor/update`。它只有世界坐标固定的 `MOVE_PLANE` XY 控制面、世界 z 方向 `MOVE_AXIS` 箭头和右键菜单，没有旋转、`MOVE_3D` 或复合 3D 控件。释放鼠标时以 `0.05 m` 吸附；候选拖动中为黄色，快速几何合法为绿色，非法为红色，完整验证中为蓝色。右键菜单为 Add、Undo、Clear、高度 `1.5/2.5/4.0 m`、Validate & Preview 和 Print Mission YAML。Add 顺序定义 P1、P2……；配置上限默认 8，逻辑和测试覆盖 5 个目标而不依赖三目标硬编码。
+活动 Interactive Marker 名为 `goal_candidate`，server update Topic 是 `/drone/interactive_goals/goal_editor/update`。它只有世界坐标固定的 `MOVE_PLANE` XY 控制面、世界 z 方向 `MOVE_AXIS` 箭头和右键菜单，没有旋转、`MOVE_3D` 或复合 3D 控件。释放鼠标时以 `0.05 m` 吸附；候选拖动中为黄色，快速几何合法为绿色，非法为红色，完整验证中为蓝色。右键菜单为 Add、Undo、Clear、高度 `1.5/2.5/4.0 m`、Validate & Preview、Execute Validated Mission 和 Print Mission YAML。Add 顺序定义 P1、P2……；配置上限默认 8，逻辑和测试覆盖 5 个目标而不依赖三目标硬编码。
 
 快速检查复用 `environment.yaml` 的 `StaticEnvironment`、`CollisionChecker`、`safety_radius+planning_margin=0.35 m` 和 `minimum_navigation_altitude=0.50 m`，分别报告非有限坐标、导航地板、safe workspace 或规划膨胀障碍物错误。完整验证在异步任务中从固定起点逐段调用 `AStarPlanner` 和内部复用 `PathSimplifier` 的 `PlannedTrajectoryBuilder`；构建器继续验证速度、加速度、轨迹采样点和相邻采样线段。草稿 revision 防止旧异步结果覆盖已修改列表。READY 才允许打印 YAML；任何候选或列表变化会立即清空预览、令 ready=false，并要求重新验证。不能声称任意几何合法序列都可达。
 
@@ -45,6 +46,26 @@ ros2 launch drone_bringup interactive_goal_editor_sim.launch.py
 - `/drone/interactive_goals/selected_goals`：按序零 yaw `PoseArray`；
 - `/drone/interactive_goals/preview_path`：独立的完整连续轨迹预览，不覆盖 `/drone/reference_path`；
 - `/drone/interactive_goals/status`、`ready`、`count`：明确状态、完整验证标志与数量。
+
+交互式执行启动命令：
+
+```bash
+ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py
+```
+
+该 Launch 仅建立一条执行链路：动力学、trajectory 模式控制器、模型、静态环境、编辑器、`goal_source=interactive` 的现有 `multi_goal_static_avoidance_node` 和 RViz。没有 Execute 请求时节点状态为 `WAITING FOR VALIDATED MISSION`，无人机保持地面且不产生非零 RPM。READY 后编辑器通过 `/drone/interactive_goals/execute`（`drone_msgs/srv/ExecuteGoalSequence`）提交完整 `PoseArray goals` 和 `uint64 draft_revision` 快照；响应仅表示异步预检是否被接受。
+
+执行节点独立复核 frame、数量、有限值、零 yaw、导航地板、安全 workspace 和规划膨胀障碍物。随后等待新鲜实际 Odom：地面状态以 `(actual_x,actual_y,takeoff_height)` 为预检起点并单独检查垂直起飞段，空中状态直接使用实际位置；再对 `START→P1→...→PN` 的每段异步运行 A* 和 `PlannedTrajectoryBuilder`。任一段失败时整体拒绝且不起飞。全部预检通过后才复用原状态机起飞，并继续从每段开始时的实际 Odom 重新规划；编辑器预览 Path 从不作为控制参考。
+
+请求快照接受后，编辑器在本次 Launch 生命周期内保持锁定，隐藏候选、编辑目标 Marker 和预览 Path；拖动、Add、Undo、Clear、Validate 和重复 Execute 均不改变快照，Print YAML 保留。执行节点发布并独占显示已有多目标 Marker。完成后保留全部绿色目标和绿色实际轨迹，清空 planned/simplified/reference Path，并持续保持末目标。第一版不支持同一次 Launch 的第二份任务、任务替换或抢占。
+
+交互式任务状态 Topic 均为 Reliable、Transient Local、Depth 1：
+
+- `/drone/interactive_mission/active`；
+- `/drone/interactive_mission/status`；
+- `/drone/interactive_mission/draft_revision`。
+
+自动集成 E2E 使用 P1 `(3.5,1.0,2.5)`、P2 `(5.5,1.0,4.0)`、P3 `(7.0,5.0,4.0)`，覆盖未 READY 门控、编辑器锁定、实际 Odom 预检、三目标顺序执行、完成清线和持续实际轨迹。全量回归中的任务用时 `50.799 s`，最大导航跟踪误差 `0.024151 m`，最小基础净空 `0.242058 m`，最大电机转速 `13067.5 RPM`，最终误差 `0.004832 m`、最终速度 `0.001565 m/s`，无碰撞、非有限值或饱和。另有测试专用闭合墙场景验证“端点几何合法但全序列无路径”时任务整体失败且零 setpoint。该测试环境不修改正式六障碍地图。
 
 ## 当前地图
 
@@ -247,7 +268,7 @@ colcon test
 colcon test-result --verbose
 ```
 
-最近一次结果：`233 tests, 0 errors, 0 failures, 0 skipped`。其中 `drone_bringup` 的 9 个 Launch 测试全部通过；目标 P1/B/C 的较长评测工具运行也全部通过。
+最近一次结果：`242 tests, 0 errors, 0 failures, 0 skipped`。其中 `drone_bringup` 的 12 个 Launch 测试全部通过；参数模式 Domain 113 默认三目标仍以 `142.170 s` 完成，目标 P1/B/C 的既有较长评测工具结果保持通过。本轮未进行带 GUI 的人工 RViz 操作，人工验收命令和步骤见 README。
 
 三组单目标闭环评测：
 

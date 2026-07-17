@@ -165,11 +165,14 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
                 (7.0, 5.0, 4.0),
                 (0.8, 0.7, 2.0),
             ]
-            for index, point in enumerate(legal_three, start=1):
+            for index, point in enumerate(legal_three[:2], start=1):
                 add_goal(index, point)
+            # Validate implicitly confirms the distinct current candidate as P3.
+            set_candidate(*legal_three[2])
             select_menu(8)  # Validate & Preview follows the height submenu.
             spin_until(
-                lambda: latest.get('ready') is not None and latest['ready'].data,
+                lambda: latest.get('ready') is not None and latest['ready'].data and
+                latest['count'].data == 3,
                 45.0, 'three-goal full continuous preview')
             self.assertEqual(latest['count'].data, 3)
             self.assertGreater(len(latest['path'].poses), 2)
@@ -201,6 +204,7 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
                 (latest['status'].data.startswith('READY:') or
                  latest['status'].data.startswith('REJECTED:')),
                 45.0, 'explicit five-goal planning outcome')
+            self.assertEqual(latest['count'].data, 5)
             self.assertIn(
                 latest['status'].data.split(':', maxsplit=1)[0],
                 ('READY', 'REJECTED'))

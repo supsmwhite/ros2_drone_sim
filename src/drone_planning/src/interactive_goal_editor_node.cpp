@@ -438,6 +438,22 @@ private:
       RCLCPP_WARN(get_logger(), "Validate & Preview ignored while a planner task is active");
       return;
     }
+    const bool candidate_is_last_goal =
+      !editor_.goals().empty() && editor_.goals().back().isApprox(editor_.candidate(), 1.0e-9);
+    if (!candidate_is_last_goal) {
+      std::string reason;
+      if (!editor_.add_goal(candidate_validation(), reason)) {
+        RCLCPP_WARN(
+          get_logger(), "Validate & Preview rejected current candidate: %s", reason.c_str());
+        rebuild_candidate_marker();
+        publish_state();
+        return;
+      }
+      invalidate_preview_storage();
+      RCLCPP_INFO(
+        get_logger(), "Validate & Preview included current candidate as P%zu",
+        editor_.goals().size());
+    }
     std::uint64_t revision = 0U;
     std::vector<Eigen::Vector3d> goals;
     if (!editor_.begin_validation(revision, goals)) {

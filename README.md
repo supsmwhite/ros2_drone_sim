@@ -373,7 +373,7 @@ ros2 launch drone_bringup interactive_goal_editor_sim.launch.py
 
 该 Launch 只启动静态环境、`interactive_goal_editor_node` 和 RViz2，不启动控制器、动力学、默认 P1/P2/P3 任务，也不发布 `/drone/trajectory_setpoint` 或 `/drone/motor_rpm_cmd`。第一版固定从参数 `planning_start=[0,0,1.5]` 预览，只编辑、验证和显示，不执行飞行。无障碍位置控制实验仍使用终端向 `/drone/goal` 发布目标。
 
-RViz 中用水平控制面调整世界坐标 x/y，用竖直箭头调整 z；释放鼠标后坐标按 `0.05 m` 吸附。右键菜单提供 `Add Goal`、`Undo Last Goal`、`Clear All Goals`、`Set Height`（`1.5/2.5/4.0 m`）、`Validate & Preview`、`Execute Validated Mission` 和 `Print Mission YAML`。目标按 Add 顺序成为 P1、P2……，默认最多 8 个且逻辑不依赖目标数为 3。绿色候选表示几何合法，红色表示非法，黄色表示拖动编辑中，蓝色表示完整验证中；READY 后固定目标全部为绿色，失败段目标为红色。
+RViz 中用水平控制面调整世界坐标 x/y，用竖直箭头调整 z；释放鼠标后坐标按 `0.05 m` 吸附。右键菜单提供 `Add Goal`、`Undo Last Goal`、`Clear All Goals`、`Set Height`（`1.5/2.5/4.0 m`）、`Validate & Preview`、`Execute Validated Mission` 和 `Print Mission YAML`。中间目标按 Add 顺序成为 P1、P2……；移动到最后一个目标后可直接选择 `Validate & Preview`，编辑器会先把与上一目标不同的当前候选自动加入列表，再验证完整序列。如果最后一点已经执行过 Add，则不会重复添加。默认最多 8 个且逻辑不依赖目标数为 3。绿色候选表示几何合法，红色表示非法，黄色表示拖动编辑中，蓝色表示完整验证中；READY 后固定目标全部为绿色，失败段目标为红色。
 
 快速检查在释放鼠标、设置高度和 Add 时执行，只检查有限坐标、`0.50 m` 导航地板、`0.35 m` 规划安全 workspace 与规划膨胀障碍物。`Validate & Preview` 则在后台依次验证 `planning_start→P1→P2→...` 的 A*、路径简化、连续轨迹生成、速度/加速度限制以及轨迹点和相邻采样线段碰撞。几何合法不保证完整序列一定可规划；只有完整验证通过才进入 READY。移动候选、添加、撤销或清空目标会立即令旧预览失效，之后必须重新点击 `Validate & Preview`。
 
@@ -394,7 +394,7 @@ Interactive Marker update Topic 为 `/drone/interactive_goals/goal_editor/update
 ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py
 ```
 
-无人机在收到执行请求前保持地面且电机命令为零。依次添加目标并完成 `Validate & Preview`，状态进入 READY 后再选择 `Execute Validated Mission`。编辑器通过 `/drone/interactive_goals/execute` 提交包含完整 `PoseArray` 和 `draft_revision` 的不可变快照；执行节点不会直接播放编辑器的预览线，而是等待最新实际 Odom，从实际地面 x/y 的起飞锚点对整个序列再次异步执行 A* 和连续轨迹预检。全部段预检成功后才起飞，正式执行每一段仍从该段开始时的实际 Odom 重新规划。
+无人机在收到执行请求前保持地面且电机命令为零。对中间目标依次执行 Add，移动到最后一个目标后直接选择 `Validate & Preview`；确认目标数量和 READY 状态后再选择 `Execute Validated Mission`。编辑器通过 `/drone/interactive_goals/execute` 提交包含完整 `PoseArray` 和 `draft_revision` 的不可变快照；执行节点不会直接播放编辑器的预览线，而是等待最新实际 Odom，从实际地面 x/y 的起飞锚点对整个序列再次异步执行 A* 和连续轨迹预检。全部段预检成功后才起飞，正式执行每一段仍从该段开始时的实际 Odom 重新规划。
 
 请求接受后编辑器隐藏候选、固定目标和预览线，并锁定拖动、Add、Undo、Clear、Validate 与再次 Execute；执行目标由已有多目标 Marker 独占显示，Print Mission YAML 仍可使用。任务结束后持续悬停，绿色实际历史轨迹保留，辅助规划线清空。当前第一版每次 Launch 只接受一份任务；若目标非法、Odom 超时或完整序列无路径，不会开始部分飞行，应重启该 Launch 后重新编辑。不要把 READY 理解为对任意实际起点都可执行的保证。
 

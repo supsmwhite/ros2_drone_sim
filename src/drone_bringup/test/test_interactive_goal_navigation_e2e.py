@@ -249,13 +249,16 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
                 3.0, 'READY gate rejection')
             self.assertFalse(latest.get('active', False))
 
-            for index, target in enumerate(TARGETS, start=1):
+            for index, target in enumerate(TARGETS[:2], start=1):
                 set_candidate(target)
                 menu(1)
                 spin_until(lambda: latest.get('count') == index, 3.0, f'goal {index}')
+            # The final candidate is confirmed by Validate & Preview itself.
+            set_candidate(TARGETS[2])
             menu(8)  # Validate & Preview.
             spin_until(
                 lambda: latest.get('ready') is True and
+                latest.get('count') == 3 and
                 len(latest.get('preview', Path()).poses) > 2,
                 35.0, 'validated preview')
             snapshot = [

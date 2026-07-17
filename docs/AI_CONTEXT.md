@@ -36,7 +36,7 @@ ros2 launch drone_bringup interactive_goal_editor_sim.launch.py
 
 该 Launch 只包含静态环境、编辑器和 RViz，不包含控制器、动力学或默认多目标任务；节点不创建 `/drone/trajectory_setpoint` 和 `/drone/motor_rpm_cmd` Publisher。第一版预览起点固定为 `planning_start=[0.0,0.0,1.5]`，所有目标 yaw 为零。无障碍直接位置实验继续从终端发布 `/drone/goal`。
 
-活动 Interactive Marker 名为 `goal_candidate`，server update Topic 是 `/drone/interactive_goals/goal_editor/update`。它只有世界坐标固定的 `MOVE_PLANE` XY 控制面、世界 z 方向 `MOVE_AXIS` 箭头和右键菜单，没有旋转、`MOVE_3D` 或复合 3D 控件。释放鼠标时以 `0.05 m` 吸附；候选拖动中为黄色，快速几何合法为绿色，非法为红色，完整验证中为蓝色。右键菜单为 Add、Undo、Clear、高度 `1.5/2.5/4.0 m`、Validate & Preview、Execute Validated Mission 和 Print Mission YAML。Add 顺序定义 P1、P2……；配置上限默认 8，逻辑和测试覆盖 5 个目标而不依赖三目标硬编码。
+活动 Interactive Marker 名为 `goal_candidate`，server update Topic 是 `/drone/interactive_goals/goal_editor/update`。它只有世界坐标固定的 `MOVE_PLANE` XY 控制面、世界 z 方向 `MOVE_AXIS` 箭头和右键菜单，没有旋转、`MOVE_3D` 或复合 3D 控件。释放鼠标时以 `0.05 m` 吸附；候选拖动中为黄色，快速几何合法为绿色，非法为红色，完整验证中为蓝色。右键菜单为 Add、Undo、Clear、高度 `1.5/2.5/4.0 m`、Validate & Preview、Execute Validated Mission 和 Print Mission YAML。中间目标按 Add 顺序定义 P1、P2……；Validate 会把与最后一个已确认目标不同的当前合法候选先加入为末目标，再启动完整验证，已 Add 的末目标不会重复。配置上限默认 8，逻辑和测试覆盖 5 个目标而不依赖三目标硬编码。
 
 快速检查复用 `environment.yaml` 的 `StaticEnvironment`、`CollisionChecker`、`safety_radius+planning_margin=0.35 m` 和 `minimum_navigation_altitude=0.50 m`，分别报告非有限坐标、导航地板、safe workspace 或规划膨胀障碍物错误。完整验证在异步任务中从固定起点逐段调用 `AStarPlanner` 和内部复用 `PathSimplifier` 的 `PlannedTrajectoryBuilder`；构建器继续验证速度、加速度、轨迹采样点和相邻采样线段。草稿 revision 防止旧异步结果覆盖已修改列表。READY 才允许打印 YAML；任何候选或列表变化会立即清空预览、令 ready=false，并要求重新验证。不能声称任意几何合法序列都可达。
 

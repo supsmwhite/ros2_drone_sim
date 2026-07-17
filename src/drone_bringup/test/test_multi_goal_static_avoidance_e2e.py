@@ -23,14 +23,14 @@ from std_msgs.msg import Bool, UInt32
 
 
 TARGETS = (
-    (12.1, 0.85, 1.5),
-    (7.8, 3.1, 2.5),
-    (0.8, 0.7, 1.8),
+    (12.1, 1.1, 1.5),
+    (7.0, 5.0, 4.0),
+    (0.8, 0.7, 2.0),
 )
 TAKEOFF_ANCHOR = (0.0, 0.0, 1.5)
 NAVIGATION_FLOOR = 0.50
 DISCOVERY_TIMEOUT = 8.0
-MISSION_TIMEOUT = 155.0
+MISSION_TIMEOUT = 170.0
 POST_COMPLETE_OBSERVATION = 3.0
 BASE_INFLATED_OBSTACLES = (
     ((1.95, -2.75, -0.25), (3.25, 1.75, 4.95)),
@@ -125,6 +125,7 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
         planned_paths = []
         simplified_paths = []
         reference_paths = []
+        latest_actual_path = []
         planning_start_errors = []
         goal_acceptance_errors = []
         goal_acceptance_speeds = []
@@ -195,6 +196,17 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
             points = check_path(message, 'reference path')
             if points:
                 reference_paths.append(points)
+
+        def on_actual_path(message):
+            nonlocal latest_actual_path
+            if message.header.frame_id != 'map':
+                health_errors.append('actual path frame is not map')
+                return
+            points = path_points(message)
+            if not all(math.isfinite(value) for point in points for value in point):
+                health_errors.append('actual path contains non-finite points')
+                return
+            latest_actual_path = points
 
         def on_goal_index(message):
             nonlocal current_goal_index
@@ -353,6 +365,7 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
                 Path, '/drone/simplified_path', on_simplified_path, latched_qos),
             node.create_subscription(
                 Path, '/drone/reference_path', on_reference_path, latched_qos),
+            node.create_subscription(Path, '/drone/path', on_actual_path, 10),
             node.create_subscription(
                 UInt32, '/drone/multi_goal/current_goal_index', on_goal_index, 10),
             node.create_subscription(
@@ -454,7 +467,7 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
                 f'goal_indices={observed_goal_indices} '
                 f'visited_counts={observed_visited_counts} '
                 f'paths=(raw={len(planned_paths)}, simplified={len(simplified_paths)}, '
-                f'reference={len(reference_paths)}) '
+                f'reference={len(reference_paths)}, actual_history={len(latest_actual_path)}) '
                 f'planning_start_errors={[round(v, 6) for v in planning_start_errors]} '
                 f'goal_acceptance_errors={[round(v, 6) for v in goal_acceptance_errors]} '
                 f'goal_acceptance_speeds={[round(v, 6) for v in goal_acceptance_speeds]} '
@@ -474,6 +487,11 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
             self.assertEqual(len(planned_paths), 3, summary)
             self.assertEqual(len(simplified_paths), 3, summary)
             self.assertEqual(len(reference_paths), 3, summary)
+            self.assertGreater(len(latest_actual_path), 1000, summary)
+            self.assertLess(norm3(latest_actual_path[0]), 0.10, summary)
+            self.assertLess(norm3(tuple(
+                latest_actual_path[-1][axis] - TARGETS[-1][axis]
+                for axis in range(3))), 0.20, summary)
             self.assertEqual(len(planning_start_errors), 3, summary)
             self.assertTrue(all(value < 0.05 for value in planning_start_errors), summary)
             self.assertGreater(takeoff_anchor_setpoints, 100, summary)

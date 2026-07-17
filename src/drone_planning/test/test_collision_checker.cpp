@@ -248,8 +248,8 @@ TEST(CollisionChecker, StaticAvoidanceEvaluationGoalsArePlanningSafe)
   EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 0.85, 1.5)));
   EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 1.1, 2.5)));
   EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 0.85, 3.25)));
-  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(7.8, 3.1, 2.5)));
-  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(0.8, 0.7, 1.8)));
+  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(7.0, 5.0, 4.0)));
+  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(0.8, 0.7, 2.0)));
 }
 
 }  // namespace

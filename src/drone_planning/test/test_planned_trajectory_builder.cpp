@@ -119,7 +119,7 @@ TEST(PlannedTrajectoryBuilder, MultiGoalFirstSegmentUsesBoundedMissionSpeed)
   const auto checker = navigation_floor_checker();
   EXPECT_DOUBLE_EQ(checker.safe_workspace().min_corner.z(), 0.50);
   const auto astar_result = AStarPlanner(checker, 0.25, 200000U).plan(
-    Eigen::Vector3d(0.0, 0.0, 1.469), Eigen::Vector3d(12.1, 0.85, 1.5));
+    Eigen::Vector3d(0.0, 0.0, 1.469), Eigen::Vector3d(12.1, 1.1, 1.5));
   ASSERT_TRUE(astar_result.success());
   PlannedTrajectoryParameters parameters;
   parameters.nominal_speed = 0.25;
@@ -135,9 +135,9 @@ TEST(PlannedTrajectoryBuilder, DefaultOrderedMultiGoalSegmentsAllValidate)
   PlannedTrajectoryParameters parameters;
   parameters.nominal_speed = 0.25;
   const std::vector<Eigen::Vector3d> goals{
-    Eigen::Vector3d(12.1, 0.85, 1.5),
-    Eigen::Vector3d(7.8, 3.1, 2.5),
-    Eigen::Vector3d(0.8, 0.7, 1.8)};
+    Eigen::Vector3d(12.1, 1.1, 1.5),
+    Eigen::Vector3d(7.0, 5.0, 4.0),
+    Eigen::Vector3d(0.8, 0.7, 2.0)};
   Eigen::Vector3d start(0.0, 0.0, 1.469);
   for (const auto & goal : goals) {
     const auto astar_result =

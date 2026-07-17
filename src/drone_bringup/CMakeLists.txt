@@ -43,7 +43,7 @@ if(BUILD_TESTING)
 
   add_launch_test(
     test/test_multi_goal_static_avoidance_e2e.py
-    TIMEOUT 180
+    TIMEOUT 200
   )
 endif()
 

@@ -28,6 +28,8 @@ quadrotor_dynamics_node:
 
     simulation_frequency: 200.0
 
-    # Odom, IMU, and TF publish every simulation step. Path publishes at 20 Hz.
-    path_publish_divider: 10
-    path_max_points: 2000
+    # Odom, IMU, and TF publish every simulation step. Path publishes at 10 Hz.
+    # Keep roughly ten minutes of actual flight history at the 200 Hz
+    # simulation rate without publishing an unnecessarily dense Path.
+    path_publish_divider: 20
+    path_max_points: 6000

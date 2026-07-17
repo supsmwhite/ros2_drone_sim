@@ -35,6 +35,15 @@ bool finite_positive(double value)
   return std::isfinite(value) && value > 0.0;
 }
 
+double path_length(const std::vector<Eigen::Vector3d> & points)
+{
+  double length = 0.0;
+  for (std::size_t index = 1U; index < points.size(); ++index) {
+    length += (points[index] - points[index - 1U]).norm();
+  }
+  return length;
+}
+
 AxisAlignedBox parse_workspace(const std::vector<double> & values)
 {
   if (values.size() != 6U) {
@@ -168,6 +177,20 @@ public:
     trajectory_parameters_.velocity_scale_candidates =
       declare_parameter<std::vector<double>>(
       "velocity_scale_candidates", {1.0, 0.75, 0.5, 0.25, 0.0});
+    trajectory_parameters_.duration_scale_candidates =
+      declare_parameter<std::vector<double>>(
+      "duration_scale_candidates", {1.0, 1.25, 1.5, 2.0, 3.0, 4.0});
+    const auto max_refinement_iterations =
+      declare_parameter<std::int64_t>("max_refinement_iterations", 8);
+    const auto max_insertions_per_refinement =
+      declare_parameter<std::int64_t>("max_insertions_per_refinement", 3);
+    if (max_refinement_iterations < 0 || max_insertions_per_refinement <= 0) {
+      throw std::invalid_argument("trajectory refinement limits are invalid");
+    }
+    trajectory_parameters_.max_refinement_iterations =
+      static_cast<std::size_t>(max_refinement_iterations);
+    trajectory_parameters_.max_insertions_per_refinement =
+      static_cast<std::size_t>(max_insertions_per_refinement);
     trajectory_parameters_.fixed_yaw = declare_parameter<double>("fixed_yaw", 0.0);
 
     if (!finite_positive(takeoff_height_) ||
@@ -429,10 +452,21 @@ private:
     RCLCPP_INFO(
       get_logger(),
       "ordered goal %zu trajectory ready: raw_points=%zu simplified_points=%zu "
-      "duration=%.3f s velocity_scale=%.2f",
+      "initial_simplified_points=%zu refinements=%zu duration=%.3f s "
+      "velocity_scale=%.2f duration_scale=%.2f max_speed=%.6f m/s "
+      "max_acceleration=%.6f m/s^2 raw_length=%.6f m simplified_length=%.6f m "
+      "expanded_nodes=%zu",
       current_goal_index_, plan.astar_result.path_world.size(),
-      plan.trajectory_result.simplified_path_world.size(), trajectory_total_duration_,
-      plan.trajectory_result.selected_velocity_scale);
+      plan.trajectory_result.simplified_path_world.size(),
+      plan.trajectory_result.initial_simplified_point_count,
+      plan.trajectory_result.refinement_iterations, trajectory_total_duration_,
+      plan.trajectory_result.selected_velocity_scale,
+      plan.trajectory_result.selected_duration_scale,
+      plan.trajectory_result.max_reference_speed,
+      plan.trajectory_result.max_reference_acceleration,
+      path_length(plan.astar_result.path_world),
+      path_length(plan.trajectory_result.simplified_path_world),
+      plan.astar_result.expanded_nodes);
   }
 
   void update()

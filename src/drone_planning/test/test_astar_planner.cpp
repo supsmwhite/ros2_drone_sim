@@ -127,7 +127,7 @@ TEST(AStarPlanner, DefaultPlanningDemoFindsSafeBlockedPath)
 {
   const auto checker = default_checker();
   const Eigen::Vector3d start(0.0, 0.0, 1.5);
-  const Eigen::Vector3d goal(12.1, 1.1, 1.5);
+  const Eigen::Vector3d goal(13.2, 5.5, 1.5);
   ASSERT_TRUE(checker.segment_in_collision(start, goal));
   const AStarResult result = AStarPlanner(checker, 0.25, 200000U).plan(start, goal);
   expect_safe_path(checker, result, start, goal);
@@ -149,7 +149,7 @@ TEST(AStarPlanner, RepeatedPlanningIsExactlyDeterministic)
   const auto checker = default_checker();
   const AStarPlanner planner(checker, 0.25, 200000U);
   const Eigen::Vector3d start(0.0, 0.0, 1.5);
-  const Eigen::Vector3d goal(12.1, 1.1, 1.5);
+  const Eigen::Vector3d goal(13.2, 5.5, 1.5);
   const AStarResult first = planner.plan(start, goal);
   const AStarResult second = planner.plan(start, goal);
   ASSERT_TRUE(first.success());

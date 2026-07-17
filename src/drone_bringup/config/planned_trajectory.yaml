@@ -8,6 +8,9 @@
     max_reference_speed: 0.70
     max_reference_acceleration: 0.35
     velocity_scale_candidates: [1.0, 0.75, 0.5, 0.25, 0.0]
+    duration_scale_candidates: [1.0, 1.25, 1.5, 2.0, 3.0, 4.0]
+    max_refinement_iterations: 8
+    max_insertions_per_refinement: 3
     fixed_yaw: 0.0
     execution_enabled: false
     publish_frequency: 50.0

@@ -249,10 +249,9 @@ TEST(CollisionChecker, StaticAvoidanceEvaluationGoalsArePlanningSafe)
     checker.inflated_obstacles()[4].min_corner.x() -
     checker.inflated_obstacles()[3].max_corner.x(),
     1.0);
-  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 5.5, 1.5)));
+  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(13.2, 5.5, 1.5)));
   EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 1.1, 1.5)));
   EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 1.1, 2.5)));
-  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 1.1, 3.25)));
   EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(7.0, 5.0, 4.0)));
   EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(0.8, 0.7, 2.0)));
 }

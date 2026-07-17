@@ -2,6 +2,7 @@
 
 import math
 import os
+import re
 import time
 import unittest
 
@@ -23,14 +24,14 @@ from std_msgs.msg import Bool, UInt32
 
 
 TARGETS = (
-    (12.1, 1.1, 1.5),
+    (13.2, 5.5, 1.5),
     (7.0, 5.0, 4.0),
     (0.8, 0.7, 2.0),
 )
 TAKEOFF_ANCHOR = (0.0, 0.0, 1.5)
 NAVIGATION_FLOOR = 0.50
 DISCOVERY_TIMEOUT = 8.0
-MISSION_TIMEOUT = 170.0
+MISSION_TIMEOUT = 200.0
 POST_COMPLETE_OBSERVATION = 3.0
 BASE_INFLATED_OBSTACLES = (
     ((1.95, -2.75, -0.25), (3.25, 1.75, 4.95)),
@@ -44,6 +45,10 @@ BASE_INFLATED_OBSTACLES = (
 
 def norm3(values):
     return math.sqrt(sum(value * value for value in values))
+
+
+def path_length(points):
+    return sum(math.dist(start, end) for start, end in zip(points, points[1:]))
 
 
 def distance_to_box(point, lower, upper):
@@ -130,6 +135,7 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
         goal_acceptance_errors = []
         goal_acceptance_speeds = []
         maximum_tracking_errors = [0.0] * len(TARGETS)
+        minimum_segment_clearances = [math.inf] * len(TARGETS)
         minimum_sampled_clearance = math.inf
         odom_samples = 0
         setpoint_samples = 0
@@ -323,6 +329,11 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
                     health_errors.append(
                         'actual Odom segment intersected a base-inflated obstacle: '
                         f'{previous_odom_position} -> {position}')
+            if current_goal_index is not None and current_goal_index < len(TARGETS):
+                minimum_segment_clearances[current_goal_index] = min(
+                    minimum_segment_clearances[current_goal_index],
+                    min(distance_to_box(position, lower, upper)
+                        for lower, upper in BASE_INFLATED_OBSTACLES))
             if (current_goal_index is not None and current_goal_index < len(TARGETS) and
                     len(planned_paths) > current_goal_index and
                     latest_setpoint is not None and mission_complete_time is None):
@@ -461,6 +472,32 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
             )
             controller_output = b''.join(event.text for event in proc_output)
             saturation_true_count = controller_output.count(b'saturated=true')
+            segment_log_pattern = re.compile(
+                rb'ordered goal (\d+) trajectory ready: raw_points=(\d+) '
+                rb'simplified_points=(\d+) initial_simplified_points=(\d+) '
+                rb'refinements=(\d+) duration=([0-9.eE+-]+) s '
+                rb'velocity_scale=([0-9.eE+-]+) duration_scale=([0-9.eE+-]+) '
+                rb'max_speed=([0-9.eE+-]+) m/s max_acceleration=([0-9.eE+-]+) m/s\^2 '
+                rb'raw_length=([0-9.eE+-]+) m simplified_length=([0-9.eE+-]+) m '
+                rb'expanded_nodes=(\d+)')
+            segment_logs = [
+                tuple(value.decode() for value in match)
+                for match in segment_log_pattern.findall(controller_output)]
+            segment_metrics = [
+                {
+                    'goal_index': index,
+                    'start': tuple(round(value, 6) for value in planned_paths[index][0]),
+                    'goal': TARGETS[index],
+                    'raw_points': len(planned_paths[index]),
+                    'raw_length': round(path_length(planned_paths[index]), 6),
+                    'simplified_points': len(simplified_paths[index]),
+                    'simplified_length': round(path_length(simplified_paths[index]), 6),
+                    'max_tracking_error': round(maximum_tracking_errors[index], 6),
+                    'minimum_clearance': round(minimum_segment_clearances[index], 6),
+                    'acceptance_error': round(goal_acceptance_errors[index], 6),
+                }
+                for index in range(min(len(planned_paths), len(simplified_paths),
+                                       len(goal_acceptance_errors)))]
             summary = (
                 'multi_goal_static_avoidance_e2e: '
                 f'mission_complete_time={mission_complete_time - test_start:.3f}s '
@@ -471,6 +508,7 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
                 f'planning_start_errors={[round(v, 6) for v in planning_start_errors]} '
                 f'goal_acceptance_errors={[round(v, 6) for v in goal_acceptance_errors]} '
                 f'goal_acceptance_speeds={[round(v, 6) for v in goal_acceptance_speeds]} '
+                f'segment_metrics={segment_metrics} segment_generation_logs={segment_logs} '
                 f'max_tracking_errors={[round(v, 6) for v in maximum_tracking_errors]} '
                 f'minimum_clearance={minimum_sampled_clearance:.6f}m '
                 f'controller_saturated_true_logs={saturation_true_count} '

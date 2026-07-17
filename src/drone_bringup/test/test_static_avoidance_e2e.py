@@ -22,9 +22,9 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, UInt32
 
 
-FINAL_TARGET = (12.1, 1.1, 1.5)
+FINAL_TARGET = (13.2, 5.5, 1.5)
 DISCOVERY_TIMEOUT = 8.0
-MISSION_TIMEOUT = 70.0
+MISSION_TIMEOUT = 85.0
 POST_COMPLETE_OBSERVATION = 3.0
 BASE_INFLATED_OBSTACLES = (
     ((1.95, -2.75, -0.25), (3.25, 1.75, 4.95)),

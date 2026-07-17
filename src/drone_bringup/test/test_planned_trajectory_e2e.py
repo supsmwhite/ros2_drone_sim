@@ -21,7 +21,7 @@ from std_msgs.msg import Bool, Float64, UInt32
 
 
 START = (0.0, 0.0, 1.5)
-GOAL = (12.1, 1.1, 1.5)
+GOAL = (13.2, 5.5, 1.5)
 VELOCITY_SCALE_CANDIDATES = (1.0, 0.75, 0.5, 0.25, 0.0)
 EFFECTIVE_INFLATED_OBSTACLES = [
     ((1.85, -2.85, -0.35), (3.35, 1.85, 5.05)),

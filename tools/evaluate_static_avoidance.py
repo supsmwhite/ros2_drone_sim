@@ -406,6 +406,26 @@ def validated_reference_extrema(log_text, collector):
     )
 
 
+def trajectory_refinement_details(log_text):
+    matches = re.findall(
+        r'planned trajectory generated: raw_points=(\d+) simplified_points=(\d+) '
+        r'initial_simplified_points=(\d+) refinements=(\d+).*?'
+        r'velocity_scale=([0-9.eE+-]+) duration_scale=([0-9.eE+-]+)',
+        log_text,
+    )
+    if not matches:
+        return None
+    raw, final, initial, refinements, velocity_scale, duration_scale = matches[-1]
+    return {
+        'raw_path_points_from_generator': int(raw),
+        'initial_simplified_path_points': int(initial),
+        'final_refined_waypoints': int(final),
+        'refinement_iterations': int(refinements),
+        'selected_velocity_scale_from_generator': float(velocity_scale),
+        'selected_duration_scale': float(duration_scale),
+    }
+
+
 def write_csv(output_directory, rows):
     with (output_directory / 'trajectory.csv').open(
             'w', newline='', encoding='utf-8') as csv_file:
@@ -645,6 +665,9 @@ def run_scenario(repo_root, scenario_name, scenario, output_root, timeout):
         'nonfinite_observed': collector.nonfinite_observed,
         'runtime_error': runtime_error,
     }
+    refinement_details = trajectory_refinement_details(log_text)
+    if refinement_details is not None:
+        metrics.update(refinement_details)
     if runtime_error is not None:
         collector._record_error(runtime_error)
     validate_metrics(metrics, collector)

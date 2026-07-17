@@ -94,6 +94,22 @@ TEST(PathSimplifier, ObstacleKeepsNecessaryTurnAndEveryOutputSegmentIsSafe)
   }
 }
 
+TEST(PathSimplifier, IndexedResultPreservesExactStrictlyIncreasingRawIndices)
+{
+  const auto input = detour_path();
+  const auto result = PathSimplifier(obstacle_checker()).simplify_with_indices(input);
+  ASSERT_EQ(result.points.size(), result.raw_indices.size());
+  ASSERT_GE(result.raw_indices.size(), 2U);
+  EXPECT_EQ(result.raw_indices.front(), 0U);
+  EXPECT_EQ(result.raw_indices.back(), input.size() - 1U);
+  for (std::size_t index = 0U; index < result.raw_indices.size(); ++index) {
+    EXPECT_TRUE(result.points[index].isApprox(input[result.raw_indices[index]], 0.0));
+    if (index > 0U) {
+      EXPECT_LT(result.raw_indices[index - 1U], result.raw_indices[index]);
+    }
+  }
+}
+
 TEST(PathSimplifier, RepeatedResultIsExactlyDeterministic)
 {
   const PathSimplifier simplifier(obstacle_checker());

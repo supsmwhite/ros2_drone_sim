@@ -111,6 +111,19 @@ public:
       declare_parameter<double>("max_reference_acceleration", 0.35);
     parameters.velocity_scale_candidates = declare_parameter<std::vector<double>>(
       "velocity_scale_candidates", {1.0, 0.75, 0.5, 0.25, 0.0});
+    parameters.duration_scale_candidates = declare_parameter<std::vector<double>>(
+      "duration_scale_candidates", {1.0, 1.25, 1.5, 2.0, 3.0, 4.0});
+    const auto max_refinement_iterations =
+      declare_parameter<std::int64_t>("max_refinement_iterations", 8);
+    const auto max_insertions_per_refinement =
+      declare_parameter<std::int64_t>("max_insertions_per_refinement", 3);
+    if (max_refinement_iterations < 0 || max_insertions_per_refinement <= 0) {
+      throw std::invalid_argument("trajectory refinement limits are invalid");
+    }
+    parameters.max_refinement_iterations =
+      static_cast<std::size_t>(max_refinement_iterations);
+    parameters.max_insertions_per_refinement =
+      static_cast<std::size_t>(max_insertions_per_refinement);
     parameters.fixed_yaw = declare_parameter<double>("fixed_yaw", 0.0);
 
     execution_enabled_ = declare_parameter<bool>("execution_enabled", false);
@@ -345,7 +358,7 @@ private:
       PlannedTrajectoryResult result = builder_->build(raw_path);
       processed_path_ = true;
       if (!result.success || !result.trajectory) {
-        publish_failure("all velocity scale candidates failed validation");
+        publish_failure("all bounded trajectory refinement candidates failed validation");
         return;
       }
 
@@ -390,11 +403,14 @@ private:
       RCLCPP_INFO(
         get_logger(),
         "planned trajectory generated: raw_points=%zu simplified_points=%zu "
-        "raw_length=%.6f m simplified_length=%.6f m velocity_scale=%.2f "
+        "initial_simplified_points=%zu refinements=%zu raw_length=%.6f m "
+        "simplified_length=%.6f m velocity_scale=%.2f duration_scale=%.2f "
         "duration=%.6f s max_speed=%.6f m/s max_acceleration=%.6f m/s^2 "
         "validation_samples=%zu",
-        raw_path.size(), simplified_path_world_.size(), path_length(raw_path),
+        raw_path.size(), simplified_path_world_.size(), result.initial_simplified_point_count,
+        result.refinement_iterations, path_length(raw_path),
         path_length(simplified_path_world_), selected_velocity_scale_,
+        result.selected_duration_scale,
         trajectory_total_duration_, result.max_reference_speed,
         result.max_reference_acceleration, result.validation_sample_count);
     } catch (const std::invalid_argument & error) {

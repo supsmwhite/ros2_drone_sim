@@ -100,7 +100,7 @@ public:
       "start", {0.0, 0.0, 1.5});
     required_goal_values_ = declare_parameter<std::vector<double>>(
       "required_goals",
-      {12.1, 5.5, 1.5, 12.1, 1.1, 1.5, 7.0, 5.0, 4.0, 0.8, 0.7, 2.0});
+      {13.2, 5.5, 1.5, 12.1, 1.1, 2.5, 7.0, 5.0, 4.0, 0.8, 0.7, 2.0});
 
     if (!std::isfinite(safety_radius) || safety_radius < 0.0 ||
       !std::isfinite(planning_margin) || planning_margin < 0.0 ||

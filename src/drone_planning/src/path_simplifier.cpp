@@ -15,6 +15,12 @@ PathSimplifier::PathSimplifier(CollisionChecker collision_checker)
 std::vector<Eigen::Vector3d> PathSimplifier::simplify(
   const std::vector<Eigen::Vector3d> & path_world) const
 {
+  return simplify_with_indices(path_world).points;
+}
+
+SimplifiedPathResult PathSimplifier::simplify_with_indices(
+  const std::vector<Eigen::Vector3d> & path_world) const
+{
   if (path_world.size() < 2U) {
     throw std::invalid_argument("path simplification requires at least two points");
   }
@@ -32,9 +38,11 @@ std::vector<Eigen::Vector3d> PathSimplifier::simplify(
     }
   }
 
-  std::vector<Eigen::Vector3d> simplified;
-  simplified.reserve(path_world.size());
-  simplified.push_back(path_world.front());
+  SimplifiedPathResult result;
+  result.points.reserve(path_world.size());
+  result.raw_indices.reserve(path_world.size());
+  result.points.push_back(path_world.front());
+  result.raw_indices.push_back(0U);
   std::size_t anchor = 0U;
   while (anchor + 1U < path_world.size()) {
     std::size_t visible = path_world.size() - 1U;
@@ -46,10 +54,11 @@ std::vector<Eigen::Vector3d> PathSimplifier::simplify(
     if (collision_checker_.segment_in_collision(path_world[anchor], path_world[visible])) {
       throw std::logic_error("validated path has no safe successor");
     }
-    simplified.push_back(path_world[visible]);
+    result.points.push_back(path_world[visible]);
+    result.raw_indices.push_back(visible);
     anchor = visible;
   }
-  return simplified;
+  return result;
 }
 
 }  // namespace drone_planning

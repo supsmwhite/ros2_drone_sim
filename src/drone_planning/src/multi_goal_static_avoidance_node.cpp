@@ -17,6 +17,7 @@
 #include "drone_mission/piecewise_quintic_trajectory.hpp"
 #include "drone_msgs/msg/trajectory_setpoint.hpp"
 #include "drone_planning/astar_planner.hpp"
+#include "drone_planning/multi_goal_visualization.hpp"
 #include "drone_planning/planned_trajectory_builder.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -24,6 +25,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/u_int32.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 
 namespace drone_planning
 {
@@ -70,34 +72,6 @@ std::vector<AxisAlignedBox> parse_obstacles(const std::vector<double> & values)
     obstacles.push_back({center - 0.5 * size, center + 0.5 * size});
   }
   return obstacles;
-}
-
-struct MissionGoal
-{
-  Eigen::Vector3d position{Eigen::Vector3d::Zero()};
-  double yaw{0.0};
-};
-
-std::vector<MissionGoal> parse_goals(const std::vector<double> & values)
-{
-  if (values.empty() || values.size() % 4U != 0U) {
-    throw std::invalid_argument("goals must contain non-empty flat [x,y,z,yaw] groups");
-  }
-  std::vector<MissionGoal> goals;
-  goals.reserve(values.size() / 4U);
-  for (std::size_t offset = 0U; offset < values.size(); offset += 4U) {
-    MissionGoal goal{
-      Eigen::Vector3d(values[offset], values[offset + 1U], values[offset + 2U]),
-      values[offset + 3U]};
-    if (!goal.position.allFinite() || !std::isfinite(goal.yaw)) {
-      throw std::invalid_argument("all multi-goal positions and yaw values must be finite");
-    }
-    if (goal.yaw != 0.0) {
-      throw std::invalid_argument("the first multi-goal avoidance version requires yaw=0");
-    }
-    goals.push_back(goal);
-  }
-  return goals;
 }
 
 struct SegmentPlan
@@ -233,7 +207,7 @@ public:
       }
     }
 
-    const auto path_qos = rclcpp::QoS(10).transient_local().reliable();
+    const auto path_qos = rclcpp::QoS(1).transient_local().reliable();
     planned_path_publisher_ = create_publisher<nav_msgs::msg::Path>(
       "/drone/planned_path", path_qos);
     simplified_path_publisher_ = create_publisher<nav_msgs::msg::Path>(
@@ -252,6 +226,12 @@ public:
       "/drone/multi_goal/success", 10);
     visited_goals_publisher_ = create_publisher<std_msgs::msg::UInt32>(
       "/drone/multi_goal/visited_goals", 10);
+    const auto visualization_qos = rclcpp::QoS(1).transient_local().reliable();
+    goal_markers_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+      "/drone/multi_goal/goal_markers", visualization_qos);
+    current_goal_pose_publisher_ = create_publisher<geometry_msgs::msg::PoseStamped>(
+      "/drone/multi_goal/current_goal_pose", visualization_qos);
+    publish_mission_visualization();
 
     odometry_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
       "/drone/odom", 10,
@@ -377,6 +357,55 @@ private:
         visited_goals_,
         static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     visited_goals_publisher_->publish(visited);
+    publish_mission_visualization();
+  }
+
+  MissionVisualizationState visualization_state() const
+  {
+    if (state_ == State::MissionComplete) {
+      return MissionVisualizationState::Complete;
+    }
+    if (state_ == State::Failed) {
+      return MissionVisualizationState::Failed;
+    }
+    return MissionVisualizationState::Running;
+  }
+
+  void publish_mission_visualization()
+  {
+    const auto display_state = visualization_state();
+    if (last_visualized_goal_index_ == current_goal_index_ &&
+      last_visualized_visited_goals_ == visited_goals_ &&
+      last_visualized_state_ == display_state)
+    {
+      return;
+    }
+    const builtin_interfaces::msg::Time stamp = now();
+    goal_markers_publisher_->publish(make_goal_markers(
+      goals_, current_goal_index_, visited_goals_, display_state, frame_id_, stamp,
+      trajectory_parameters_.nominal_speed));
+
+    geometry_msgs::msg::PoseStamped current_goal_pose;
+    current_goal_pose.header.frame_id = frame_id_;
+    current_goal_pose.header.stamp = stamp;
+    const auto & goal = goals_[std::min(current_goal_index_, goals_.size() - 1U)];
+    current_goal_pose.pose.position.x = goal.position.x();
+    current_goal_pose.pose.position.y = goal.position.y();
+    current_goal_pose.pose.position.z = goal.position.z();
+    current_goal_pose.pose.orientation.w = 1.0;
+    current_goal_pose_publisher_->publish(current_goal_pose);
+
+    last_visualized_goal_index_ = current_goal_index_;
+    last_visualized_visited_goals_ = visited_goals_;
+    last_visualized_state_ = display_state;
+  }
+
+  void clear_planning_visualization_paths()
+  {
+    const nav_msgs::msg::Path empty_path = make_path({});
+    planned_path_publisher_->publish(empty_path);
+    simplified_path_publisher_->publish(empty_path);
+    reference_path_publisher_->publish(empty_path);
   }
 
   void fail(const std::string & reason)
@@ -569,6 +598,7 @@ private:
             start_planning(odometry_position);
           } else {
             state_ = State::MissionComplete;
+            clear_planning_visualization_paths();
             RCLCPP_INFO(get_logger(), "multi-goal static avoidance mission complete");
           }
         }
@@ -618,6 +648,9 @@ private:
   std::chrono::steady_clock::time_point last_update_time_;
   std::optional<nav_msgs::msg::Odometry> latest_odometry_;
   std::optional<std::chrono::steady_clock::time_point> latest_odometry_reception_time_;
+  std::optional<std::size_t> last_visualized_goal_index_;
+  std::optional<std::size_t> last_visualized_visited_goals_;
+  std::optional<MissionVisualizationState> last_visualized_state_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_subscription_;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr planned_path_publisher_;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr simplified_path_publisher_;
@@ -628,6 +661,8 @@ private:
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr complete_publisher_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr success_publisher_;
   rclcpp::Publisher<std_msgs::msg::UInt32>::SharedPtr visited_goals_publisher_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr goal_markers_publisher_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr current_goal_pose_publisher_;
   rclcpp::TimerBase::SharedPtr update_timer_;
 };
 

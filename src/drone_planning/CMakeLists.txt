@@ -66,6 +66,16 @@ target_link_libraries(
   planned_trajectory_builder path_simplifier collision_checker
     drone_mission::piecewise_quintic_trajectory Eigen3::Eigen)
 
+add_library(multi_goal_visualization src/multi_goal_visualization.cpp)
+target_include_directories(multi_goal_visualization
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_options(multi_goal_visualization PRIVATE -Wall -Wextra -Wpedantic)
+ament_target_dependencies(multi_goal_visualization visualization_msgs)
+target_link_libraries(multi_goal_visualization Eigen3::Eigen)
+
 add_executable(static_environment_node src/static_environment_node.cpp)
 target_compile_options(static_environment_node PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(
@@ -91,10 +101,10 @@ target_compile_options(
   multi_goal_static_avoidance_node PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(
   multi_goal_static_avoidance_node
-  drone_msgs geometry_msgs nav_msgs rclcpp std_msgs)
+  drone_msgs geometry_msgs nav_msgs rclcpp std_msgs visualization_msgs)
 target_link_libraries(
   multi_goal_static_avoidance_node
-  planned_trajectory_builder astar_planner Eigen3::Eigen)
+  multi_goal_visualization planned_trajectory_builder astar_planner Eigen3::Eigen)
 
 add_executable(map_reachability_check src/map_reachability_check.cpp)
 target_compile_options(map_reachability_check PRIVATE -Wall -Wextra -Wpedantic)
@@ -121,12 +131,19 @@ if(BUILD_TESTING)
     test_planned_trajectory_builder PRIVATE -Wall -Wextra -Wpedantic)
   target_link_libraries(
     test_planned_trajectory_builder planned_trajectory_builder astar_planner Eigen3::Eigen)
+
+  ament_add_gtest(
+    test_multi_goal_visualization test/test_multi_goal_visualization.cpp)
+  target_compile_options(
+    test_multi_goal_visualization PRIVATE -Wall -Wextra -Wpedantic)
+  target_link_libraries(
+    test_multi_goal_visualization multi_goal_visualization Eigen3::Eigen)
 endif()
 
 install(DIRECTORY include/ DESTINATION include)
 install(
   TARGETS static_environment collision_checker astar_planner path_simplifier
-    planned_trajectory_builder
+    planned_trajectory_builder multi_goal_visualization
     static_environment_node astar_planner_node planned_trajectory_node
     multi_goal_static_avoidance_node map_reachability_check
   EXPORT export_drone_planning
@@ -136,5 +153,6 @@ install(
 )
 
 ament_export_targets(export_drone_planning HAS_LIBRARY_TARGET)
-ament_export_dependencies(drone_mission drone_msgs eigen3_cmake_module Eigen3)
+ament_export_dependencies(
+  drone_mission drone_msgs eigen3_cmake_module Eigen3 visualization_msgs)
 ament_package()

@@ -95,6 +95,8 @@ goal  = (13.2, 5.5, 1.5)
 
 P1、P2、P3 以及评测目标 B `(12.1,1.1,2.5)` 均在 `0.35 m` 模型下安全且 A* 可达。P1 已同时作为默认单目标和默认多目标首段完成闭环验证。
 
+默认任务仍为上述三个目标，但配置解析没有写死数量：支持任意非空数量的 `[x,y,z,yaw]` 分组，且当前版本要求所有 yaw 为零。任意数量的合法目标都可以配置并按序尝试规划；每个目标仍必须满足几何安全、A* 可达和连续轨迹验证。自动测试覆盖 1、3、5 个目标以及空列表、非 4 倍数、NaN/Inf 和非零 yaw 拒绝。
+
 多目标轨迹名义速度为 `0.35 m/s`，由本轮完整速度扫描从旧 `0.25 m/s` 基线保守提高；单目标轨迹名义速度仍为 `0.35 m/s`。控制器增益、最大倾角、最大水平加速度、最大参考加速度、最大 RPM、地图、安全半径、规划裕量、A* 分辨率和核心算法均未改变。
 
 ## 安全轨迹细化回退
@@ -196,9 +198,14 @@ RViz Orbit 默认焦点为 `(6.75,2.25,1.5)`，距离 `17.5 m`。默认视野覆
 - 黄色 `/drone/planned_path`：A* 原始路径，保留但默认关闭
 - 粉色 `/drone/simplified_path`：简化折线，保留但默认关闭
 
-静态环境、RobotModel 和 Goal Pose 默认开启。人工分析规划细节时，可在 RViz Displays 中重新勾选黄色和粉色路径；考核演示默认减少遮挡，突出绿色实际轨迹和蓝色参考轨迹。
+多目标显示 Topic：
 
-多目标 E2E 会验证任务结束时绿色实际轨迹仍保留起飞初始点。超过约 10 分钟的永久记录应使用 rosbag，而不是无限增长 RViz Path 消息。
+- `/drone/multi_goal/goal_markers`：全部目标主体、Pn 状态标签和任务状态文字；未访问为黄色，当前目标为放大的橙红色，已完成为绿色
+- `/drone/multi_goal/current_goal_pose`：当前多目标任务目标 Pose，任务完成后保留最后目标
+
+两个多目标显示 Publisher 均使用 Reliable、Transient Local、Depth 1 QoS，RViz 晚启动也能得到最新状态。旧 `/drone/goal` 属于 waypoint/直接位置目标链路，多目标节点不复用它。RViz 默认开启静态环境、RobotModel、多目标 Marker 和当前多目标 Pose，旧 Goal Pose 默认关闭。人工分析规划细节时，可在 Displays 中重新勾选黄色和粉色路径。
+
+首次进入 `MissionComplete` 时，多目标节点一次性向 `/drone/planned_path`、`/drone/simplified_path` 和 `/drone/reference_path` 发布带 `map` frame 和当前时间戳的空 Path；这些 Path 同样为 transient-local，晚订阅者不会看到最后一段残留。绿色 `/drone/path` 不会被清除，多目标 E2E 会验证任务结束时实际轨迹仍保留起飞初始点。失败状态当前保留最后规划线，便于诊断，同时继续安全悬停并显示 `MISSION FAILED`。超过约 10 分钟的永久记录应使用 rosbag，而不是无限增长 RViz Path 消息。
 
 ## 构建、测试与人工运行
 
@@ -213,7 +220,7 @@ colcon test
 colcon test-result --verbose
 ```
 
-最近一次结果：`215 tests, 0 errors, 0 failures, 0 skipped`。其中 `drone_bringup` 的 8 个 Launch 测试全部通过；目标 P1/B/C 的较长评测工具运行也全部通过。
+最近一次结果：`220 tests, 0 errors, 0 failures, 0 skipped`。其中 `drone_bringup` 的 8 个 Launch 测试全部通过；目标 P1/B/C 的较长评测工具运行也全部通过。
 
 三组单目标闭环评测：
 

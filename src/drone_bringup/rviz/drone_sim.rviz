@@ -101,7 +101,7 @@ Visualization Manager:
       Axes Radius: 0.05
       Class: rviz_default_plugins/Pose
       Color: 255; 40; 40
-      Enabled: true
+      Enabled: false
       Head Length: 0.22
       Head Radius: 0.09
       Name: Goal Pose
@@ -115,6 +115,37 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /drone/goal
+      Value: false
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/multi_goal/goal_markers
+      Name: Multi-Goal Markers
+      Namespaces: {}
+      Value: true
+    - Alpha: 1
+      Axes Length: 0.5
+      Axes Radius: 0.05
+      Class: rviz_default_plugins/Pose
+      Color: 255; 80; 20
+      Enabled: true
+      Head Length: 0.22
+      Head Radius: 0.09
+      Name: Current Multi-Goal
+      Shape: Arrow
+      Shaft Length: 0.45
+      Shaft Radius: 0.035
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/multi_goal/current_goal_pose
       Value: true
     - Alpha: 1
       Buffer Length: 1

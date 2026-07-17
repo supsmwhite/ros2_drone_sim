@@ -195,7 +195,7 @@ Motor Mixer 与四电机 RPM
 - RViz2 的 Orbit 焦点为 `(6.75,2.25,1.5)`、观察距离 `17.5 m`，可同时显示扩展后的完整工作空间、六个原始障碍物、透明基础安全膨胀区、无人机及四类路径；
 - RViz2 显示无人机模型、TF、历史 Path 和目标 Pose；
 - 控制器退出后约 `0.30 s` 触发 MotorRPM watchdog，目标转速归零；控制器重启并重新发送目标后闭环恢复；
-- 当前完整测试结果为 `215 tests, 0 errors, 0 failures, 0 skipped`。
+- 当前完整测试结果为 `220 tests, 0 errors, 0 failures, 0 skipped`。
 
 ## 下一阶段
 
@@ -345,11 +345,11 @@ python3 tools/evaluate_static_avoidance.py
 ros2 launch drone_bringup multi_goal_static_avoidance_sim.launch.py
 ```
 
-默认任务配置 `multi_goal_mission.yaml` 依次包含 `(13.2,5.5,1.5)`、`(7.0,5.0,4.0)` 和 `(0.8,0.7,2.0)` 三个零 yaw 目标：P1 一次完整穿越地图到右上远端，P2 返回中部上侧高点，P3 偏置返航到起飞区附近。当前节点显式要求 yaw 为零。可用 `mission_config:=<绝对路径>` 载入独立任务 YAML。节点启动时一次性读取目标列表，以首次有效 Odom 的 x/y 为起飞锚点，先发布 `z=1.5 m` 的静止 setpoint；位置与速度连续稳定 `1.0 s` 后，才从当时实际 Odom 规划 P1。每个目标同样采用“到达、停稳、切换”语义，Odom 无效或超时会暂停当前轨迹时钟，最终持续保持最后目标。任务状态可通过 `/drone/multi_goal/current_goal_index`、`current_segment`、`complete`、`success` 和 `visited_goals` 五个 Topic 观察。
+默认任务配置 `multi_goal_mission.yaml` 依次包含 `(13.2,5.5,1.5)`、`(7.0,5.0,4.0)` 和 `(0.8,0.7,2.0)` 三个零 yaw 目标：P1 一次完整穿越地图到右上远端，P2 返回中部上侧高点，P3 偏置返航到起飞区附近。目标数量没有写死为三个；配置支持任意非空数量的 `[x,y,z,yaw]` 分组，当前节点显式要求 yaw 为零。任意数量的合法目标都可以配置并按序尝试规划；每个目标仍必须满足几何安全、A* 可达和连续轨迹验证。可用 `mission_config:=<绝对路径>` 载入独立任务 YAML。节点启动时一次性读取目标列表，以首次有效 Odom 的 x/y 为起飞锚点，先发布 `z=1.5 m` 的静止 setpoint；位置与速度连续稳定 `1.0 s` 后，才从当时实际 Odom 规划 P1。每个目标同样采用“到达、停稳、切换”语义，Odom 无效或超时会暂停当前轨迹时钟，最终持续保持最后目标。任务状态可通过 `/drone/multi_goal/current_goal_index`、`current_segment`、`complete`、`success` 和 `visited_goals` 五个 Topic 观察。
 
 绿色 `/drone/path` 实际轨迹默认以 `10 Hz` 采样并最多保留 `6000` 点，可覆盖约 10 分钟飞行；多目标 E2E 会验证长任务结束后首个起飞轨迹点仍然存在，防止历史缓存配置回退。
 
-RViz 默认开启绿色实际轨迹和蓝色连续参考轨迹；黄色 A* 原始路径与粉色简化折线保留为可选显示但默认关闭，避免考核演示时遮挡绿色运行轨迹。需要分析规划细节时可在 Displays 面板手动勾选。
+RViz 默认开启绿色实际轨迹、蓝色连续参考轨迹、全部多目标 Marker 和当前目标 Pose；黄色 A* 原始路径与粉色简化折线保留为可选显示但默认关闭，避免考核演示时遮挡绿色运行轨迹。`/drone/multi_goal/goal_markers` 将未访问目标显示为黄色、当前目标显示为放大的橙红色、已完成目标显示为绿色，并附带 Pn 状态标签和任务状态文字；`/drone/multi_goal/current_goal_pose` 只表示当前多目标任务目标。两者都采用 Reliable、Transient Local、Depth 1 QoS。进入最终完成态时，节点一次性向 `/drone/planned_path`、`/drone/simplified_path` 和 `/drone/reference_path` 发布瞬态保留的空 Path，清除规划辅助线；绿色 `/drone/path` 实际历史轨迹不被清除。需要分析规划细节时可在 Displays 面板手动勾选。
 
 导航地板 `0.50 m` 是规划阶段的安全球心最低高度，与动力学地面接触不是同一概念：起飞竖直段单独使用原始环境检查，空中各段使用原始 workspace 最低 z 加 `0.35 m` 有效半径得到的安全地板。多目标任务名义速度已由 `0.25 m/s` 保守提高到 `0.35 m/s`；同时将公共确定性时间比例候选从 `[1.0,1.25,1.5,2.0,3.0,4.0]` 细化为 `[1.0,1.05,1.10,1.15,1.20,1.25,1.5,2.0,3.0,4.0]`。最终三段选择的 duration scale 为 `1.00/1.00/1.10`，轨迹时间为 `62.754/38.316/31.213 s`；旧基线本轮复测 `183.894 s`，最终全量回归 `142.175 s`，缩短 `41.719 s`（`22.69%`）。地图、目标、`0.25 m` 基础安全半径、`0.10 m` 规划裕量、`0.35 m/s²` 最大参考加速度、控制器能力和 A* 均未修改。本轮属于统一名义速度与时间比例的保守参数优化；完整扫描摘要保存在 `results/speed_optimization/`。
 
@@ -364,7 +364,7 @@ ros2 run tf2_ros tf2_echo map base_link
 
 ## 目标发布
 
-`/drone/goal` 使用 `geometry_msgs/msg/PoseStamped`。例如发布 `1.5 m` 高度、零 yaw 目标：
+`/drone/goal` 使用 `geometry_msgs/msg/PoseStamped`，属于旧 waypoint/直接位置目标链路，不用于多目标列表显示，也不驱动 `multi_goal_static_avoidance_node`。多目标显示使用独立的 `/drone/multi_goal/goal_markers` 和 `/drone/multi_goal/current_goal_pose`。例如向直接位置目标链路发布 `1.5 m` 高度、零 yaw 目标：
 
 ```bash
 ros2 topic pub --once /drone/goal geometry_msgs/msg/PoseStamped \

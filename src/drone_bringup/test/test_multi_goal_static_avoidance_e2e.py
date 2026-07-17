@@ -10,6 +10,7 @@ os.environ['ROS_DOMAIN_ID'] = '113'
 
 from ament_index_python.packages import get_package_share_directory
 from drone_msgs.msg import MotorRPM, TrajectorySetpoint
+from geometry_msgs.msg import PoseStamped
 import launch
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -21,6 +22,7 @@ import pytest
 import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, UInt32
+from visualization_msgs.msg import MarkerArray
 
 
 TARGETS = (
@@ -130,7 +132,15 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
         planned_paths = []
         simplified_paths = []
         reference_paths = []
+        latest_planning_paths_empty = {
+            'planned': False,
+            'simplified': False,
+            'reference': False,
+        }
         latest_actual_path = []
+        marker_state_history = []
+        latest_status_text = None
+        current_goal_poses = []
         planning_start_errors = []
         goal_acceptance_errors = []
         goal_acceptance_speeds = []
@@ -153,6 +163,8 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
                 health_errors.append(f'{name} frame is not map')
                 return []
             points = path_points(message)
+            if not points:
+                return points
             if len(points) < 2:
                 health_errors.append(f'{name} contains fewer than two points')
                 return points
@@ -166,7 +178,9 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
             nonlocal first_path_time
             points = check_path(message, 'planned path')
             if not points:
+                latest_planning_paths_empty['planned'] = True
                 return
+            latest_planning_paths_empty['planned'] = False
             path_index = len(planned_paths)
             planned_paths.append(points)
             if first_path_time is None:
@@ -196,12 +210,62 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
         def on_simplified_path(message):
             points = check_path(message, 'simplified path')
             if points:
+                latest_planning_paths_empty['simplified'] = False
                 simplified_paths.append(points)
+            else:
+                latest_planning_paths_empty['simplified'] = True
 
         def on_reference_path(message):
             points = check_path(message, 'reference path')
             if points:
+                latest_planning_paths_empty['reference'] = False
                 reference_paths.append(points)
+            else:
+                latest_planning_paths_empty['reference'] = True
+
+        def on_goal_markers(message):
+            nonlocal latest_status_text
+            if len(message.markers) != 2 * len(TARGETS) + 1:
+                health_errors.append(
+                    f'unexpected goal marker count: {len(message.markers)}')
+                return
+            if any(marker.header.frame_id != 'map' for marker in message.markers):
+                health_errors.append('goal marker frame is not map')
+                return
+            labels = sorted(
+                (marker for marker in message.markers
+                 if marker.ns == 'multi_goal_labels'),
+                key=lambda marker: marker.id)
+            statuses = [
+                status for label in labels
+                for status in ('DONE', 'CURRENT', 'WAITING')
+                if status in label.text
+            ]
+            if len(statuses) != len(TARGETS):
+                health_errors.append(f'invalid goal marker labels: {statuses}')
+                return
+            state = tuple(statuses)
+            if not marker_state_history or marker_state_history[-1] != state:
+                marker_state_history.append(state)
+            status_markers = [
+                marker for marker in message.markers
+                if marker.ns == 'multi_goal_status']
+            if len(status_markers) != 1:
+                health_errors.append('goal markers do not contain one mission status')
+                return
+            latest_status_text = status_markers[0].text
+
+        def on_current_goal_pose(message):
+            if message.header.frame_id != 'map':
+                health_errors.append('current goal pose frame is not map')
+                return
+            position = (
+                message.pose.position.x,
+                message.pose.position.y,
+                message.pose.position.z,
+            )
+            if not current_goal_poses or current_goal_poses[-1] != position:
+                current_goal_poses.append(position)
 
         def on_actual_path(message):
             nonlocal latest_actual_path
@@ -376,6 +440,12 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
                 Path, '/drone/simplified_path', on_simplified_path, latched_qos),
             node.create_subscription(
                 Path, '/drone/reference_path', on_reference_path, latched_qos),
+            node.create_subscription(
+                MarkerArray, '/drone/multi_goal/goal_markers',
+                on_goal_markers, latched_qos),
+            node.create_subscription(
+                PoseStamped, '/drone/multi_goal/current_goal_pose',
+                on_current_goal_pose, latched_qos),
             node.create_subscription(Path, '/drone/path', on_actual_path, 10),
             node.create_subscription(
                 UInt32, '/drone/multi_goal/current_goal_index', on_goal_index, 10),
@@ -408,7 +478,8 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
                 if (required_nodes.issubset(set(node.get_node_names())) and
                         latest_position is not None and latest_setpoint is not None and
                         current_goal_index is not None and latest_visited is not None and
-                        success_seen and rpm_samples > 0 and collision_samples > 0):
+                        success_seen and rpm_samples > 0 and collision_samples > 0 and
+                        marker_state_history and current_goal_poses):
                     break
             else:
                 self.fail(
@@ -420,6 +491,10 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
             self.assertEqual(node.count_publishers('/drone/planned_path'), 1)
             self.assertEqual(node.count_publishers('/drone/simplified_path'), 1)
             self.assertEqual(node.count_publishers('/drone/reference_path'), 1)
+            self.assertEqual(
+                node.count_publishers('/drone/multi_goal/goal_markers'), 1)
+            self.assertEqual(
+                node.count_publishers('/drone/multi_goal/current_goal_pose'), 1)
             self.assertEqual(node.count_publishers('/drone/trajectory_setpoint'), 1)
             self.assertNotIn('astar_planner_node', node.get_node_names())
             self.assertNotIn('planned_trajectory_node', node.get_node_names())
@@ -452,6 +527,38 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
                 if health_errors:
                     self.fail(health_errors[0])
                 self.assertTrue(required_nodes.issubset(set(node.get_node_names())))
+
+            late_node = rclpy.create_node('multi_goal_late_joiner_test')
+            late_results = {
+                'planned': None,
+                'simplified': None,
+                'reference': None,
+                'markers': None,
+            }
+            late_subscriptions = [
+                late_node.create_subscription(
+                    Path, '/drone/planned_path',
+                    lambda message: late_results.update(
+                        planned=len(message.poses)), latched_qos),
+                late_node.create_subscription(
+                    Path, '/drone/simplified_path',
+                    lambda message: late_results.update(
+                        simplified=len(message.poses)), latched_qos),
+                late_node.create_subscription(
+                    Path, '/drone/reference_path',
+                    lambda message: late_results.update(
+                        reference=len(message.poses)), latched_qos),
+                late_node.create_subscription(
+                    MarkerArray, '/drone/multi_goal/goal_markers',
+                    lambda message: late_results.update(markers=message), latched_qos),
+            ]
+            late_deadline = time.monotonic() + 2.0
+            while (time.monotonic() < late_deadline and
+                   any(value is None for value in late_results.values())):
+                rclpy.spin_once(late_node, timeout_sec=0.05)
+            for subscription in late_subscriptions:
+                late_node.destroy_subscription(subscription)
+            late_node.destroy_node()
 
             final_position_error = norm3(tuple(
                 latest_position[axis] - TARGETS[-1][axis] for axis in range(3)))
@@ -525,6 +632,24 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
             self.assertEqual(len(planned_paths), 3, summary)
             self.assertEqual(len(simplified_paths), 3, summary)
             self.assertEqual(len(reference_paths), 3, summary)
+            self.assertTrue(all(latest_planning_paths_empty.values()), summary)
+            self.assertEqual(late_results['planned'], 0, summary)
+            self.assertEqual(late_results['simplified'], 0, summary)
+            self.assertEqual(late_results['reference'], 0, summary)
+            self.assertIsNotNone(late_results['markers'], summary)
+            self.assertEqual(marker_state_history, [
+                ('CURRENT', 'WAITING', 'WAITING'),
+                ('DONE', 'CURRENT', 'WAITING'),
+                ('DONE', 'DONE', 'CURRENT'),
+                ('DONE', 'DONE', 'DONE'),
+            ], summary)
+            self.assertIn('MISSION COMPLETE', latest_status_text, summary)
+            self.assertEqual(current_goal_poses, list(TARGETS), summary)
+            late_labels = [
+                marker.text for marker in late_results['markers'].markers
+                if marker.ns == 'multi_goal_labels']
+            self.assertEqual(len(late_labels), len(TARGETS), summary)
+            self.assertTrue(all('DONE' in label for label in late_labels), summary)
             self.assertGreater(len(latest_actual_path), 1000, summary)
             self.assertLess(norm3(latest_actual_path[0]), 0.10, summary)
             self.assertLess(norm3(tuple(

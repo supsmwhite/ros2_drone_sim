@@ -129,16 +129,11 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/InteractiveMarkers
       Enabled: true
+      Interactive Markers Namespace: /drone/interactive_goals/goal_editor
       Name: Interactive Goal Candidate
       Show Axes: false
       Show Descriptions: true
       Show Visual Aids: false
-      Update Topic:
-        Depth: 100
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /drone/interactive_goals/goal_editor/update
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true

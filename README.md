@@ -197,7 +197,7 @@ Motor Mixer 与四电机 RPM
 - RViz2 的 Orbit 焦点为 `(6.75,2.25,1.5)`、观察距离 `17.5 m`，可同时显示扩展后的完整工作空间、六个原始障碍物、透明基础安全膨胀区、无人机及四类路径；
 - RViz2 显示无人机模型、TF、历史 Path 和目标 Pose；
 - 控制器退出后约 `0.30 s` 触发 MotorRPM watchdog，目标转速归零；控制器重启并重新发送目标后闭环恢复；
-- 当前完整测试结果为 `232 tests, 0 errors, 0 failures, 0 skipped`。
+- 当前完整测试结果为 `233 tests, 0 errors, 0 failures, 0 skipped`。
 
 ## 下一阶段
 

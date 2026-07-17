@@ -46,6 +46,22 @@ def generate_test_description():
 
 class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
 
+    def test_rviz_uses_humble_interactive_marker_namespace(self):
+        bringup_share = get_package_share_directory('drone_bringup')
+        rviz_config = os.path.join(
+            bringup_share, 'rviz', 'drone_sim.rviz')
+        with open(rviz_config, encoding='utf-8') as config_file:
+            config = config_file.read()
+        self.assertIn(
+            'Interactive Markers Namespace: '
+            '/drone/interactive_goals/goal_editor',
+            config,
+        )
+        self.assertNotIn(
+            'Update Topic: /drone/interactive_goals/goal_editor/update',
+            config,
+        )
+
     def test_editor_topics_validation_and_read_only_contract(self):
         rclpy.init()
         node = rclpy.create_node('interactive_goal_editor_e2e_test')

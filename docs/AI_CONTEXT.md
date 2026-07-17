@@ -247,7 +247,7 @@ colcon test
 colcon test-result --verbose
 ```
 
-最近一次结果：`232 tests, 0 errors, 0 failures, 0 skipped`。其中 `drone_bringup` 的 9 个 Launch 测试全部通过；目标 P1/B/C 的较长评测工具运行也全部通过。
+最近一次结果：`233 tests, 0 errors, 0 failures, 0 skipped`。其中 `drone_bringup` 的 9 个 Launch 测试全部通过；目标 P1/B/C 的较长评测工具运行也全部通过。
 
 三组单目标闭环评测：
 

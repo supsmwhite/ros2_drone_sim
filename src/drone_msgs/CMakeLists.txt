@@ -9,6 +9,7 @@ find_package(std_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MotorRPM.msg"
   "msg/TrajectorySetpoint.msg"
+  "srv/ExecuteGoalSequence.srv"
   DEPENDENCIES geometry_msgs std_msgs
 )
 

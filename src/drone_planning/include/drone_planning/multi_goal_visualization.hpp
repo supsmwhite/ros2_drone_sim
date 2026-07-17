@@ -22,6 +22,8 @@ struct MissionGoal
 
 enum class MissionVisualizationState
 {
+  Waiting,
+  Preflight,
   Running,
   Complete,
   Failed

@@ -118,7 +118,17 @@ visualization_msgs::msg::MarkerArray make_goal_markers(
   status.color.b = 0.95F;
   std::ostringstream text;
   text << std::fixed << std::setprecision(2);
-  if (state == MissionVisualizationState::Complete) {
+  if (state == MissionVisualizationState::Waiting) {
+    status.color.r = 0.95F;
+    status.color.g = 0.75F;
+    status.color.b = 0.15F;
+    text << "WAITING FOR VALIDATED MISSION\nGoals: 0 / 0";
+  } else if (state == MissionVisualizationState::Preflight) {
+    status.color.r = 0.10F;
+    status.color.g = 0.35F;
+    status.color.b = 1.00F;
+    text << "PREFLIGHT VALIDATING\nGoals: 0 / " << goals.size();
+  } else if (state == MissionVisualizationState::Complete) {
     status.color.r = 0.10F;
     status.color.g = 0.85F;
     status.color.b = 0.20F;

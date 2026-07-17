@@ -16,15 +16,19 @@
 
 #include "drone_mission/piecewise_quintic_trajectory.hpp"
 #include "drone_msgs/msg/trajectory_setpoint.hpp"
+#include "drone_msgs/srv/execute_goal_sequence.hpp"
 #include "drone_planning/astar_planner.hpp"
 #include "drone_planning/multi_goal_visualization.hpp"
 #include "drone_planning/planned_trajectory_builder.hpp"
+#include "geometry_msgs/msg/pose_array.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/u_int32.hpp"
+#include "std_msgs/msg/u_int64.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 
 namespace drone_planning
@@ -81,6 +85,29 @@ struct SegmentPlan
   std::string error;
 };
 
+struct PreflightResult
+{
+  bool success{false};
+  std::string message;
+};
+
+bool quaternion_has_zero_yaw(const geometry_msgs::msg::Quaternion & orientation)
+{
+  const double norm_squared = orientation.x * orientation.x +
+    orientation.y * orientation.y + orientation.z * orientation.z +
+    orientation.w * orientation.w;
+  if (!std::isfinite(norm_squared) || norm_squared < 1.0e-12) {
+    return false;
+  }
+  const double inverse_norm = 1.0 / std::sqrt(norm_squared);
+  const double x = orientation.x * inverse_norm;
+  const double y = orientation.y * inverse_norm;
+  const double z = orientation.z * inverse_norm;
+  const double w = orientation.w * inverse_norm;
+  const double yaw = std::atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
+  return std::isfinite(yaw) && std::abs(yaw) <= 1.0e-9;
+}
+
 }  // namespace
 
 class MultiGoalStaticAvoidanceNode : public rclcpp::Node
@@ -89,6 +116,19 @@ public:
   MultiGoalStaticAvoidanceNode()
   : Node("multi_goal_static_avoidance_node")
   {
+    goal_source_ = declare_parameter<std::string>("goal_source", "parameters");
+    if (goal_source_ != "parameters" && goal_source_ != "interactive") {
+      throw std::invalid_argument("goal_source must be parameters or interactive");
+    }
+    interactive_mode_ = goal_source_ == "interactive";
+    const auto max_goals_parameter = declare_parameter<std::int64_t>("max_goals", 8);
+    interactive_mission_odom_wait_timeout_ =
+      declare_parameter<double>("interactive_mission_odom_wait_timeout", 3.0);
+    if (max_goals_parameter <= 0 || !finite_positive(interactive_mission_odom_wait_timeout_)) {
+      throw std::invalid_argument("interactive mission limits are invalid");
+    }
+    max_goals_ = static_cast<std::size_t>(max_goals_parameter);
+
     frame_id_ = declare_parameter<std::string>("frame_id", "map");
     if (frame_id_ != "map") {
       throw std::invalid_argument("multi-goal static avoidance frame_id must be map");
@@ -116,7 +156,13 @@ public:
       declare_parameter<double>("minimum_navigation_altitude", 0.50);
     const auto goal_values =
       declare_parameter<std::vector<double>>("goals", std::vector<double>{});
-    goals_ = parse_goals(goal_values);
+    if (interactive_mode_) {
+      if (!goal_values.empty()) {
+        throw std::invalid_argument("interactive goal_source must not preload parameter goals");
+      }
+    } else {
+      goals_ = parse_goals(goal_values);
+    }
     const double publish_frequency = declare_parameter<double>("publish_frequency", 50.0);
     visualization_update_frequency_ =
       declare_parameter<double>("visualization_update_frequency", 5.0);
@@ -234,6 +280,23 @@ public:
       "/drone/multi_goal/goal_markers", visualization_qos);
     current_goal_pose_publisher_ = create_publisher<geometry_msgs::msg::PoseStamped>(
       "/drone/multi_goal/current_goal_pose", visualization_qos);
+    interactive_active_publisher_ = create_publisher<std_msgs::msg::Bool>(
+      "/drone/interactive_mission/active", visualization_qos);
+    interactive_status_publisher_ = create_publisher<std_msgs::msg::String>(
+      "/drone/interactive_mission/status", visualization_qos);
+    interactive_revision_publisher_ = create_publisher<std_msgs::msg::UInt64>(
+      "/drone/interactive_mission/draft_revision", visualization_qos);
+    state_ = interactive_mode_ ? State::WaitingForMission : State::WaitingForOdometry;
+    if (interactive_mode_) {
+      execute_service_ = create_service<drone_msgs::srv::ExecuteGoalSequence>(
+        "/drone/interactive_goals/execute",
+        [this](
+          const drone_msgs::srv::ExecuteGoalSequence::Request::SharedPtr request,
+          drone_msgs::srv::ExecuteGoalSequence::Response::SharedPtr response)
+        {
+          handle_execute_request(*request, *response);
+        });
+    }
     publish_mission_visualization(true);
 
     odometry_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
@@ -251,15 +314,18 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "multi-goal static avoidance waiting for odometry: goals=%zu takeoff=%.2f m "
+      "multi-goal static avoidance started: goal_source=%s goals=%zu takeoff=%.2f m "
       "navigation_floor=%.2f m effective_radius=%.2f m",
-      goals_.size(), takeoff_height_, minimum_navigation_altitude_,
+      goal_source_.c_str(), goals_.size(), takeoff_height_, minimum_navigation_altitude_,
       effective_planning_radius_);
   }
 
 private:
   enum class State
   {
+    WaitingForMission,
+    WaitingForPreflightOdometry,
+    PreflightValidation,
     WaitingForOdometry,
     CheckingTakeoff,
     TakingOff,
@@ -269,6 +335,190 @@ private:
     MissionComplete,
     Failed
   };
+
+  bool mission_active() const
+  {
+    return state_ == State::WaitingForPreflightOdometry ||
+           state_ == State::PreflightValidation || state_ == State::CheckingTakeoff ||
+           state_ == State::TakingOff || state_ == State::PlanningSegment ||
+           state_ == State::ExecutingSegment || state_ == State::HoldingGoal;
+  }
+
+  std::string mission_status_text() const
+  {
+    switch (state_) {
+      case State::WaitingForMission:
+        return "WAITING FOR VALIDATED MISSION";
+      case State::WaitingForPreflightOdometry:
+        return "WAITING FOR FRESH ODOMETRY";
+      case State::PreflightValidation:
+        return "PREFLIGHT VALIDATING";
+      case State::WaitingForOdometry:
+        return "WAITING FOR ODOMETRY";
+      case State::CheckingTakeoff:
+        return "CHECKING TAKEOFF";
+      case State::TakingOff:
+        return "TAKING OFF";
+      case State::PlanningSegment:
+        return "PLANNING P" + std::to_string(current_goal_index_ + 1U) + " / " +
+               std::to_string(goals_.size());
+      case State::ExecutingSegment:
+        return "EXECUTING P" + std::to_string(current_goal_index_ + 1U) + " / " +
+               std::to_string(goals_.size());
+      case State::HoldingGoal:
+        return "HOLDING P" + std::to_string(current_goal_index_ + 1U) + " / " +
+               std::to_string(goals_.size());
+      case State::MissionComplete:
+        return "MISSION COMPLETE";
+      case State::Failed:
+        return "MISSION FAILED: " + failure_reason_;
+    }
+    return "MISSION STATE UNKNOWN";
+  }
+
+  std::optional<std::string> validate_request(
+    const drone_msgs::srv::ExecuteGoalSequence::Request & request,
+    std::vector<MissionGoal> & validated_goals) const
+  {
+    if (request.goals.header.frame_id != frame_id_) {
+      return "REJECTED: goals frame_id must be map";
+    }
+    if (request.goals.poses.empty()) {
+      return "REJECTED: goal list is empty";
+    }
+    if (request.goals.poses.size() > max_goals_) {
+      return "REJECTED: goal count exceeds max_goals";
+    }
+    validated_goals.clear();
+    validated_goals.reserve(request.goals.poses.size());
+    for (std::size_t index = 0U; index < request.goals.poses.size(); ++index) {
+      const auto & pose = request.goals.poses[index];
+      const Eigen::Vector3d position(pose.position.x, pose.position.y, pose.position.z);
+      if (!position.allFinite() || !std::isfinite(pose.orientation.x) ||
+        !std::isfinite(pose.orientation.y) || !std::isfinite(pose.orientation.z) ||
+        !std::isfinite(pose.orientation.w))
+      {
+        return "REJECTED: P" + std::to_string(index + 1U) + " contains non-finite values";
+      }
+      if (!quaternion_has_zero_yaw(pose.orientation)) {
+        return "REJECTED: P" + std::to_string(index + 1U) + " requires yaw=0";
+      }
+      if (position.z() < minimum_navigation_altitude_) {
+        return "REJECTED: P" + std::to_string(index + 1U) +
+               " is below the navigation floor";
+      }
+      if (navigation_collision_checker_->point_in_collision(position)) {
+        return "REJECTED: P" + std::to_string(index + 1U) +
+               " is outside the safe workspace or inside an inflated obstacle";
+      }
+      validated_goals.push_back({position, 0.0});
+    }
+    return std::nullopt;
+  }
+
+  void handle_execute_request(
+    const drone_msgs::srv::ExecuteGoalSequence::Request & request,
+    drone_msgs::srv::ExecuteGoalSequence::Response & response)
+  {
+    if (!interactive_mode_) {
+      response.message = "REJECTED: executor is not in interactive mode";
+      return;
+    }
+    if (mission_active()) {
+      response.message = "REJECTED: another mission is active";
+      return;
+    }
+    if (mission_ever_accepted_) {
+      response.message = "REJECTED: restart the interactive navigation launch for a new mission";
+      return;
+    }
+    std::vector<MissionGoal> snapshot;
+    if (const auto rejection = validate_request(request, snapshot)) {
+      response.message = *rejection;
+      return;
+    }
+
+    goals_ = std::move(snapshot);
+    accepted_draft_revision_ = request.draft_revision;
+    mission_ever_accepted_ = true;
+    current_goal_index_ = 0U;
+    current_segment_ = 0U;
+    visited_goals_ = 0U;
+    failure_reason_.clear();
+    mission_request_time_ = std::chrono::steady_clock::now();
+    state_ = State::WaitingForPreflightOdometry;
+    response.accepted = true;
+    response.message = "ACCEPTED: mission snapshot received; preflight validation started";
+    publish_mission_visualization(true);
+    RCLCPP_INFO(
+      get_logger(), "accepted interactive mission revision=%lu goals=%zu",
+      accepted_draft_revision_, goals_.size());
+  }
+
+  void start_preflight(const Eigen::Vector3d & actual_position)
+  {
+    initial_position_ = actual_position;
+    preflight_requires_takeoff_ = actual_position.z() < minimum_navigation_altitude_;
+    Eigen::Vector3d preflight_start = actual_position;
+    if (preflight_requires_takeoff_) {
+      takeoff_anchor_ = Eigen::Vector3d(
+        actual_position.x(), actual_position.y(), takeoff_height_);
+      if (takeoff_collision_checker_->segment_in_collision(actual_position, takeoff_anchor_)) {
+        fail("preflight vertical takeoff segment is unsafe");
+        return;
+      }
+      if (navigation_collision_checker_->point_in_collision(takeoff_anchor_)) {
+        fail("preflight takeoff anchor is not navigation-safe");
+        return;
+      }
+      preflight_start = takeoff_anchor_;
+    } else {
+      takeoff_anchor_ = actual_position;
+      hold_position_ = actual_position;
+    }
+
+    const auto goals_snapshot = goals_;
+    const CollisionChecker checker = *navigation_collision_checker_;
+    const double resolution = resolution_;
+    const std::size_t max_grid_nodes = max_grid_nodes_;
+    const PlannedTrajectoryParameters parameters = trajectory_parameters_;
+    preflight_future_.emplace(std::async(
+      std::launch::async,
+      [checker, resolution, max_grid_nodes, parameters, preflight_start,
+      goals_snapshot]() mutable {
+        PreflightResult result;
+        Eigen::Vector3d segment_start = preflight_start;
+        try {
+          for (std::size_t index = 0U; index < goals_snapshot.size(); ++index) {
+            const auto astar = AStarPlanner(checker, resolution, max_grid_nodes).plan(
+              segment_start, goals_snapshot[index].position);
+            const std::string segment = index == 0U ? "START -> P1" :
+              "P" + std::to_string(index) + " -> P" + std::to_string(index + 1U);
+            if (!astar.success()) {
+              result.message = "preflight segment " + segment + " A* failed";
+              return result;
+            }
+            const auto trajectory = PlannedTrajectoryBuilder(checker, parameters).build(
+              astar.path_world);
+            if (!trajectory.success || !trajectory.trajectory) {
+              result.message = "preflight segment " + segment +
+                " has no valid continuous trajectory";
+              return result;
+            }
+            segment_start = goals_snapshot[index].position;
+          }
+          result.success = true;
+          result.message = "preflight validation passed";
+        } catch (const std::exception & error) {
+          result.message = std::string("preflight exception: ") + error.what();
+        }
+        return result;
+      }));
+    state_ = State::PreflightValidation;
+    RCLCPP_INFO(
+      get_logger(), "preflight started from [%.3f, %.3f, %.3f] for %zu goals",
+      preflight_start.x(), preflight_start.y(), preflight_start.z(), goals_.size());
+  }
 
   bool valid_odometry(Eigen::Vector3d & position, double & speed) const
   {
@@ -360,11 +610,26 @@ private:
         visited_goals_,
         static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     visited_goals_publisher_->publish(visited);
+    std_msgs::msg::Bool active;
+    active.data = mission_active();
+    interactive_active_publisher_->publish(active);
+    std_msgs::msg::String interactive_status;
+    interactive_status.data = mission_status_text();
+    interactive_status_publisher_->publish(interactive_status);
+    std_msgs::msg::UInt64 revision;
+    revision.data = accepted_draft_revision_;
+    interactive_revision_publisher_->publish(revision);
     publish_mission_visualization();
   }
 
   MissionVisualizationState visualization_state() const
   {
+    if (state_ == State::WaitingForMission || state_ == State::WaitingForPreflightOdometry) {
+      return MissionVisualizationState::Waiting;
+    }
+    if (state_ == State::PreflightValidation) {
+      return MissionVisualizationState::Preflight;
+    }
     if (state_ == State::MissionComplete) {
       return MissionVisualizationState::Complete;
     }
@@ -391,6 +656,16 @@ private:
       return;
     }
     const builtin_interfaces::msg::Time stamp = now();
+    if (goals_.empty()) {
+      visualization_msgs::msg::MarkerArray clear;
+      visualization_msgs::msg::Marker delete_all;
+      delete_all.action = visualization_msgs::msg::Marker::DELETEALL;
+      clear.markers.push_back(delete_all);
+      goal_markers_publisher_->publish(clear);
+      last_visualized_state_ = display_state;
+      last_visualization_publish_time_ = steady_now;
+      return;
+    }
     goal_markers_publisher_->publish(make_goal_markers(
       goals_, current_goal_index_, visited_goals_, display_state, frame_id_, stamp,
       visualization_actual_speed_, visualization_reference_speed_,
@@ -422,8 +697,10 @@ private:
 
   void fail(const std::string & reason)
   {
+    failure_reason_ = reason;
     state_ = State::Failed;
     stable_duration_ = 0.0;
+    clear_planning_visualization_paths();
     RCLCPP_ERROR(get_logger(), "multi-goal static avoidance failed: %s", reason.c_str());
   }
 
@@ -524,6 +801,34 @@ private:
       std::optional<double>(speed) : std::nullopt;
     visualization_reference_speed_ = 0.0;
 
+    if (state_ == State::WaitingForPreflightOdometry) {
+      if (valid_fresh_odometry) {
+        start_preflight(odometry_position);
+      } else if (mission_request_time_ &&
+        std::chrono::duration<double>(steady_now - *mission_request_time_).count() >=
+        interactive_mission_odom_wait_timeout_)
+      {
+        fail("REJECTED: timed out waiting for fresh Odom before preflight");
+      }
+    }
+
+    if (state_ == State::PreflightValidation && preflight_future_ &&
+      preflight_future_->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+    {
+      const PreflightResult result = preflight_future_->get();
+      preflight_future_.reset();
+      if (!result.success) {
+        fail("REJECTED: " + result.message);
+      } else if (preflight_requires_takeoff_) {
+        state_ = State::CheckingTakeoff;
+      } else if (!valid_fresh_odometry) {
+        fail("REJECTED: Odom became stale after preflight validation");
+      } else {
+        RCLCPP_INFO(get_logger(), "preflight passed; planning first goal from airborne Odom");
+        start_planning(odometry_position);
+      }
+    }
+
     if (state_ == State::WaitingForOdometry && valid_fresh_odometry) {
       initial_position_ = odometry_position;
       takeoff_anchor_ = Eigen::Vector3d(
@@ -548,6 +853,14 @@ private:
     }
 
     switch (state_) {
+      case State::WaitingForMission:
+      case State::WaitingForPreflightOdometry:
+        break;
+      case State::PreflightValidation:
+        if (!preflight_requires_takeoff_ && hold_position_.allFinite()) {
+          publish_hold(hold_position_);
+        }
+        break;
       case State::WaitingForOdometry:
       case State::CheckingTakeoff:
         break;
@@ -632,6 +945,13 @@ private:
   }
 
   std::string frame_id_{"map"};
+  std::string goal_source_{"parameters"};
+  std::string failure_reason_;
+  bool interactive_mode_{false};
+  bool mission_ever_accepted_{false};
+  bool preflight_requires_takeoff_{false};
+  std::uint64_t accepted_draft_revision_{0U};
+  double interactive_mission_odom_wait_timeout_{3.0};
   double effective_planning_radius_{0.35};
   double takeoff_height_{1.5};
   double minimum_navigation_altitude_{0.50};
@@ -649,6 +969,7 @@ private:
   double trajectory_elapsed_{0.0};
   double trajectory_total_duration_{0.0};
   std::size_t max_grid_nodes_{200000U};
+  std::size_t max_goals_{8U};
   std::size_t current_goal_index_{0U};
   std::size_t current_segment_{0U};
   std::size_t visited_goals_{0U};
@@ -662,9 +983,11 @@ private:
   std::unique_ptr<CollisionChecker> navigation_collision_checker_;
   std::optional<drone_mission::PiecewiseQuinticTrajectory> trajectory_;
   std::optional<std::future<SegmentPlan>> planning_future_;
+  std::optional<std::future<PreflightResult>> preflight_future_;
   std::chrono::steady_clock::time_point last_update_time_;
   std::optional<nav_msgs::msg::Odometry> latest_odometry_;
   std::optional<std::chrono::steady_clock::time_point> latest_odometry_reception_time_;
+  std::optional<std::chrono::steady_clock::time_point> mission_request_time_;
   std::optional<double> visualization_actual_speed_;
   double visualization_reference_speed_{0.0};
   std::optional<std::size_t> last_visualized_goal_index_;
@@ -681,8 +1004,12 @@ private:
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr complete_publisher_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr success_publisher_;
   rclcpp::Publisher<std_msgs::msg::UInt32>::SharedPtr visited_goals_publisher_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr interactive_active_publisher_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr interactive_status_publisher_;
+  rclcpp::Publisher<std_msgs::msg::UInt64>::SharedPtr interactive_revision_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr goal_markers_publisher_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr current_goal_pose_publisher_;
+  rclcpp::Service<drone_msgs::srv::ExecuteGoalSequence>::SharedPtr execute_service_;
   rclcpp::TimerBase::SharedPtr update_timer_;
 };
 

@@ -50,6 +50,11 @@ if(BUILD_TESTING)
     test/test_interactive_goal_editor_e2e.py
     TIMEOUT 120
   )
+
+  add_launch_test(
+    test/test_interactive_mission_service.py
+    TIMEOUT 40
+  )
 endif()
 
 install(

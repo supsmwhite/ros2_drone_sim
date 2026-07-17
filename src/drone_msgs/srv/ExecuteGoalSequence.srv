@@ -1,0 +1,5 @@
+geometry_msgs/PoseArray goals
+uint64 draft_revision
+---
+bool accepted
+string message

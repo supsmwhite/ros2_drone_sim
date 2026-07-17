@@ -96,6 +96,11 @@ target_link_libraries(
   multi_goal_static_avoidance_node
   planned_trajectory_builder astar_planner Eigen3::Eigen)
 
+add_executable(map_reachability_check src/map_reachability_check.cpp)
+target_compile_options(map_reachability_check PRIVATE -Wall -Wextra -Wpedantic)
+ament_target_dependencies(map_reachability_check rclcpp)
+target_link_libraries(map_reachability_check astar_planner Eigen3::Eigen)
+
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_collision_checker test/test_collision_checker.cpp)
@@ -123,7 +128,7 @@ install(
   TARGETS static_environment collision_checker astar_planner path_simplifier
     planned_trajectory_builder
     static_environment_node astar_planner_node planned_trajectory_node
-    multi_goal_static_avoidance_node
+    multi_goal_static_avoidance_node map_reachability_check
   EXPORT export_drone_planning
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib

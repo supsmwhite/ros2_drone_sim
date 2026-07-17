@@ -24,13 +24,13 @@ CollisionChecker default_checker()
 {
   return CollisionChecker(
     StaticEnvironment(
-      box(-1.0, 13.0, -2.5, 6.5, -0.5, 5.0),
+      box(-1.0, 14.5, -2.5, 7.0, -0.5, 5.0),
       {box(2.2, 3.0, -2.5, 1.5, 0.0, 4.7),
         box(4.2, 5.0, 1.8, 6.5, 0.0, 4.7),
         box(6.3, 7.1, -0.8, 2.4, 0.0, 4.7),
         box(8.5, 9.3, 1.0, 6.5, 0.0, 4.7),
-        box(10.3, 11.1, -1.5, -0.2, 0.0, 4.7),
-        box(10.3, 11.1, 1.7, 4.2, 0.0, 4.7)}),
+        box(11.0, 11.8, -1.5, -0.2, 0.0, 4.7),
+        box(11.0, 11.8, 1.7, 4.2, 0.0, 4.7)}),
     0.35);
 }
 
@@ -38,13 +38,13 @@ CollisionChecker navigation_floor_checker()
 {
   return CollisionChecker(
     StaticEnvironment(
-      box(-1.0, 13.0, -2.5, 6.5, 0.15, 5.0),
+      box(-1.0, 14.5, -2.5, 7.0, 0.15, 5.0),
       {box(2.2, 3.0, -2.5, 1.5, 0.0, 4.7),
         box(4.2, 5.0, 1.8, 6.5, 0.0, 4.7),
         box(6.3, 7.1, -0.8, 2.4, 0.0, 4.7),
         box(8.5, 9.3, 1.0, 6.5, 0.0, 4.7),
-        box(10.3, 11.1, -1.5, -0.2, 0.0, 4.7),
-        box(10.3, 11.1, 1.7, 4.2, 0.0, 4.7)}),
+        box(11.0, 11.8, -1.5, -0.2, 0.0, 4.7),
+        box(11.0, 11.8, 1.7, 4.2, 0.0, 4.7)}),
     0.35);
 }
 
@@ -52,7 +52,7 @@ std::vector<Eigen::Vector3d> default_raw_path()
 {
   const auto checker = default_checker();
   const auto result = AStarPlanner(checker, 0.25, 200000U).plan(
-    Eigen::Vector3d(0.0, 0.0, 1.5), Eigen::Vector3d(12.1, 0.85, 1.5));
+    Eigen::Vector3d(0.0, 0.0, 1.5), Eigen::Vector3d(12.1, 1.1, 1.5));
   EXPECT_TRUE(result.success());
   return result.path_world;
 }
@@ -96,6 +96,18 @@ TEST(PlannedTrajectoryBuilder, DefaultAStarScenarioProducesSafeBoundedTrajectory
   const auto result = PlannedTrajectoryBuilder(checker, parameters).build(raw_path);
   expect_valid_result(checker, parameters, raw_path, result);
   EXPECT_LT(result.simplified_path_world.size(), raw_path.size());
+}
+
+TEST(PlannedTrajectoryBuilder, ExpandedTerminalWorkspaceProducesSafeTrajectoryToHighYGoal)
+{
+  const auto checker = default_checker();
+  const auto astar_result = AStarPlanner(checker, 0.25, 200000U).plan(
+    Eigen::Vector3d(0.0, 0.0, 1.5), Eigen::Vector3d(12.1, 5.5, 1.5));
+  ASSERT_TRUE(astar_result.success());
+  PlannedTrajectoryParameters parameters;
+  const auto trajectory_result =
+    PlannedTrajectoryBuilder(checker, parameters).build(astar_result.path_world);
+  expect_valid_result(checker, parameters, astar_result.path_world, trajectory_result);
 }
 
 TEST(PlannedTrajectoryBuilder, RepeatedBuildIsExactlyDeterministic)

@@ -15,15 +15,14 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 import launch_testing
 import launch_testing.actions
 import launch_testing.markers
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 import pytest
 import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, UInt32
 
 
-FINAL_TARGET = (12.1, 0.85, 1.5)
-EXPECTED_SEGMENTS = [0, 1, 2, 3, 4, 5, 6]
+FINAL_TARGET = (12.1, 1.1, 1.5)
 DISCOVERY_TIMEOUT = 8.0
 MISSION_TIMEOUT = 70.0
 POST_COMPLETE_OBSERVATION = 3.0
@@ -32,8 +31,8 @@ BASE_INFLATED_OBSTACLES = (
     ((3.95, 1.55, -0.25), (5.25, 6.75, 4.95)),
     ((6.05, -1.05, -0.25), (7.35, 2.65, 4.95)),
     ((8.25, 0.75, -0.25), (9.55, 6.75, 4.95)),
-    ((10.05, -1.75, -0.25), (11.35, 0.05, 4.95)),
-    ((10.05, 1.45, -0.25), (11.35, 4.45, 4.95)),
+    ((10.75, -1.75, -0.25), (12.05, 0.05, 4.95)),
+    ((10.75, 1.45, -0.25), (12.05, 4.45, 4.95)),
 )
 
 
@@ -111,6 +110,7 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
         test_start = time.monotonic()
         path_planning_success = None
         trajectory_generation_success = None
+        expected_segments = None
         observed_segments = []
         segment_switch_times = []
         preparation_complete_time = None
@@ -142,12 +142,19 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
             nonlocal trajectory_generation_success
             trajectory_generation_success = bool(message.data)
 
+        def on_simplified_path(message):
+            nonlocal expected_segments
+            if message.header.frame_id != 'map' or len(message.poses) < 2:
+                health_errors.append('simplified path is invalid')
+                return
+            expected_segments = list(range(len(message.poses) - 1))
+
         def on_segment(message):
             value = int(message.data)
             if not observed_segments or value != observed_segments[-1]:
                 observed_segments.append(value)
                 segment_switch_times.append(time.monotonic() - test_start)
-                if observed_segments != EXPECTED_SEGMENTS[:len(observed_segments)]:
+                if observed_segments != list(range(len(observed_segments))):
                     health_errors.append(
                         f'planned trajectory segment skipped or regressed: {observed_segments}')
 
@@ -271,6 +278,8 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
                 Bool, '/drone/trajectory_generation/success',
                 on_generation_success, latched_qos),
             node.create_subscription(
+                Path, '/drone/simplified_path', on_simplified_path, latched_qos),
+            node.create_subscription(
                 UInt32, '/drone/planned_trajectory/current_segment', on_segment, 10),
             node.create_subscription(
                 Bool, '/drone/planned_trajectory/complete', on_complete, 10),
@@ -299,6 +308,7 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
                 if (required_nodes.issubset(set(node.get_node_names())) and
                         path_planning_success is not None and
                         trajectory_generation_success is not None and
+                        expected_segments is not None and
                         latest_position is not None and latest_setpoint is not None and
                         rpm_samples > 0 and collision_samples > 0):
                     break
@@ -387,7 +397,7 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
 
             self.assertIsNotNone(preparation_complete_time, summary)
             self.assertIsNotNone(trajectory_start_time, summary)
-            self.assertEqual(observed_segments, EXPECTED_SEGMENTS, summary)
+            self.assertEqual(observed_segments, expected_segments, summary)
             self.assertLess(max_tracking_error, 0.10, summary)
             self.assertGreater(minimum_sampled_clearance, 0.05, summary)
             self.assertEqual(saturation_true_count, 0, summary)

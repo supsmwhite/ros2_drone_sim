@@ -185,18 +185,18 @@ TEST(CollisionChecker, PlanningDemoHasBlockedDirectPathAndKnownSafeSnakeRoute)
 {
   const CollisionChecker checker(
     StaticEnvironment(
-      box(-1.0, 13.0, -2.5, 6.5, -0.5, 5.0),
+      box(-1.0, 14.5, -2.5, 7.0, -0.5, 5.0),
       {
         box(2.2, 3.0, -2.5, 1.5, 0.0, 4.7),
         box(4.2, 5.0, 1.8, 6.5, 0.0, 4.7),
         box(6.3, 7.1, -0.8, 2.4, 0.0, 4.7),
         box(8.5, 9.3, 1.0, 6.5, 0.0, 4.7),
-        box(10.3, 11.1, -1.5, -0.2, 0.0, 4.7),
-        box(10.3, 11.1, 1.7, 4.2, 0.0, 4.7),
+        box(11.0, 11.8, -1.5, -0.2, 0.0, 4.7),
+        box(11.0, 11.8, 1.7, 4.2, 0.0, 4.7),
       }),
     0.25);
   const Eigen::Vector3d start(0.0, 0.0, 1.5);
-  const Eigen::Vector3d goal(12.1, 0.85, 1.5);
+  const Eigen::Vector3d goal(12.1, 1.1, 1.5);
   const std::vector<Eigen::Vector3d> known_safe_route{
     start,
     Eigen::Vector3d(1.85, 2.1, 1.6),
@@ -220,22 +220,22 @@ TEST(CollisionChecker, PlanningDemoHasBlockedDirectPathAndKnownSafeSnakeRoute)
   EXPECT_TRUE(checker.point_in_collision(Eigen::Vector3d(4.6, 4.15, 1.5)));
   EXPECT_TRUE(checker.point_in_collision(Eigen::Vector3d(6.7, 0.8, 1.5)));
   EXPECT_TRUE(checker.point_in_collision(Eigen::Vector3d(8.9, 3.75, 1.5)));
-  EXPECT_TRUE(checker.point_in_collision(Eigen::Vector3d(10.7, -0.85, 1.5)));
-  EXPECT_TRUE(checker.point_in_collision(Eigen::Vector3d(10.7, 2.95, 1.5)));
+  EXPECT_TRUE(checker.point_in_collision(Eigen::Vector3d(11.4, -0.85, 1.5)));
+  EXPECT_TRUE(checker.point_in_collision(Eigen::Vector3d(11.4, 2.95, 1.5)));
 }
 
 TEST(CollisionChecker, StaticAvoidanceEvaluationGoalsArePlanningSafe)
 {
   const CollisionChecker checker(
     StaticEnvironment(
-      box(-1.0, 13.0, -2.5, 6.5, -0.5, 5.0),
+      box(-1.0, 14.5, -2.5, 7.0, -0.5, 5.0),
       {
         box(2.2, 3.0, -2.5, 1.5, 0.0, 4.7),
         box(4.2, 5.0, 1.8, 6.5, 0.0, 4.7),
         box(6.3, 7.1, -0.8, 2.4, 0.0, 4.7),
         box(8.5, 9.3, 1.0, 6.5, 0.0, 4.7),
-        box(10.3, 11.1, -1.5, -0.2, 0.0, 4.7),
-        box(10.3, 11.1, 1.7, 4.2, 0.0, 4.7),
+        box(11.0, 11.8, -1.5, -0.2, 0.0, 4.7),
+        box(11.0, 11.8, 1.7, 4.2, 0.0, 4.7),
       }),
     0.35);
 
@@ -245,9 +245,14 @@ TEST(CollisionChecker, StaticAvoidanceEvaluationGoalsArePlanningSafe)
     checker.inflated_obstacles()[5].min_corner.y() -
     checker.inflated_obstacles()[4].max_corner.y(),
     1.2);
-  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 0.85, 1.5)));
+  EXPECT_DOUBLE_EQ(
+    checker.inflated_obstacles()[4].min_corner.x() -
+    checker.inflated_obstacles()[3].max_corner.x(),
+    1.0);
+  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 5.5, 1.5)));
+  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 1.1, 1.5)));
   EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 1.1, 2.5)));
-  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 0.85, 3.25)));
+  EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(12.1, 1.1, 3.25)));
   EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(7.0, 5.0, 4.0)));
   EXPECT_FALSE(checker.point_in_collision(Eigen::Vector3d(0.8, 0.7, 2.0)));
 }

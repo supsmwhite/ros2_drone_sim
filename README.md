@@ -165,6 +165,8 @@ Motor Mixer 与四电机 RPM
 - RViz 三维多目标编辑器：一个世界坐标固定的 XY 移动平面和 Z 轴箭头、最多 8 个有序目标、快速几何拒绝、异步完整连续轨迹验证、独立预览 Path 和可复制 YAML；
 - `tools/evaluate_multi_goal_mission.py` 的独立 Domain 114 完整任务评测，记录三段路径、实际/参考状态、净空、四电机 RPM、目标接受时刻和最终悬停，并生成结构化数据与报告图；
 - MotorRPM 命令超时保护；
+- 默认关闭的 `/drone/external_wrench` 世界系外力输入，具备 frame、有限性、模长限制和 `0.20 s` 超时清零保护，并发布实际应用状态；
+- `disturbance_hover_sim.launch.py`、周期外力工具和 Domain 119 悬停抗扰自动评测；
 - Xacro 四旋翼模型、robot_state_publisher 和 RViz2 基础可视化；
 - `basic_sim.launch.py` 一键启动动力学、控制器、机器人模型发布和 RViz2；`mission_sim.launch.py` 启动离散顺序任务，`trajectory_sim.launch.py` 启动连续轨迹任务，`environment_sim.launch.py` 启动静态环境监测，`planning_sim.launch.py` 再增加一次性 A* 规划与路径显示。
 
@@ -198,12 +200,13 @@ Motor Mixer 与四电机 RPM
 - RViz2 的 Orbit 焦点为 `(6.75,2.25,1.5)`、观察距离 `17.5 m`，可同时显示扩展后的完整工作空间、六个原始障碍物、透明基础安全膨胀区、无人机及四类路径；
 - RViz2 显示无人机模型、TF、历史 Path 和目标 Pose；
 - 控制器退出后约 `0.30 s` 触发 MotorRPM watchdog，目标转速归零；控制器重启并重新发送目标后闭环恢复；
-- 当前完整测试结果为 `246 tests, 0 errors, 0 failures, 0 skipped`；`drone_bringup` 的 12 个 Launch 测试全部通过。交互执行 E2E 的三目标任务用时 `50.721 s`，最大导航跟踪误差 `0.024197 m`，最小基础净空 `0.242045 m`，最大电机转速 `13067.5 RPM`，最终误差 `0.004826 m`、最终速度 `0.001573 m/s`，无碰撞、非有限值或饱和。预检无路径测试在失败后继续观察 `3 s`：trajectory setpoint 数为 `0`，`412` 条 RPM 命令的最大绝对值为 `0`，最大高度和水平位移均为 `0 m`。
+- 悬停抗扰最终采用 `+x 0.30 N × 2.0 s`：最大位置误差/水平偏移 `0.350191 m`，最大速度 `0.188198 m/s`，最大 roll/pitch `0/0.033841 rad`，最大 RPM `10856.7`，恢复时间 `5.700 s`，最终误差 `0.008458 m`、最终速度 `0.005322 m/s`，无非有限值、姿态发散或控制器饱和；
+- 当前完整测试结果为 `252 tests, 0 errors, 0 failures, 0 skipped`；`drone_bringup` 的 13 个 Launch 测试全部通过。交互执行 E2E 的三目标任务用时 `50.722 s`，最大导航跟踪误差 `0.023958 m`，最小基础净空 `0.242077 m`，最大电机转速 `13067.5 RPM`，最终误差 `0.004834 m`、最终速度 `0.001569 m/s`，无碰撞、非有限值或饱和。预检无路径测试在失败后继续观察 `3 s`：trajectory setpoint 数为 `0`，`412` 条 RPM 命令的最大绝对值为 `0`，最大高度和水平位移均为 `0 m`。
 
 ## 下一阶段
 
 - 若需要进一步缩短任务时间，评估转角/净空相关的分段速度规划；
-- 长时间、扰动和极限工况稳定性验证；
+- 航迹跟踪抗扰和更长时间极限工况仍属于后续可选验证；
 - 局部规划、动态障碍与在线重规划属于可选扩展，不作为当前主线必做内容。
 
 `/drone/path` 是动力学实际状态的历史位姿；`/drone/planned_path` 是 A* 原始栅格路径；`/drone/simplified_path` 是视线简化折线；`/drone/reference_path` 是连续参考轨迹。四者用途不同；只显示 Launch 不驱动无人机，静态避障 Launch 才启用规划轨迹执行。
@@ -363,6 +366,36 @@ python3 tools/evaluate_multi_goal_mission.py --timeout 200
 工具直接读取正式 `multi_goal_mission.yaml`、`environment.yaml` 和 `dynamics.yaml`，使用 ROS Domain 114。结果保存在 `results/multi_goal_evaluation/default_mission/`：`launch.log` 是完整节点日志，`metrics.json` 是任务级和逐段指标，`trajectory.csv` 是 Odom、参考、误差、净空、状态与四电机对齐时间序列；`xy_path.png`、`position_tracking.png`、`speed_tracking.png`、`tracking_error.png`、`clearance.png`、`motor_rpm.png` 和 `mission_summary.png` 分别用于路径、位置、速度、误差、安全净空、电机和报告综合展示。
 
 导航地板 `0.50 m` 是规划阶段的安全球心最低高度，与动力学地面接触不是同一概念：起飞竖直段单独使用原始环境检查，空中各段使用原始 workspace 最低 z 加 `0.35 m` 有效半径得到的安全地板。多目标任务名义速度已由 `0.25 m/s` 保守提高到 `0.35 m/s`；同时将公共确定性时间比例候选从 `[1.0,1.25,1.5,2.0,3.0,4.0]` 细化为 `[1.0,1.05,1.10,1.15,1.20,1.25,1.5,2.0,3.0,4.0]`。最终三段选择的 duration scale 为 `1.00/1.00/1.10`，轨迹时间为 `62.754/38.316/31.213 s`；旧基线本轮复测 `183.894 s`，最终全量回归 `142.175 s`，缩短 `41.719 s`（`22.69%`）。地图、目标、`0.25 m` 基础安全半径、`0.10 m` 规划裕量、`0.35 m/s²` 最大参考加速度、控制器能力和 A* 均未修改。本轮属于统一名义速度与时间比例的保守参数优化；完整扫描摘要保存在 `results/speed_optimization/`。
+
+### 外部力扰动与悬停抗扰
+
+外部扰动默认关闭，现有 Launch 的数值语义不变。动力学节点可选订阅 `/drone/external_wrench`（`geometry_msgs/msg/WrenchStamped`）：第一版只接受 `header.frame_id=map`，`force` 作为作用在质心上的世界坐标系外力，方向按 map 正方向加入平动方程；`torque` 必须全零。输入必须有限，外力模长不得超过 `max_external_force=2.0 N`，超限、NaN/Inf、非法 frame 或非零 torque 会整条拒绝并节流警告。合法非零输入超过 `external_wrench_timeout=0.20 s` 未刷新后自动归零，不会永久保留。
+
+`/drone/external_wrench/active`（`std_msgs/Bool`）和 `/drone/external_wrench/applied`（`WrenchStamped`）使用 Reliable、Transient Local、Depth 1，表示当前未超时的扰动状态和实际通过检查的 map 系外力；超时或明确零输入后发布 inactive 和零力。悬停演示启动：
+
+```bash
+ros2 launch drone_bringup disturbance_hover_sim.launch.py
+```
+
+该 Launch 只在本实验中设置 `enable_external_wrench=true`，复用现有 `/drone/goal` 位置控制链自动起飞到 `(0,0,1.5)`。稳定后可在另一终端周期施力，工具在结束或 Ctrl+C 时额外发布零 Wrench：
+
+```bash
+source install/setup.bash
+python3 tools/apply_external_wrench.py \
+  --force-x 0.30 --force-y 0.0 --force-z 0.0 \
+  --duration 2.0 --rate 20
+```
+
+自动评测使用独立 Domain 119，等待稳定悬停、记录基线、施力、撤销、判定连续 `1.0 s` 的恢复并关闭 Launch：
+
+```bash
+source install/setup.bash
+python3 tools/evaluate_hover_disturbance.py --timeout 45
+```
+
+最终默认选择 `0.30 N × 2.0 s`。初始候选 `0.80 N × 2.0 s` 会超过现有约 `0.4 m/s²` 水平控制能力，实测水平偏移 `2.087771 m`、恢复 `10.679879 s` 并出现 5 条饱和日志，因此保留在 `results/hover_disturbance/candidates/force_0p8_duration_2p0/`，没有通过修改控制器迎合测试。最终通过结果位于 `results/hover_disturbance/default/`，包含 `launch.log`、`metrics.json`、`trajectory.csv`、`position_error.png`、`position_xyz.png`、`velocity.png`、`attitude.png`、`motor_rpm.png`、`external_force.png` 和 `disturbance_summary.png`。
+
+本功能仅模拟集中作用于质心的可控外力，不等同于真实空气动力学风场；当前没有空间变化风场、随机阵风模型、气动阻力或非零外力矩支持。
 
 ### RViz 三维多目标编辑、预览与执行
 

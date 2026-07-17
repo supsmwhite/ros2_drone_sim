@@ -20,6 +20,12 @@ quadrotor_dynamics_node:
     enable_motor_command_timeout: true
     motor_command_timeout: 0.30
 
+    # Optional map-frame force disturbance. Disabled in every existing workflow.
+    # The first version rejects non-zero torque and clears stale force automatically.
+    external_wrench_timeout: 0.20
+    max_external_force: 2.0
+    max_external_torque: 0.0
+
     gravity: 9.80665
 
     # Simplified rigid horizontal ground used by the normal Launch workflow.

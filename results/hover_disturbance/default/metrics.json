@@ -1,0 +1,35 @@
+{
+  "target_position": [
+    0.0,
+    0.0,
+    1.5
+  ],
+  "disturbance_force_n": {
+    "vector": [
+      0.3,
+      0.0,
+      0.0
+    ],
+    "magnitude": 0.3
+  },
+  "disturbance_duration_s": 2.0,
+  "baseline_position_error_m": 0.0014241139956070476,
+  "maximum_position_error_m": 0.3501905022898304,
+  "maximum_horizontal_displacement_m": 0.3501905022831214,
+  "maximum_vertical_error_m": 0.0002907800077815992,
+  "maximum_speed_m_s": 0.1881977959640119,
+  "maximum_roll_rad": 1.0054642458395797e-16,
+  "maximum_pitch_rad": 0.0338406388427108,
+  "maximum_motor_rpm": 10856.70931134835,
+  "minimum_active_motor_rpm": 10784.071502883693,
+  "controller_saturation_count": 0,
+  "recovery_time_s": 5.699643154000114,
+  "final_position_error_m": 0.008457917346646878,
+  "final_speed_m_s": 0.005321535529974196,
+  "nonfinite_observed": false,
+  "attitude_divergence_observed": false,
+  "passed": true,
+  "sample_count": 3913,
+  "health_errors": [],
+  "recovery_definition": "first continuous 1.0 s with error <0.05 m and speed <0.03 m/s"
+}

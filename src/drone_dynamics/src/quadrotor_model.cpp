@@ -46,12 +46,25 @@ void QuadrotorModel::reset()
     state_.position_world.z() = parameters_.ground_z;
   }
   commanded_motor_angular_velocity_rad_s_.fill(0.0);
+  external_force_world_.setZero();
+  external_torque_body_.setZero();
   body_wrench_ = BodyWrench{};
 
   // 地面关闭时，零推力初始加速度为自由落体；地面开启时，地面支持力
   // 与重力平衡，静止状态的实际世界系加速度为 0。
   linear_acceleration_world_ = parameters_.enable_ground_contact ?
     Eigen::Vector3d::Zero() : Eigen::Vector3d(0.0, 0.0, -parameters_.gravity);
+}
+
+void QuadrotorModel::set_external_wrench(
+  const Eigen::Vector3d & external_force_world,
+  const Eigen::Vector3d & external_torque_body)
+{
+  if (!external_force_world.allFinite() || !external_torque_body.allFinite()) {
+    throw std::invalid_argument("external wrench components must be finite");
+  }
+  external_force_world_ = external_force_world;
+  external_torque_body_ = external_torque_body;
 }
 
 // 输入：四个电机目标转速，单位 RPM，顺序固定为 M1、M2、M3、M4。
@@ -103,7 +116,8 @@ void QuadrotorModel::step(const double dt)
   // 再除以质量，得到质心的世界系线加速度。
   const Eigen::Vector3d gravity_world(0.0, 0.0, -parameters_.gravity);
   linear_acceleration_world_ =
-    state_.orientation_body_to_world * thrust_body / parameters_.mass + gravity_world;
+    (state_.orientation_body_to_world * thrust_body + external_force_world_) /
+    parameters_.mass + gravity_world;
 
   // 第 6 步：用当前机体系角速度和转动惯量计算角动量。
   const Eigen::Vector3d angular_momentum =
@@ -111,7 +125,8 @@ void QuadrotorModel::step(const double dt)
 
   // 第 7 步：根据三轴力矩、转动惯量和刚体耦合项计算机体系角加速度。
   const Eigen::Vector3d angular_acceleration = parameters_.inertia.cwiseInverse().asDiagonal() *
-    (body_wrench_.torque - state_.angular_velocity_body.cross(angular_momentum));
+    (body_wrench_.torque + external_torque_body_ -
+    state_.angular_velocity_body.cross(angular_momentum));
 
   // 第 8 步：用线加速度更新世界系速度，再用新速度更新世界系位置。
   state_.velocity_world += linear_acceleration_world_ * dt;

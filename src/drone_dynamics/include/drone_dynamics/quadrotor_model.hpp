@@ -105,6 +105,12 @@ public:
   // 它只更新目标值，实际电机转速由后续 step() 中的一阶响应逐渐逼近。
   void set_motor_rpm_command(const MotorValues & motor_rpm);
 
+  // 设置作用在质心上的外部扰动。force 使用 map/world 坐标系，torque 使用
+  // base_link/body 坐标系；所有分量必须有限。ROS 适配层可进一步限制支持范围。
+  void set_external_wrench(
+    const Eigen::Vector3d & external_force_world,
+    const Eigen::Vector3d & external_torque_body = Eigen::Vector3d::Zero());
+
   // 使用固定时间步长 dt（单位 s）将完整动力学状态向前推进一步。
   void step(double dt);
 
@@ -142,6 +148,9 @@ private:
   // 由外部 RPM 指令转换得到的目标电机角速度，单位 rad/s；
   // 与 state_ 中的“实际角速度”分开保存，才能表示电机响应滞后。
   MotorValues commanded_motor_angular_velocity_rad_s_{};
+
+  Eigen::Vector3d external_force_world_{Eigen::Vector3d::Zero()};
+  Eigen::Vector3d external_torque_body_{Eigen::Vector3d::Zero()};
 
   // 最近一个积分步的中间/输出量，缓存后可直接用于消息发布和测试。
   BodyWrench body_wrench_;

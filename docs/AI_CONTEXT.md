@@ -23,8 +23,29 @@
 - `multi_goal_static_avoidance_sim.launch.py`：三目标闭环静态避障
 - `interactive_goal_editor_sim.launch.py`：RViz 三维有序目标编辑和完整轨迹预览；不启动飞控或动力学
 - `interactive_goal_navigation_sim.launch.py`：RViz 编辑、实际 Odom 全序列预检和交互式顺序飞行
+- `disturbance_hover_sim.launch.py`：启用可选外力输入、自动起飞至 `(0,0,1.5)` 并悬停
 
 所有规划/避障 Launch 均从 `src/drone_bringup/config/environment.yaml` 读取同一地图，没有复制运行时障碍物配置。
+
+## 外部力扰动与悬停抗扰
+
+`QuadrotorModel::set_external_wrench()` 保持纯模型接口：force 在 map/world 中表达并加入世界系平动力，torque 在 body 中表达。ROS 第一版只允许 `frame_id=map`、有限且模长不超过 `2.0 N` 的 force，并要求 torque 全零；非法 frame、NaN/Inf、超限 force 和非零 torque 会拒绝整条消息。`enable_external_wrench` 默认 `false`，现有 Launch 不创建订阅且旧动力学数值不变；`disturbance_hover_sim.launch.py` 单独覆盖为 true。合法非零输入超过 `external_wrench_timeout=0.20 s` 后模型和状态 Topic 自动归零。
+
+输入 Topic 为 `/drone/external_wrench`（`geometry_msgs/msg/WrenchStamped`）。状态 `/drone/external_wrench/active` 与 `/drone/external_wrench/applied` 使用 Reliable、Transient Local、Depth 1。周期人工工具：
+
+```bash
+python3 tools/apply_external_wrench.py --force-x 0.30 --duration 2.0 --rate 20
+```
+
+自动评测命令：
+
+```bash
+python3 tools/evaluate_hover_disturbance.py --timeout 45
+```
+
+Domain 119 最终实验使用 `+x 0.30 N × 2.0 s`，基线误差 `0.001424 m`，最大位置误差和水平偏移 `0.350191 m`，最大竖直误差 `0.000291 m`，最大速度 `0.188198 m/s`，最大 roll/pitch `0/0.033841 rad`，RPM 命令范围 `10784.1–10856.7`，饱和日志 `0`，恢复时间 `5.699643 s`，最终误差 `0.008458 m`、最终速度 `0.005322 m/s`，无 NaN/Inf 或姿态发散，验收通过。失败候选 `0.80 N × 2.0 s` 的最大水平偏移 `2.087771 m`、恢复时间 `10.679879 s`、饱和日志 `5`；候选结果被保留，控制器参数未修改。
+
+最终文件位于 `results/hover_disturbance/default/`：`launch.log`、`metrics.json`、`trajectory.csv` 和七张要求图像；失败候选位于 `results/hover_disturbance/candidates/force_0p8_duration_2p0/`。该功能是集中外力注入，不是完整空气动力学；未实现空间变化风场、随机阵风、气动阻力和非零 torque。
 
 ## RViz 三维目标编辑器
 
@@ -271,6 +292,8 @@ colcon test-result --verbose
 ```
 
 阶段 A 实际执行 `colcon build --symlink-install`、`source install/setup.bash && colcon test --event-handlers console_cohesion+` 和 `colcon test-result --verbose`；6 个包构建成功，结果为 `246 tests, 0 errors, 0 failures, 0 skipped`，其中 `drone_bringup` 的 12 个 Launch 测试全部通过。默认参数三目标于 `142.199 s` 完成，最小基础净空 `0.089752 m`、最大跟踪误差 `0.027339 m`、最终误差 `0.004245 m`，无碰撞、非有限值或控制器饱和日志。交互三目标 E2E 于 `50.721 s` 完成，最小基础净空 `0.242045 m`、最大跟踪误差 `0.024197 m`、最终误差 `0.004826 m`，无碰撞、非有限值或饱和。预检无路径测试在失败后持续观察 `3 s`，总 setpoint 数 `0`，收到 `412` 条 RPM 命令且最大绝对值 `0`，最大 `|z|=0 m`、最大水平位移 `0 m`；新增纯状态测试还覆盖飞行后失败保持最近非原点安全位置且速度、加速度为零，以及缺失/非有限安全位置时拒绝发布。用户已经在 RViz2 中人工确认自定义目标选择、完整预览、Execute、顺序导航和最终悬停成功；阶段 A 没有要求用户重复 GUI 人工操作。
+
+阶段 B 完整回归再次执行相同构建和全量测试命令，结果为 `252 tests, 0 errors, 0 failures, 0 skipped`，`drone_bringup` 的 13 个 Launch 测试全部通过。默认参数三目标于 `142.143 s` 完成，最小基础净空 `0.089742 m`、最大跟踪误差 `0.029898 m`、最终误差 `0.004216 m`，无饱和；交互三目标于 `50.722 s` 完成，最小基础净空 `0.242077 m`、最大跟踪误差 `0.023958 m`、最终误差 `0.004834 m`，无饱和。阶段 A 预检失败回归仍为 setpoint `0`、最大 RPM 命令 `0`、最大 `|z|=0 m`、最大水平位移 `0 m`。新增测试覆盖外力纯模型方向/零输入兼容/非有限拒绝，以及 ROS 默认关闭、合法应用、非法 frame、非零 torque、超限/非有限拒绝和超时归零。
 
 三组单目标闭环评测：
 

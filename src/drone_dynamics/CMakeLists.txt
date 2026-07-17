@@ -16,6 +16,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 
@@ -36,6 +37,7 @@ ament_target_dependencies(quadrotor_dynamics_node
   nav_msgs
   rclcpp
   sensor_msgs
+  std_msgs
   tf2
   tf2_ros
 )

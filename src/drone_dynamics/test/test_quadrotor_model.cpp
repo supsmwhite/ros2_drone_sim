@@ -51,6 +51,61 @@ TEST(QuadrotorModelTest, ZeroRpmFreeFall)
   EXPECT_NEAR(model.specific_force_body().norm(), 0.0, 1.0e-10);
 }
 
+TEST(QuadrotorModelTest, ZeroExternalWrenchPreservesNominalHoverBehavior)
+{
+  const QuadrotorParameters parameters = fast_motor_parameters();
+  QuadrotorModel baseline(parameters);
+  QuadrotorModel explicit_zero(parameters);
+  const double hover_rpm = nominal_hover_rpm(parameters);
+  baseline.set_motor_rpm_command({hover_rpm, hover_rpm, hover_rpm, hover_rpm});
+  explicit_zero.set_motor_rpm_command({hover_rpm, hover_rpm, hover_rpm, hover_rpm});
+  explicit_zero.set_external_wrench(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
+
+  for (int step = 0; step < 100; ++step) {
+    baseline.step(0.01);
+    explicit_zero.step(0.01);
+  }
+  EXPECT_TRUE(baseline.state().position_world.isApprox(
+    explicit_zero.state().position_world, 0.0));
+  EXPECT_TRUE(baseline.state().velocity_world.isApprox(
+    explicit_zero.state().velocity_world, 0.0));
+  EXPECT_TRUE(baseline.state().angular_velocity_body.isApprox(
+    explicit_zero.state().angular_velocity_body, 0.0));
+}
+
+TEST(QuadrotorModelTest, WorldForceProducesMatchingHorizontalAccelerationWithoutAngularAcceleration)
+{
+  QuadrotorParameters parameters = fast_motor_parameters();
+  QuadrotorModel positive(parameters);
+  QuadrotorModel negative(parameters);
+  const double hover_rpm = nominal_hover_rpm(parameters);
+  positive.set_motor_rpm_command({hover_rpm, hover_rpm, hover_rpm, hover_rpm});
+  negative.set_motor_rpm_command({hover_rpm, hover_rpm, hover_rpm, hover_rpm});
+  positive.set_external_wrench(Eigen::Vector3d(0.8, 0.0, 0.0));
+  negative.set_external_wrench(Eigen::Vector3d(-0.8, 0.0, 0.0));
+
+  positive.step(0.01);
+  negative.step(0.01);
+  EXPECT_NEAR(positive.linear_acceleration_world().x(), 0.8 / parameters.mass, 1.0e-12);
+  EXPECT_NEAR(negative.linear_acceleration_world().x(), -0.8 / parameters.mass, 1.0e-12);
+  EXPECT_NEAR(positive.state().angular_velocity_body.norm(), 0.0, 1.0e-12);
+  EXPECT_NEAR(negative.state().angular_velocity_body.norm(), 0.0, 1.0e-12);
+}
+
+TEST(QuadrotorModelTest, NonFiniteExternalWrenchIsRejected)
+{
+  QuadrotorModel model(fast_motor_parameters());
+  EXPECT_THROW(
+    model.set_external_wrench(
+      Eigen::Vector3d(std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0)),
+    std::invalid_argument);
+  EXPECT_THROW(
+    model.set_external_wrench(
+      Eigen::Vector3d::Zero(),
+      Eigen::Vector3d(0.0, std::numeric_limits<double>::infinity(), 0.0)),
+    std::invalid_argument);
+}
+
 TEST(QuadrotorModelTest, GroundContactKeepsZeroRpmVehicleStationary)
 {
   QuadrotorParameters parameters = fast_motor_parameters();

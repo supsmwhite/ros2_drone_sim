@@ -65,6 +65,11 @@ if(BUILD_TESTING)
     test/test_interactive_preflight_failure.py
     TIMEOUT 40
   )
+
+  add_launch_test(
+    test/test_external_wrench.py
+    TIMEOUT 40
+  )
 endif()
 
 install(

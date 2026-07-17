@@ -2,6 +2,7 @@
 #define DRONE_PLANNING__MULTI_GOAL_VISUALIZATION_HPP_
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,8 @@ visualization_msgs::msg::MarkerArray make_goal_markers(
   MissionVisualizationState state,
   const std::string & frame_id,
   const builtin_interfaces::msg::Time & stamp,
+  std::optional<double> actual_speed,
+  double reference_speed,
   double nominal_speed);
 
 }  // namespace drone_planning

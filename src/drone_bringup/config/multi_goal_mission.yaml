@@ -11,6 +11,7 @@ multi_goal_static_avoidance_node:
       ]
 
     publish_frequency: 50.0
+    visualization_update_frequency: 5.0
     odometry_timeout: 0.25
 
     takeoff_position_tolerance: 0.20

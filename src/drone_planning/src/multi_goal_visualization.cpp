@@ -41,6 +41,8 @@ visualization_msgs::msg::MarkerArray make_goal_markers(
   MissionVisualizationState state,
   const std::string & frame_id,
   const builtin_interfaces::msg::Time & stamp,
+  std::optional<double> actual_speed,
+  double reference_speed,
   double nominal_speed)
 {
   visualization_msgs::msg::MarkerArray result;
@@ -115,6 +117,7 @@ visualization_msgs::msg::MarkerArray make_goal_markers(
   status.color.g = 0.95F;
   status.color.b = 0.95F;
   std::ostringstream text;
+  text << std::fixed << std::setprecision(2);
   if (state == MissionVisualizationState::Complete) {
     status.color.r = 0.10F;
     status.color.g = 0.85F;
@@ -127,9 +130,16 @@ visualization_msgs::msg::MarkerArray make_goal_markers(
     text << "MISSION FAILED\nGoal: P" << (current_goal_index + 1U) << " / " << goals.size();
   } else {
     text << "Mission: RUNNING\nGoal: P" << (current_goal_index + 1U) << " / " << goals.size()
-         << "\nVisited: " << completed_count << " / " << goals.size()
-         << "\nSpeed: " << std::fixed << std::setprecision(2) << nominal_speed << " m/s";
+         << "\nVisited: " << completed_count << " / " << goals.size();
   }
+  text << "\nActual: ";
+  if (actual_speed && std::isfinite(*actual_speed)) {
+    text << *actual_speed << " m/s";
+  } else {
+    text << "--";
+  }
+  text << "\nReference: " << reference_speed << " m/s"
+       << "\nNominal: " << nominal_speed << " m/s";
   status.text = text.str();
   result.markers.push_back(status);
   return result;

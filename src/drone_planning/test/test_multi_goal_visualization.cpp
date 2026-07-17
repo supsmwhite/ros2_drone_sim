@@ -46,7 +46,7 @@ TEST(MultiGoalVisualizationTest, MarksCurrentCompletedAndWaitingGoals)
   const auto goals = parse_goals(goal_values(5U));
   const builtin_interfaces::msg::Time stamp;
   const auto markers = make_goal_markers(
-    goals, 1U, 1U, MissionVisualizationState::Running, "map", stamp, 0.35);
+    goals, 1U, 1U, MissionVisualizationState::Running, "map", stamp, 0.42, 0.45, 0.35);
   ASSERT_EQ(markers.markers.size(), 11U);
   EXPECT_EQ(markers.markers[0].ns, "multi_goal_points");
   EXPECT_FLOAT_EQ(markers.markers[0].color.g, 0.85F);
@@ -57,6 +57,22 @@ TEST(MultiGoalVisualizationTest, MarksCurrentCompletedAndWaitingGoals)
   EXPECT_FLOAT_EQ(markers.markers[4].color.r, 0.95F);
   EXPECT_NE(markers.markers[5].text.find("WAITING"), std::string::npos);
   EXPECT_NE(markers.markers.back().text.find("Goal: P2 / 5"), std::string::npos);
+  EXPECT_NE(markers.markers.back().text.find("Actual: 0.42 m/s"), std::string::npos);
+  EXPECT_NE(markers.markers.back().text.find("Reference: 0.45 m/s"), std::string::npos);
+  EXPECT_NE(markers.markers.back().text.find("Nominal: 0.35 m/s"), std::string::npos);
+  EXPECT_EQ(markers.markers.back().text.find("Speed:"), std::string::npos);
+}
+
+TEST(MultiGoalVisualizationTest, ShowsUnavailableActualSpeedExplicitly)
+{
+  const auto goals = parse_goals(goal_values(1U));
+  const builtin_interfaces::msg::Time stamp;
+  const auto markers = make_goal_markers(
+    goals, 0U, 0U, MissionVisualizationState::Running, "map", stamp,
+    std::nullopt, 0.0, 0.35);
+  EXPECT_NE(markers.markers.back().text.find("Actual: --"), std::string::npos);
+  EXPECT_NE(markers.markers.back().text.find("Reference: 0.00 m/s"), std::string::npos);
+  EXPECT_NE(markers.markers.back().text.find("Nominal: 0.35 m/s"), std::string::npos);
 }
 
 TEST(MultiGoalVisualizationTest, MarksEveryGoalComplete)
@@ -64,13 +80,14 @@ TEST(MultiGoalVisualizationTest, MarksEveryGoalComplete)
   const auto goals = parse_goals(goal_values(3U));
   const builtin_interfaces::msg::Time stamp;
   const auto markers = make_goal_markers(
-    goals, 2U, 3U, MissionVisualizationState::Complete, "map", stamp, 0.35);
+    goals, 2U, 3U, MissionVisualizationState::Complete, "map", stamp, 0.0, 0.0, 0.35);
   ASSERT_EQ(markers.markers.size(), 7U);
   for (std::size_t index = 0U; index < goals.size(); ++index) {
     EXPECT_FLOAT_EQ(markers.markers[2U * index].color.g, 0.85F);
     EXPECT_NE(markers.markers[2U * index + 1U].text.find("DONE"), std::string::npos);
   }
   EXPECT_NE(markers.markers.back().text.find("MISSION COMPLETE"), std::string::npos);
+  EXPECT_NE(markers.markers.back().text.find("Reference: 0.00 m/s"), std::string::npos);
 }
 
 }  // namespace

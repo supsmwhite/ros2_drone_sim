@@ -118,6 +118,8 @@ public:
       declare_parameter<std::vector<double>>("goals", std::vector<double>{});
     goals_ = parse_goals(goal_values);
     const double publish_frequency = declare_parameter<double>("publish_frequency", 50.0);
+    visualization_update_frequency_ =
+      declare_parameter<double>("visualization_update_frequency", 5.0);
     odometry_timeout_ = declare_parameter<double>("odometry_timeout", 0.25);
     takeoff_position_tolerance_ =
       declare_parameter<double>("takeoff_position_tolerance", 0.20);
@@ -171,7 +173,8 @@ public:
     if (!finite_positive(takeoff_height_) ||
       !std::isfinite(minimum_navigation_altitude_) || minimum_navigation_altitude_ < 0.0 ||
       takeoff_height_ <= minimum_navigation_altitude_ ||
-      !finite_positive(publish_frequency) || !finite_positive(odometry_timeout_) ||
+      !finite_positive(publish_frequency) || !finite_positive(visualization_update_frequency_) ||
+      !finite_positive(odometry_timeout_) ||
       !finite_positive(takeoff_position_tolerance_) ||
       !finite_positive(takeoff_speed_tolerance_) || !finite_positive(takeoff_hold_duration_) ||
       !finite_positive(goal_position_tolerance_) || !finite_positive(goal_speed_tolerance_) ||
@@ -231,7 +234,7 @@ public:
       "/drone/multi_goal/goal_markers", visualization_qos);
     current_goal_pose_publisher_ = create_publisher<geometry_msgs::msg::PoseStamped>(
       "/drone/multi_goal/current_goal_pose", visualization_qos);
-    publish_mission_visualization();
+    publish_mission_visualization(true);
 
     odometry_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
       "/drone/odom", 10,
@@ -371,18 +374,26 @@ private:
     return MissionVisualizationState::Running;
   }
 
-  void publish_mission_visualization()
+  void publish_mission_visualization(bool force = false)
   {
     const auto display_state = visualization_state();
-    if (last_visualized_goal_index_ == current_goal_index_ &&
-      last_visualized_visited_goals_ == visited_goals_ &&
-      last_visualized_state_ == display_state)
+    const bool state_changed =
+      last_visualized_goal_index_ != current_goal_index_ ||
+      last_visualized_visited_goals_ != visited_goals_ ||
+      last_visualized_state_ != display_state;
+    const auto steady_now = std::chrono::steady_clock::now();
+    const bool periodic_update_due = !last_visualization_publish_time_ ||
+      std::chrono::duration<double>(
+      steady_now - *last_visualization_publish_time_).count() >=
+      1.0 / visualization_update_frequency_;
+    if (!force && !state_changed && !periodic_update_due)
     {
       return;
     }
     const builtin_interfaces::msg::Time stamp = now();
     goal_markers_publisher_->publish(make_goal_markers(
       goals_, current_goal_index_, visited_goals_, display_state, frame_id_, stamp,
+      visualization_actual_speed_, visualization_reference_speed_,
       trajectory_parameters_.nominal_speed));
 
     geometry_msgs::msg::PoseStamped current_goal_pose;
@@ -398,6 +409,7 @@ private:
     last_visualized_goal_index_ = current_goal_index_;
     last_visualized_visited_goals_ = visited_goals_;
     last_visualized_state_ = display_state;
+    last_visualization_publish_time_ = steady_now;
   }
 
   void clear_planning_visualization_paths()
@@ -508,6 +520,9 @@ private:
     double speed = 0.0;
     const bool valid_fresh_odometry =
       odometry_is_fresh(steady_now) && valid_odometry(odometry_position, speed);
+    visualization_actual_speed_ = valid_fresh_odometry ?
+      std::optional<double>(speed) : std::nullopt;
+    visualization_reference_speed_ = 0.0;
 
     if (state_ == State::WaitingForOdometry && valid_fresh_odometry) {
       initial_position_ = odometry_position;
@@ -567,6 +582,7 @@ private:
             trajectory_elapsed_ += dt;
           }
           const auto sample = trajectory_->sample(trajectory_elapsed_);
+          visualization_reference_speed_ = sample.velocity_world.norm();
           current_segment_ = sample.segment_index;
           publish_setpoint(
             sample.position_world, sample.velocity_world, sample.acceleration_world, sample.yaw);
@@ -628,6 +644,7 @@ private:
   double goal_hold_duration_{1.0};
   double resolution_{0.25};
   double reference_path_sample_period_{0.05};
+  double visualization_update_frequency_{5.0};
   double stable_duration_{0.0};
   double trajectory_elapsed_{0.0};
   double trajectory_total_duration_{0.0};
@@ -648,9 +665,12 @@ private:
   std::chrono::steady_clock::time_point last_update_time_;
   std::optional<nav_msgs::msg::Odometry> latest_odometry_;
   std::optional<std::chrono::steady_clock::time_point> latest_odometry_reception_time_;
+  std::optional<double> visualization_actual_speed_;
+  double visualization_reference_speed_{0.0};
   std::optional<std::size_t> last_visualized_goal_index_;
   std::optional<std::size_t> last_visualized_visited_goals_;
   std::optional<MissionVisualizationState> last_visualized_state_;
+  std::optional<std::chrono::steady_clock::time_point> last_visualization_publish_time_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_subscription_;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr planned_path_publisher_;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr simplified_path_publisher_;

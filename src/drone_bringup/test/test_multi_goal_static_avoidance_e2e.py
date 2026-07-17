@@ -140,6 +140,8 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
         latest_actual_path = []
         marker_state_history = []
         latest_status_text = None
+        actual_speed_texts = set()
+        reference_speed_texts = set()
         current_goal_poses = []
         planning_start_errors = []
         goal_acceptance_errors = []
@@ -254,6 +256,14 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
                 health_errors.append('goal markers do not contain one mission status')
                 return
             latest_status_text = status_markers[0].text
+            actual_match = re.search(
+                r'Actual: (--|[0-9]+\.[0-9]{2} m/s)', latest_status_text)
+            reference_match = re.search(
+                r'Reference: ([0-9]+\.[0-9]{2}) m/s', latest_status_text)
+            if actual_match:
+                actual_speed_texts.add(actual_match.group(1))
+            if reference_match:
+                reference_speed_texts.add(reference_match.group(1))
 
         def on_current_goal_pose(message):
             if message.header.frame_id != 'map':
@@ -644,6 +654,12 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
                 ('DONE', 'DONE', 'DONE'),
             ], summary)
             self.assertIn('MISSION COMPLETE', latest_status_text, summary)
+            self.assertIn('Nominal: 0.35 m/s', latest_status_text, summary)
+            self.assertIn('Reference: 0.00 m/s', latest_status_text, summary)
+            self.assertGreaterEqual(len(actual_speed_texts), 2, summary)
+            self.assertGreaterEqual(len(reference_speed_texts), 2, summary)
+            self.assertTrue(
+                any(float(value) > 0.0 for value in reference_speed_texts), summary)
             self.assertEqual(current_goal_poses, list(TARGETS), summary)
             late_labels = [
                 marker.text for marker in late_results['markers'].markers

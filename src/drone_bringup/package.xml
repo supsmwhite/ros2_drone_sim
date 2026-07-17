@@ -28,6 +28,7 @@
   <test_depend>drone_msgs</test_depend>
   <test_depend>std_msgs</test_depend>
   <test_depend>visualization_msgs</test_depend>
+  <test_depend>interactive_markers</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

@@ -21,8 +21,30 @@
 - `planned_trajectory_sim.launch.py`：A*、简化路径和连续参考轨迹，不执行飞行
 - `static_avoidance_sim.launch.py`：单目标闭环静态避障
 - `multi_goal_static_avoidance_sim.launch.py`：三目标闭环静态避障
+- `interactive_goal_editor_sim.launch.py`：RViz 三维有序目标编辑和完整轨迹预览；不启动飞控或动力学
 
 所有规划/避障 Launch 均从 `src/drone_bringup/config/environment.yaml` 读取同一地图，没有复制运行时障碍物配置。
+
+## RViz 三维目标编辑器
+
+`interactive_goal_editor_node` 是与正式 `multi_goal_static_avoidance_node` 完全独立的只读规划工具。启动命令：
+
+```bash
+ros2 launch drone_bringup interactive_goal_editor_sim.launch.py
+```
+
+该 Launch 只包含静态环境、编辑器和 RViz，不包含控制器、动力学或默认多目标任务；节点不创建 `/drone/trajectory_setpoint` 和 `/drone/motor_rpm_cmd` Publisher。第一版预览起点固定为 `planning_start=[0.0,0.0,1.5]`，所有目标 yaw 为零。无障碍直接位置实验继续从终端发布 `/drone/goal`。
+
+活动 Interactive Marker 名为 `goal_candidate`，server update Topic 是 `/drone/interactive_goals/goal_editor/update`。它只有世界坐标固定的 `MOVE_PLANE` XY 控制面、世界 z 方向 `MOVE_AXIS` 箭头和右键菜单，没有旋转、`MOVE_3D` 或复合 3D 控件。释放鼠标时以 `0.05 m` 吸附；候选拖动中为黄色，快速几何合法为绿色，非法为红色，完整验证中为蓝色。右键菜单为 Add、Undo、Clear、高度 `1.5/2.5/4.0 m`、Validate & Preview 和 Print Mission YAML。Add 顺序定义 P1、P2……；配置上限默认 8，逻辑和测试覆盖 5 个目标而不依赖三目标硬编码。
+
+快速检查复用 `environment.yaml` 的 `StaticEnvironment`、`CollisionChecker`、`safety_radius+planning_margin=0.35 m` 和 `minimum_navigation_altitude=0.50 m`，分别报告非有限坐标、导航地板、safe workspace 或规划膨胀障碍物错误。完整验证在异步任务中从固定起点逐段调用 `AStarPlanner` 和内部复用 `PathSimplifier` 的 `PlannedTrajectoryBuilder`；构建器继续验证速度、加速度、轨迹采样点和相邻采样线段。草稿 revision 防止旧异步结果覆盖已修改列表。READY 才允许打印 YAML；任何候选或列表变化会立即清空预览、令 ready=false，并要求重新验证。不能声称任意几何合法序列都可达。
+
+编辑器的 Reliable、Transient Local、Depth 1 Topic：
+
+- `/drone/interactive_goals/goal_markers`：固定目标；
+- `/drone/interactive_goals/selected_goals`：按序零 yaw `PoseArray`；
+- `/drone/interactive_goals/preview_path`：独立的完整连续轨迹预览，不覆盖 `/drone/reference_path`；
+- `/drone/interactive_goals/status`、`ready`、`count`：明确状态、完整验证标志与数量。
 
 ## 当前地图
 
@@ -225,7 +247,7 @@ colcon test
 colcon test-result --verbose
 ```
 
-最近一次结果：`221 tests, 0 errors, 0 failures, 0 skipped`。其中 `drone_bringup` 的 8 个 Launch 测试全部通过；目标 P1/B/C 的较长评测工具运行也全部通过。
+最近一次结果：`232 tests, 0 errors, 0 failures, 0 skipped`。其中 `drone_bringup` 的 9 个 Launch 测试全部通过；目标 P1/B/C 的较长评测工具运行也全部通过。
 
 三组单目标闭环评测：
 

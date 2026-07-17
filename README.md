@@ -162,6 +162,7 @@ Motor Mixer 与四电机 RPM
 - 三个独立规划配置和 `tools/evaluate_static_avoidance.py` 顺序评测工具；每个场景使用独立 ROS Domain，保存 JSON、CSV、XY 路径、位置跟踪、跟踪误差和净空曲线，不加入默认 `colcon test`；
 - `multi_goal_static_avoidance_node` 的首次 Odom 起飞检查、导航地板、有序逐段规划、目标停稳切换、Odom 超时暂停和最终持续保持；
 - `multi_goal_static_avoidance_sim.launch.py` 的唯一多目标规划执行链路，以及独立 Domain 113 远程首目标与偏置返航真实闭环安全回归；
+- RViz 三维多目标编辑器：一个世界坐标固定的 XY 移动平面和 Z 轴箭头、最多 8 个有序目标、快速几何拒绝、异步完整连续轨迹验证、独立预览 Path 和可复制 YAML；
 - `tools/evaluate_multi_goal_mission.py` 的独立 Domain 114 完整任务评测，记录三段路径、实际/参考状态、净空、四电机 RPM、目标接受时刻和最终悬停，并生成结构化数据与报告图；
 - MotorRPM 命令超时保护；
 - Xacro 四旋翼模型、robot_state_publisher 和 RViz2 基础可视化；
@@ -196,7 +197,7 @@ Motor Mixer 与四电机 RPM
 - RViz2 的 Orbit 焦点为 `(6.75,2.25,1.5)`、观察距离 `17.5 m`，可同时显示扩展后的完整工作空间、六个原始障碍物、透明基础安全膨胀区、无人机及四类路径；
 - RViz2 显示无人机模型、TF、历史 Path 和目标 Pose；
 - 控制器退出后约 `0.30 s` 触发 MotorRPM watchdog，目标转速归零；控制器重启并重新发送目标后闭环恢复；
-- 当前完整测试结果为 `221 tests, 0 errors, 0 failures, 0 skipped`。
+- 当前完整测试结果为 `232 tests, 0 errors, 0 failures, 0 skipped`。
 
 ## 下一阶段
 
@@ -362,6 +363,31 @@ python3 tools/evaluate_multi_goal_mission.py --timeout 200
 
 导航地板 `0.50 m` 是规划阶段的安全球心最低高度，与动力学地面接触不是同一概念：起飞竖直段单独使用原始环境检查，空中各段使用原始 workspace 最低 z 加 `0.35 m` 有效半径得到的安全地板。多目标任务名义速度已由 `0.25 m/s` 保守提高到 `0.35 m/s`；同时将公共确定性时间比例候选从 `[1.0,1.25,1.5,2.0,3.0,4.0]` 细化为 `[1.0,1.05,1.10,1.15,1.20,1.25,1.5,2.0,3.0,4.0]`。最终三段选择的 duration scale 为 `1.00/1.00/1.10`，轨迹时间为 `62.754/38.316/31.213 s`；旧基线本轮复测 `183.894 s`，最终全量回归 `142.175 s`，缩短 `41.719 s`（`22.69%`）。地图、目标、`0.25 m` 基础安全半径、`0.10 m` 规划裕量、`0.35 m/s²` 最大参考加速度、控制器能力和 A* 均未修改。本轮属于统一名义速度与时间比例的保守参数优化；完整扫描摘要保存在 `results/speed_optimization/`。
 
+### RViz 三维多目标编辑与预览
+
+有障碍地图中的目标可以用独立编辑器直观选择：
+
+```bash
+ros2 launch drone_bringup interactive_goal_editor_sim.launch.py
+```
+
+该 Launch 只启动静态环境、`interactive_goal_editor_node` 和 RViz2，不启动控制器、动力学、默认 P1/P2/P3 任务，也不发布 `/drone/trajectory_setpoint` 或 `/drone/motor_rpm_cmd`。第一版固定从参数 `planning_start=[0,0,1.5]` 预览，只编辑、验证和显示，不执行飞行。无障碍位置控制实验仍使用终端向 `/drone/goal` 发布目标。
+
+RViz 中用水平控制面调整世界坐标 x/y，用竖直箭头调整 z；释放鼠标后坐标按 `0.05 m` 吸附。右键菜单提供 `Add Goal`、`Undo Last Goal`、`Clear All Goals`、`Set Height`（`1.5/2.5/4.0 m`）、`Validate & Preview` 和 `Print Mission YAML`。目标按 Add 顺序成为 P1、P2……，默认最多 8 个且逻辑不依赖目标数为 3。绿色候选表示几何合法，红色表示非法，黄色表示拖动编辑中，蓝色表示完整验证中；READY 后固定目标全部为绿色，失败段目标为红色。
+
+快速检查在释放鼠标、设置高度和 Add 时执行，只检查有限坐标、`0.50 m` 导航地板、`0.35 m` 规划安全 workspace 与规划膨胀障碍物。`Validate & Preview` 则在后台依次验证 `planning_start→P1→P2→...` 的 A*、路径简化、连续轨迹生成、速度/加速度限制以及轨迹点和相邻采样线段碰撞。几何合法不保证完整序列一定可规划；只有完整验证通过才进入 READY。移动候选、添加、撤销或清空目标会立即令旧预览失效，之后必须重新点击 `Validate & Preview`。
+
+编辑器状态均使用 Reliable、Transient Local、Depth 1：
+
+- `/drone/interactive_goals/selected_goals`：按 Pn 顺序的 `PoseArray`，零 yaw；
+- `/drone/interactive_goals/goal_markers`：固定目标和 Pn 标签；
+- `/drone/interactive_goals/preview_path`：成功验证后的完整多段连续轨迹预览；
+- `/drone/interactive_goals/status`：EDITING、VALIDATING、READY 或带具体段/原因的 REJECTED；
+- `/drone/interactive_goals/ready`：当前草稿是否已完整验证；
+- `/drone/interactive_goals/count`：已确认目标数量。
+
+Interactive Marker update Topic 为 `/drone/interactive_goals/goal_editor/update`。完整验证成功后选择 `Print Mission YAML`，日志会打印可复制的 `goals: [...]` 平铺列表；它不会直接修改正式任务配置。任何目标变化后，必须重新完整验证，之后才能再次打印 YAML。
+
 常用检查：
 
 ```bash
@@ -390,6 +416,8 @@ ros2 topic pub --once /drone/goal geometry_msgs/msg/PoseStamped \
 ```
 
 RViz2 的 SetGoal 工具也发布到 `/drone/goal`，但 2D 操作不便于精确指定高度，因此高度验收更适合使用终端命令。
+
+上述 `/drone/goal` 方式继续用于无障碍、直接位置控制实验；六障碍地图中的一个或多个候选目标建议先使用 RViz 三维编辑器做完整路径预览。预览成功并不自动接入飞行执行。
 
 `trajectory_sim.launch.py` 将控制器切换为 `setpoint_source=trajectory`，订阅 `/drone/trajectory_setpoint`。该模式使用消息中的 position、velocity、acceleration 和 yaw；轨迹消息无效或超过 `0.20 s` 未更新时发布零 RPM，不回退到 `/drone/goal`。
 

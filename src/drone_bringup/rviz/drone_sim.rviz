@@ -127,6 +127,58 @@ Visualization Manager:
       Name: Multi-Goal Markers
       Namespaces: {}
       Value: true
+    - Class: rviz_default_plugins/InteractiveMarkers
+      Enabled: true
+      Name: Interactive Goal Candidate
+      Show Axes: false
+      Show Descriptions: true
+      Show Visual Aids: false
+      Update Topic:
+        Depth: 100
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/interactive_goals/goal_editor/update
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/interactive_goals/goal_markers
+      Name: Interactive Goal List
+      Namespaces: {}
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 70; 150; 255
+      Enabled: true
+      Head Diameter: 0.06
+      Head Length: 0.08
+      Length: 0.3
+      Line Style: Lines
+      Line Width: 0.055
+      Name: Interactive Goal Preview
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 70; 150; 255
+      Pose Style: None
+      Radius: 0.03
+      Shaft Diameter: 0.02
+      Shaft Length: 0.08
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/interactive_goals/preview_path
+      Value: true
     - Alpha: 1
       Axes Length: 0.5
       Axes Radius: 0.05

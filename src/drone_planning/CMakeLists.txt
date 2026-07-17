@@ -14,6 +14,7 @@ find_package(drone_msgs REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(interactive_markers REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -76,6 +77,16 @@ target_compile_options(multi_goal_visualization PRIVATE -Wall -Wextra -Wpedantic
 ament_target_dependencies(multi_goal_visualization visualization_msgs)
 target_link_libraries(multi_goal_visualization Eigen3::Eigen)
 
+add_library(interactive_goal_editor src/interactive_goal_editor.cpp)
+target_include_directories(interactive_goal_editor
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_options(interactive_goal_editor PRIVATE -Wall -Wextra -Wpedantic)
+ament_target_dependencies(interactive_goal_editor std_msgs visualization_msgs)
+target_link_libraries(interactive_goal_editor collision_checker Eigen3::Eigen)
+
 add_executable(static_environment_node src/static_environment_node.cpp)
 target_compile_options(static_environment_node PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(
@@ -111,6 +122,15 @@ target_compile_options(map_reachability_check PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(map_reachability_check rclcpp)
 target_link_libraries(map_reachability_check astar_planner Eigen3::Eigen)
 
+add_executable(interactive_goal_editor_node src/interactive_goal_editor_node.cpp)
+target_compile_options(interactive_goal_editor_node PRIVATE -Wall -Wextra -Wpedantic)
+ament_target_dependencies(
+  interactive_goal_editor_node
+  geometry_msgs interactive_markers nav_msgs rclcpp std_msgs visualization_msgs)
+target_link_libraries(
+  interactive_goal_editor_node interactive_goal_editor planned_trajectory_builder
+  astar_planner Eigen3::Eigen)
+
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_collision_checker test/test_collision_checker.cpp)
@@ -138,14 +158,21 @@ if(BUILD_TESTING)
     test_multi_goal_visualization PRIVATE -Wall -Wextra -Wpedantic)
   target_link_libraries(
     test_multi_goal_visualization multi_goal_visualization Eigen3::Eigen)
+
+  ament_add_gtest(
+    test_interactive_goal_editor test/test_interactive_goal_editor.cpp)
+  target_compile_options(
+    test_interactive_goal_editor PRIVATE -Wall -Wextra -Wpedantic)
+  target_link_libraries(
+    test_interactive_goal_editor interactive_goal_editor Eigen3::Eigen)
 endif()
 
 install(DIRECTORY include/ DESTINATION include)
 install(
   TARGETS static_environment collision_checker astar_planner path_simplifier
-    planned_trajectory_builder multi_goal_visualization
+    planned_trajectory_builder multi_goal_visualization interactive_goal_editor
     static_environment_node astar_planner_node planned_trajectory_node
-    multi_goal_static_avoidance_node map_reachability_check
+    multi_goal_static_avoidance_node map_reachability_check interactive_goal_editor_node
   EXPORT export_drone_planning
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -154,5 +181,5 @@ install(
 
 ament_export_targets(export_drone_planning HAS_LIBRARY_TARGET)
 ament_export_dependencies(
-  drone_mission drone_msgs eigen3_cmake_module Eigen3 visualization_msgs)
+  drone_mission drone_msgs eigen3_cmake_module Eigen3 interactive_markers visualization_msgs)
 ament_package()

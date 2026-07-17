@@ -62,7 +62,7 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
             config,
         )
 
-    def test_editor_topics_validation_and_read_only_contract(self):
+    def test_editor_topics_validation_and_read_only_contract(self, proc_output):
         rclpy.init()
         node = rclpy.create_node('interactive_goal_editor_e2e_test')
         qos = QoSProfile(
@@ -150,6 +150,9 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
                 '/drone/interactive_goals/goal_editor/update', topic_names)
             self.assertNotIn('/drone/trajectory_setpoint', topic_names)
             self.assertNotIn('/drone/motor_rpm_cmd', topic_names)
+            output = b''.join(event.text for event in proc_output)
+            self.assertIn(b'preview only', output)
+            self.assertNotIn(b'preview and execution enabled', output)
 
             # An obstacle-interior point is rejected and reports the exact reason.
             set_candidate(2.6, -0.5, 1.5)

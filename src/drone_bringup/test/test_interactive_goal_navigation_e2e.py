@@ -308,6 +308,7 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
             self.assertLess(latest['speed'], 0.03)
 
             output = b''.join(event.text for event in proc_output)
+            self.assertIn(b'preview and execution enabled', output)
             saturation_count = output.count(b'saturated=true')
             self.assertEqual(saturation_count, 0)
             print(

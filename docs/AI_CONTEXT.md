@@ -34,9 +34,9 @@
 ros2 launch drone_bringup interactive_goal_editor_sim.launch.py
 ```
 
-该 Launch 只包含静态环境、编辑器和 RViz，不包含控制器、动力学或默认多目标任务；节点不创建 `/drone/trajectory_setpoint` 和 `/drone/motor_rpm_cmd` Publisher。第一版预览起点固定为 `planning_start=[0.0,0.0,1.5]`，所有目标 yaw 为零。无障碍直接位置实验继续从终端发布 `/drone/goal`。
+该 Launch 只包含静态环境、编辑器和 RViz，不包含控制器、动力学或默认多目标任务；节点不创建 `/drone/trajectory_setpoint` 和 `/drone/motor_rpm_cmd` Publisher。它显式设置 `execution_enabled=false`，因此不创建执行客户端、不显示 Execute 菜单，日志显示 `preview only`。第一版预览起点固定为 `planning_start=[0.0,0.0,1.5]`，所有目标 yaw 为零。无障碍直接位置实验继续从终端发布 `/drone/goal`。
 
-活动 Interactive Marker 名为 `goal_candidate`，server update Topic 是 `/drone/interactive_goals/goal_editor/update`。它只有世界坐标固定的 `MOVE_PLANE` XY 控制面、世界 z 方向 `MOVE_AXIS` 箭头和右键菜单，没有旋转、`MOVE_3D` 或复合 3D 控件。释放鼠标时以 `0.05 m` 吸附；候选拖动中为黄色，快速几何合法为绿色，非法为红色，完整验证中为蓝色。右键菜单为 Add、Undo、Clear、高度 `1.5/2.5/4.0 m`、Validate & Preview、Execute Validated Mission 和 Print Mission YAML。中间目标按 Add 顺序定义 P1、P2……；Validate 会把与最后一个已确认目标不同的当前合法候选先加入为末目标，再启动完整验证，已 Add 的末目标不会重复。配置上限默认 8，逻辑和测试覆盖 5 个目标而不依赖三目标硬编码。
+活动 Interactive Marker 名为 `goal_candidate`，server update Topic 是 `/drone/interactive_goals/goal_editor/update`。它只有世界坐标固定的 `MOVE_PLANE` XY 控制面、世界 z 方向 `MOVE_AXIS` 箭头和右键菜单，没有旋转、`MOVE_3D` 或复合 3D 控件。释放鼠标时以 `0.05 m` 吸附；候选拖动中为黄色，快速几何合法为绿色，非法为红色，完整验证中为蓝色。两个模式都有 Add、Undo、Clear、高度 `1.5/2.5/4.0 m`、Validate & Preview 和 Print Mission YAML；仅 `execution_enabled=true` 显示 Execute Validated Mission。中间目标按 Add 顺序定义 P1、P2……；Validate 会把与最后一个已确认目标不同的当前合法候选先加入为末目标，再启动完整验证，已 Add 的末目标不会重复。配置上限默认 8，逻辑和测试覆盖 5 个目标而不依赖三目标硬编码。
 
 快速检查复用 `environment.yaml` 的 `StaticEnvironment`、`CollisionChecker`、`safety_radius+planning_margin=0.35 m` 和 `minimum_navigation_altitude=0.50 m`，分别报告非有限坐标、导航地板、safe workspace 或规划膨胀障碍物错误。完整验证在异步任务中从固定起点逐段调用 `AStarPlanner` 和内部复用 `PathSimplifier` 的 `PlannedTrajectoryBuilder`；构建器继续验证速度、加速度、轨迹采样点和相邻采样线段。草稿 revision 防止旧异步结果覆盖已修改列表。READY 才允许打印 YAML；任何候选或列表变化会立即清空预览、令 ready=false，并要求重新验证。不能声称任意几何合法序列都可达。
 
@@ -53,9 +53,11 @@ ros2 launch drone_bringup interactive_goal_editor_sim.launch.py
 ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py
 ```
 
-该 Launch 仅建立一条执行链路：动力学、trajectory 模式控制器、模型、静态环境、编辑器、`goal_source=interactive` 的现有 `multi_goal_static_avoidance_node` 和 RViz。没有 Execute 请求时节点状态为 `WAITING FOR VALIDATED MISSION`，无人机保持地面且不产生非零 RPM。READY 后编辑器通过 `/drone/interactive_goals/execute`（`drone_msgs/srv/ExecuteGoalSequence`）提交完整 `PoseArray goals` 和 `uint64 draft_revision` 快照；响应仅表示异步预检是否被接受。
+该 Launch 仅建立一条执行链路：动力学、trajectory 模式控制器、模型、静态环境、`execution_enabled=true` 的编辑器、`goal_source=interactive` 的现有 `multi_goal_static_avoidance_node` 和 RViz。编辑器创建执行客户端、显示 Execute 菜单，日志显示 `preview and execution enabled`。没有 Execute 请求时执行节点状态为 `WAITING FOR VALIDATED MISSION`，无人机保持地面且不产生非零 RPM。READY 后编辑器通过 `/drone/interactive_goals/execute`（`drone_msgs/srv/ExecuteGoalSequence`）提交完整 `PoseArray goals` 和 `uint64 draft_revision` 快照；响应仅表示异步预检是否被接受。
 
 执行节点独立复核 frame、数量、有限值、零 yaw、导航地板、安全 workspace 和规划膨胀障碍物。随后等待新鲜实际 Odom：地面状态以 `(actual_x,actual_y,takeoff_height)` 为预检起点并单独检查垂直起飞段，空中状态直接使用实际位置；再对 `START→P1→...→PN` 的每段异步运行 A* 和 `PlannedTrajectoryBuilder`。任一段失败时整体拒绝且不起飞。全部预检通过后才复用原状态机起飞，并继续从每段开始时的实际 Odom 重新规划；编辑器预览 Path 从不作为控制参考。
+
+失败控制显式区分 `flight_started=false/true`，且安全 hold 使用 `std::optional<Eigen::Vector3d>`，不再把默认零向量视为有效位置。地面预检失败后 Failed 状态发布零 trajectory setpoint，控制器因没有有效 setpoint 持续输出零 RPM；已开始飞行后失败则持续发布最近有限安全 Odom 位置的零速度、零加速度 hold。若已飞行却缺少安全位置，节点记录 fatal 并拒绝发布默认原点目标。两类失败都为 `active=false`、`success=false`、`complete=false`，`fail()` 清空 planned、simplified 和 reference Path。
 
 请求快照接受后，编辑器在本次 Launch 生命周期内保持锁定，隐藏候选、编辑目标 Marker 和预览 Path；拖动、Add、Undo、Clear、Validate 和重复 Execute 均不改变快照，Print YAML 保留。执行节点发布并独占显示已有多目标 Marker。完成后保留全部绿色目标和绿色实际轨迹，清空 planned/simplified/reference Path，并持续保持末目标。第一版不支持同一次 Launch 的第二份任务、任务替换或抢占。
 
@@ -253,7 +255,7 @@ RViz Orbit 默认焦点为 `(6.75,2.25,1.5)`，距离 `17.5 m`。默认视野覆
 
 任务状态 Marker 默认以 `5 Hz` 刷新。`Actual` 来自最新且未超时 Odom 的三维线速度模长，无有效 Odom 时显示 `--`；`Reference` 来自当前 `PiecewiseQuinticTrajectory` 采样速度模长，起飞、规划、保持、完成和失败状态为 `0.00 m/s`；`Nominal` 是轨迹分段时间计算的配置基线。`nominal_speed=0.35 m/s` 不代表实际速度或参考速度全程恒定为 `0.35 m/s`。
 
-首次进入 `MissionComplete` 时，多目标节点一次性向 `/drone/planned_path`、`/drone/simplified_path` 和 `/drone/reference_path` 发布带 `map` frame 和当前时间戳的空 Path；这些 Path 同样为 transient-local，晚订阅者不会看到最后一段残留。绿色 `/drone/path` 不会被清除，多目标 E2E 会验证任务结束时实际轨迹仍保留起飞初始点。失败状态当前保留最后规划线，便于诊断，同时继续安全悬停并显示 `MISSION FAILED`。超过约 10 分钟的永久记录应使用 rosbag，而不是无限增长 RViz Path 消息。
+首次进入 `MissionComplete` 时，多目标节点一次性向 `/drone/planned_path`、`/drone/simplified_path` 和 `/drone/reference_path` 发布带 `map` frame 和当前时间戳的空 Path；这些 Path 同样为 transient-local，晚订阅者不会看到最后一段残留。绿色 `/drone/path` 不会被清除，多目标 E2E 会验证任务结束时实际轨迹仍保留起飞初始点。`fail()` 同样清空三类辅助规划线：飞行前失败保持地面且不发布 setpoint，飞行后失败在最近安全位置悬停，并显示 `MISSION FAILED`。超过约 10 分钟的永久记录应使用 rosbag，而不是无限增长 RViz Path 消息。
 
 ## 构建、测试与人工运行
 
@@ -268,7 +270,7 @@ colcon test
 colcon test-result --verbose
 ```
 
-最近一次结果：`242 tests, 0 errors, 0 failures, 0 skipped`。其中 `drone_bringup` 的 12 个 Launch 测试全部通过；参数模式 Domain 113 默认三目标仍以 `142.170 s` 完成，目标 P1/B/C 的既有较长评测工具结果保持通过。本轮未进行带 GUI 的人工 RViz 操作，人工验收命令和步骤见 README。
+阶段 A 实际执行 `colcon build --symlink-install`、`source install/setup.bash && colcon test --event-handlers console_cohesion+` 和 `colcon test-result --verbose`；6 个包构建成功，结果为 `246 tests, 0 errors, 0 failures, 0 skipped`，其中 `drone_bringup` 的 12 个 Launch 测试全部通过。默认参数三目标于 `142.199 s` 完成，最小基础净空 `0.089752 m`、最大跟踪误差 `0.027339 m`、最终误差 `0.004245 m`，无碰撞、非有限值或控制器饱和日志。交互三目标 E2E 于 `50.721 s` 完成，最小基础净空 `0.242045 m`、最大跟踪误差 `0.024197 m`、最终误差 `0.004826 m`，无碰撞、非有限值或饱和。预检无路径测试在失败后持续观察 `3 s`，总 setpoint 数 `0`，收到 `412` 条 RPM 命令且最大绝对值 `0`，最大 `|z|=0 m`、最大水平位移 `0 m`；新增纯状态测试还覆盖飞行后失败保持最近非原点安全位置且速度、加速度为零，以及缺失/非有限安全位置时拒绝发布。用户已经在 RViz2 中人工确认自定义目标选择、完整预览、Execute、顺序导航和最终悬停成功；阶段 A 没有要求用户重复 GUI 人工操作。
 
 三组单目标闭环评测：
 

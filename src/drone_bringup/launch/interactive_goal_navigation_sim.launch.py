@@ -47,7 +47,10 @@ def generate_launch_description():
         Node(
             package='drone_planning', executable='interactive_goal_editor_node',
             name='interactive_goal_editor_node', output='screen',
-            parameters=[environment, astar, trajectory, editor]),
+            parameters=[
+                environment, astar, trajectory, editor,
+                {'execution_enabled': True},
+            ]),
         Node(
             package='drone_planning', executable='multi_goal_static_avoidance_node',
             name='multi_goal_static_avoidance_node', output='screen',

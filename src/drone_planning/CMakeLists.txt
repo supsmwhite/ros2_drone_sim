@@ -77,6 +77,15 @@ target_compile_options(multi_goal_visualization PRIVATE -Wall -Wextra -Wpedantic
 ament_target_dependencies(multi_goal_visualization visualization_msgs)
 target_link_libraries(multi_goal_visualization Eigen3::Eigen)
 
+add_library(mission_failure_safety src/mission_failure_safety.cpp)
+target_include_directories(mission_failure_safety
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_options(mission_failure_safety PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(mission_failure_safety Eigen3::Eigen)
+
 add_library(interactive_goal_editor src/interactive_goal_editor.cpp)
 target_include_directories(interactive_goal_editor
   PUBLIC
@@ -115,7 +124,8 @@ ament_target_dependencies(
   drone_msgs geometry_msgs nav_msgs rclcpp std_msgs visualization_msgs)
 target_link_libraries(
   multi_goal_static_avoidance_node
-  multi_goal_visualization planned_trajectory_builder astar_planner Eigen3::Eigen)
+  mission_failure_safety multi_goal_visualization planned_trajectory_builder
+  astar_planner Eigen3::Eigen)
 
 add_executable(map_reachability_check src/map_reachability_check.cpp)
 target_compile_options(map_reachability_check PRIVATE -Wall -Wextra -Wpedantic)
@@ -160,6 +170,13 @@ if(BUILD_TESTING)
     test_multi_goal_visualization multi_goal_visualization Eigen3::Eigen)
 
   ament_add_gtest(
+    test_mission_failure_safety test/test_mission_failure_safety.cpp)
+  target_compile_options(
+    test_mission_failure_safety PRIVATE -Wall -Wextra -Wpedantic)
+  target_link_libraries(
+    test_mission_failure_safety mission_failure_safety Eigen3::Eigen)
+
+  ament_add_gtest(
     test_interactive_goal_editor test/test_interactive_goal_editor.cpp)
   target_compile_options(
     test_interactive_goal_editor PRIVATE -Wall -Wextra -Wpedantic)
@@ -170,7 +187,8 @@ endif()
 install(DIRECTORY include/ DESTINATION include)
 install(
   TARGETS static_environment collision_checker astar_planner path_simplifier
-    planned_trajectory_builder multi_goal_visualization interactive_goal_editor
+    planned_trajectory_builder multi_goal_visualization mission_failure_safety
+    interactive_goal_editor
     static_environment_node astar_planner_node planned_trajectory_node
     multi_goal_static_avoidance_node map_reachability_check interactive_goal_editor_node
   EXPORT export_drone_planning

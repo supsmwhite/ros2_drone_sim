@@ -194,10 +194,11 @@ Motor Mixer 与四电机 RPM
 - 默认单目标闭环由 72 个原始路径点经 3 次局部细化形成 18 点、17 段，总轨迹 `62.768339 s`，任务于 `68.757 s` 完成；最大跟踪误差 `0.030305 m`、最小基础净空 `0.089736 m`、最终误差 `0.006014 m`，无碰撞或饱和；
 - 最新 Domain 114 正式多目标评测从实际地面 Odom 原地起飞，依次执行 P1、P2 和 P3；Launch 后 `142.388 s` 完成，导航执行 `136.762 s`，三段从轨迹启动到目标接受分别为 `63.749/39.298/32.196 s`。最大跟踪误差 `0.027957 m`，最小基础净空 `0.089363 m`；起飞瞬态实际速度峰值 `1.016178 m/s`，三段导航实际速度峰值为 `0.559882/0.636064/0.506316 m/s`，参考速度/加速度峰值为 `0.633128 m/s`、`0.344052 m/s²`；四电机范围 `0.0–13067.5 RPM`，完成后保持 `10811.1–10827.2 RPM` 悬停；最终误差 `0.004183 m`、最终速度 `0.001692 m/s`，无碰撞、非有限值或饱和；
 - 当前远程首目标与两段偏置返航任务已由 Domain 114 正式评测确认严格按序执行；任务结束时绿色实际 Path 仍保留从起飞点开始的 `1451` 个历史点，当前六障碍地图的定量验收以自动测试和 `metrics.json` 为准；
+- 用户已在 RViz2 中人工确认自定义目标选择、完整预览、Execute、严格顺序导航和最终稳定悬停能够完成；
 - RViz2 的 Orbit 焦点为 `(6.75,2.25,1.5)`、观察距离 `17.5 m`，可同时显示扩展后的完整工作空间、六个原始障碍物、透明基础安全膨胀区、无人机及四类路径；
 - RViz2 显示无人机模型、TF、历史 Path 和目标 Pose；
 - 控制器退出后约 `0.30 s` 触发 MotorRPM watchdog，目标转速归零；控制器重启并重新发送目标后闭环恢复；
-- 当前完整测试结果为 `242 tests, 0 errors, 0 failures, 0 skipped`；`drone_bringup` 的 12 个 Launch 测试全部通过。新增交互执行 E2E 的三目标任务用时 `50.799 s`，最大导航跟踪误差 `0.024151 m`，最小基础净空 `0.242058 m`，最大电机转速 `13067.5 RPM`，最终误差 `0.004832 m`、最终速度 `0.001565 m/s`，无碰撞、非有限值或饱和。
+- 当前完整测试结果为 `246 tests, 0 errors, 0 failures, 0 skipped`；`drone_bringup` 的 12 个 Launch 测试全部通过。交互执行 E2E 的三目标任务用时 `50.721 s`，最大导航跟踪误差 `0.024197 m`，最小基础净空 `0.242045 m`，最大电机转速 `13067.5 RPM`，最终误差 `0.004826 m`、最终速度 `0.001573 m/s`，无碰撞、非有限值或饱和。预检无路径测试在失败后继续观察 `3 s`：trajectory setpoint 数为 `0`，`412` 条 RPM 命令的最大绝对值为 `0`，最大高度和水平位移均为 `0 m`。
 
 ## 下一阶段
 
@@ -371,9 +372,9 @@ python3 tools/evaluate_multi_goal_mission.py --timeout 200
 ros2 launch drone_bringup interactive_goal_editor_sim.launch.py
 ```
 
-该 Launch 只启动静态环境、`interactive_goal_editor_node` 和 RViz2，不启动控制器、动力学、默认 P1/P2/P3 任务，也不发布 `/drone/trajectory_setpoint` 或 `/drone/motor_rpm_cmd`。第一版固定从参数 `planning_start=[0,0,1.5]` 预览，只编辑、验证和显示，不执行飞行。无障碍位置控制实验仍使用终端向 `/drone/goal` 发布目标。
+该 Launch 只启动静态环境、`interactive_goal_editor_node` 和 RViz2，不启动控制器、动力学、默认 P1/P2/P3 任务，也不发布 `/drone/trajectory_setpoint` 或 `/drone/motor_rpm_cmd`。它显式使用 `execution_enabled=false`，不创建执行服务客户端，右键菜单不显示 Execute，启动日志显示 `preview only`。第一版固定从参数 `planning_start=[0,0,1.5]` 预览，只编辑、验证和显示，不执行飞行。无障碍位置控制实验仍使用终端向 `/drone/goal` 发布目标。
 
-RViz 中用水平控制面调整世界坐标 x/y，用竖直箭头调整 z；释放鼠标后坐标按 `0.05 m` 吸附。右键菜单提供 `Add Goal`、`Undo Last Goal`、`Clear All Goals`、`Set Height`（`1.5/2.5/4.0 m`）、`Validate & Preview`、`Execute Validated Mission` 和 `Print Mission YAML`。中间目标按 Add 顺序成为 P1、P2……；移动到最后一个目标后可直接选择 `Validate & Preview`，编辑器会先把与上一目标不同的当前候选自动加入列表，再验证完整序列。如果最后一点已经执行过 Add，则不会重复添加。默认最多 8 个且逻辑不依赖目标数为 3。绿色候选表示几何合法，红色表示非法，黄色表示拖动编辑中，蓝色表示完整验证中；READY 后固定目标全部为绿色，失败段目标为红色。
+RViz 中用水平控制面调整世界坐标 x/y，用竖直箭头调整 z；释放鼠标后坐标按 `0.05 m` 吸附。两个模式都有 `Add Goal`、`Undo Last Goal`、`Clear All Goals`、`Set Height`（`1.5/2.5/4.0 m`）、`Validate & Preview` 和 `Print Mission YAML`；只有执行模式显示 `Execute Validated Mission`。中间目标按 Add 顺序成为 P1、P2……；移动到最后一个目标后可直接选择 `Validate & Preview`，编辑器会先把与上一目标不同的当前候选自动加入列表，再验证完整序列。如果最后一点已经执行过 Add，则不会重复添加。默认最多 8 个且逻辑不依赖目标数为 3。绿色候选表示几何合法，红色表示非法，黄色表示拖动编辑中，蓝色表示完整验证中；READY 后固定目标全部为绿色，失败段目标为红色。
 
 快速检查在释放鼠标、设置高度和 Add 时执行，只检查有限坐标、`0.50 m` 导航地板、`0.35 m` 规划安全 workspace 与规划膨胀障碍物。`Validate & Preview` 则在后台依次验证 `planning_start→P1→P2→...` 的 A*、路径简化、连续轨迹生成、速度/加速度限制以及轨迹点和相邻采样线段碰撞。几何合法不保证完整序列一定可规划；只有完整验证通过才进入 READY。移动候选、添加、撤销或清空目标会立即令旧预览失效，之后必须重新点击 `Validate & Preview`。
 
@@ -395,6 +396,8 @@ ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py
 ```
 
 无人机在收到执行请求前保持地面且电机命令为零。对中间目标依次执行 Add，移动到最后一个目标后直接选择 `Validate & Preview`；确认目标数量和 READY 状态后再选择 `Execute Validated Mission`。编辑器通过 `/drone/interactive_goals/execute` 提交包含完整 `PoseArray` 和 `draft_revision` 的不可变快照；执行节点不会直接播放编辑器的预览线，而是等待最新实际 Odom，从实际地面 x/y 的起飞锚点对整个序列再次异步执行 A* 和连续轨迹预检。全部段预检成功后才起飞，正式执行每一段仍从该段开始时的实际 Odom 重新规划。
+
+执行 Launch 显式使用 `execution_enabled=true`，会创建执行客户端、显示 Execute 菜单，并在启动日志显示 `preview and execution enabled`。服务返回 `accepted=true` 只代表不可变快照已接收并进入异步预检。若地面预检失败，执行节点不会发布任何 trajectory setpoint，控制器持续发布零 RPM，无人机保持地面；若飞行开始后失败，则任务停止并持续向最近的有限安全 Odom 位置发布零速度、零加速度 hold。两类失败都发布 `active=false`、`success=false`、`complete=false`，并清空 planned、simplified 和 reference 辅助规划线。
 
 请求接受后编辑器隐藏候选、固定目标和预览线，并锁定拖动、Add、Undo、Clear、Validate 与再次 Execute；执行目标由已有多目标 Marker 独占显示，Print Mission YAML 仍可使用。任务结束后持续悬停，绿色实际历史轨迹保留，辅助规划线清空。当前第一版每次 Launch 只接受一份任务；若目标非法、Odom 超时或完整序列无路径，不会开始部分飞行，应重启该 Launch 后重新编辑。不要把 READY 理解为对任意实际起点都可执行的保证。
 

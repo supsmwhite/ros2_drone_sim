@@ -44,6 +44,7 @@ def generate_launch_description():
                 astar_parameters,
                 trajectory_parameters,
                 editor_parameters,
+                {'execution_enabled': False},
             ],
         ),
         Node(

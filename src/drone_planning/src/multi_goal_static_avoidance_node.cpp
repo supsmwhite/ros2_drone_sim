@@ -18,6 +18,7 @@
 #include "drone_msgs/msg/trajectory_setpoint.hpp"
 #include "drone_msgs/srv/execute_goal_sequence.hpp"
 #include "drone_planning/astar_planner.hpp"
+#include "drone_planning/mission_failure_safety.hpp"
 #include "drone_planning/multi_goal_visualization.hpp"
 #include "drone_planning/planned_trajectory_builder.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
@@ -475,6 +476,8 @@ private:
     } else {
       takeoff_anchor_ = actual_position;
       hold_position_ = actual_position;
+      safe_hold_position_ = actual_position;
+      flight_started_ = true;
     }
 
     const auto goals_snapshot = goals_;
@@ -707,6 +710,9 @@ private:
   void start_planning(const Eigen::Vector3d & start)
   {
     hold_position_ = start;
+    if (flight_started_ && start.allFinite()) {
+      safe_hold_position_ = start;
+    }
     const Eigen::Vector3d goal = goals_[current_goal_index_].position;
     const CollisionChecker checker = *navigation_collision_checker_;
     const double resolution = resolution_;
@@ -800,6 +806,9 @@ private:
     visualization_actual_speed_ = valid_fresh_odometry ?
       std::optional<double>(speed) : std::nullopt;
     visualization_reference_speed_ = 0.0;
+    if (flight_started_ && valid_fresh_odometry && state_ != State::Failed) {
+      safe_hold_position_ = odometry_position;
+    }
 
     if (state_ == State::WaitingForPreflightOdometry) {
       if (valid_fresh_odometry) {
@@ -841,8 +850,10 @@ private:
         fail("initial position to takeoff anchor is not safe in the original environment");
       } else if (navigation_collision_checker_->point_in_collision(takeoff_anchor_)) {
         fail("takeoff anchor is not valid in the navigation environment");
-      } else {
+      } else if (valid_fresh_odometry) {
         hold_position_ = takeoff_anchor_;
+        safe_hold_position_ = odometry_position;
+        flight_started_ = true;
         stable_duration_ = 0.0;
         state_ = State::TakingOff;
         RCLCPP_INFO(
@@ -936,8 +947,16 @@ private:
         publish_hold(goals_.back().position);
         break;
       case State::Failed:
-        if (hold_position_.allFinite()) {
-          publish_hold(hold_position_);
+        if (const auto command = make_failure_hold_command(
+            flight_started_, safe_hold_position_))
+        {
+          publish_setpoint(
+            command->position_world, command->velocity_world,
+            command->acceleration_world, 0.0);
+        } else if (flight_started_) {
+          RCLCPP_FATAL_THROTTLE(
+            get_logger(), *get_clock(), 1000,
+            "flight failed without a valid safe hold position; refusing an unsafe default target");
         }
         break;
     }
@@ -950,6 +969,7 @@ private:
   bool interactive_mode_{false};
   bool mission_ever_accepted_{false};
   bool preflight_requires_takeoff_{false};
+  bool flight_started_{false};
   std::uint64_t accepted_draft_revision_{0U};
   double interactive_mission_odom_wait_timeout_{3.0};
   double effective_planning_radius_{0.35};
@@ -979,6 +999,7 @@ private:
   Eigen::Vector3d initial_position_{Eigen::Vector3d::Zero()};
   Eigen::Vector3d takeoff_anchor_{Eigen::Vector3d::Zero()};
   Eigen::Vector3d hold_position_{Eigen::Vector3d::Zero()};
+  std::optional<Eigen::Vector3d> safe_hold_position_;
   std::unique_ptr<CollisionChecker> takeoff_collision_checker_;
   std::unique_ptr<CollisionChecker> navigation_collision_checker_;
   std::optional<drone_mission::PiecewiseQuinticTrajectory> trajectory_;

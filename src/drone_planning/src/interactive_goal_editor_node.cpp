@@ -136,6 +136,7 @@ public:
   : Node("interactive_goal_editor_node"),
     editor_(validated_max_goals(declare_parameter<std::int64_t>("max_goals", 8)))
   {
+    execution_enabled_ = declare_parameter<bool>("execution_enabled", false);
     frame_id_ = declare_parameter<std::string>("frame_id", "map");
     if (frame_id_ != "map") {
       throw std::invalid_argument("interactive goal editor frame_id must be map");
@@ -223,33 +224,35 @@ public:
       "/drone/interactive_goals/ready", qos);
     count_publisher_ = create_publisher<std_msgs::msg::UInt32>(
       "/drone/interactive_goals/count", qos);
-    execute_client_ = create_client<drone_msgs::srv::ExecuteGoalSequence>(
-      "/drone/interactive_goals/execute");
-    mission_active_subscription_ = create_subscription<std_msgs::msg::Bool>(
-      "/drone/interactive_mission/active", qos,
-      [this](const std_msgs::msg::Bool::SharedPtr message) {
-        execution_active_ = message->data;
-        if (execution_active_) {
-          mission_submitted_ = true;
-          status_override_ = "MISSION EXECUTION ACTIVE";
-          rebuild_candidate_marker();
-          publish_state();
-        }
-      });
-    mission_status_subscription_ = create_subscription<std_msgs::msg::String>(
-      "/drone/interactive_mission/status", qos,
-      [this](const std_msgs::msg::String::SharedPtr message) {
-        executor_status_ = message->data;
-        if (mission_submitted_) {
-          status_override_ = executor_status_;
-          publish_state();
-        }
-      });
-    mission_revision_subscription_ = create_subscription<std_msgs::msg::UInt64>(
-      "/drone/interactive_mission/draft_revision", qos,
-      [this](const std_msgs::msg::UInt64::SharedPtr message) {
-        executor_revision_ = message->data;
-      });
+    if (execution_enabled_) {
+      execute_client_ = create_client<drone_msgs::srv::ExecuteGoalSequence>(
+        "/drone/interactive_goals/execute");
+      mission_active_subscription_ = create_subscription<std_msgs::msg::Bool>(
+        "/drone/interactive_mission/active", qos,
+        [this](const std_msgs::msg::Bool::SharedPtr message) {
+          execution_active_ = message->data;
+          if (execution_active_) {
+            mission_submitted_ = true;
+            status_override_ = "MISSION EXECUTION ACTIVE";
+            rebuild_candidate_marker();
+            publish_state();
+          }
+        });
+      mission_status_subscription_ = create_subscription<std_msgs::msg::String>(
+        "/drone/interactive_mission/status", qos,
+        [this](const std_msgs::msg::String::SharedPtr message) {
+          executor_status_ = message->data;
+          if (mission_submitted_) {
+            status_override_ = executor_status_;
+            publish_state();
+          }
+        });
+      mission_revision_subscription_ = create_subscription<std_msgs::msg::UInt64>(
+        "/drone/interactive_mission/draft_revision", qos,
+        [this](const std_msgs::msg::UInt64::SharedPtr message) {
+          executor_revision_ = message->data;
+        });
+    }
 
     marker_server_ = std::make_unique<interactive_markers::InteractiveMarkerServer>(
       kServerNamespace, get_node_base_interface(), get_node_clock_interface(),
@@ -263,8 +266,9 @@ public:
       std::chrono::milliseconds(50), [this]() {poll_planning_result();});
     RCLCPP_INFO(
       get_logger(),
-      "interactive goal editor ready: update_topic=%s/update max_goals=%zu, preview only",
-      kServerNamespace, editor_.max_goals());
+      "interactive goal editor ready: update_topic=%s/update max_goals=%zu, %s",
+      kServerNamespace, editor_.max_goals(),
+      execution_enabled_ ? "preview and execution enabled" : "preview only");
   }
 
 private:
@@ -304,8 +308,10 @@ private:
     menu_handler_.insert(height_menu, "2.5 m", [this](const auto &) {set_height(2.5);});
     menu_handler_.insert(height_menu, "4.0 m", [this](const auto &) {set_height(4.0);});
     menu_handler_.insert("Validate & Preview", [this](const auto &) {start_validation();});
-    menu_handler_.insert(
-      "Execute Validated Mission", [this](const auto &) {execute_validated_mission();});
+    if (execution_enabled_) {
+      menu_handler_.insert(
+        "Execute Validated Mission", [this](const auto &) {execute_validated_mission();});
+    }
     menu_handler_.insert("Print Mission YAML", [this](const auto &) {print_yaml();});
   }
 
@@ -552,6 +558,9 @@ private:
 
   void execute_validated_mission()
   {
+    if (!execution_enabled_) {
+      return;
+    }
     if (reject_if_locked("EXECUTE")) {
       return;
     }
@@ -744,6 +753,7 @@ private:
   std::vector<Eigen::Vector3d> preview_points_;
   std::optional<std::future<SequencePlanResult>> planning_future_;
   bool execute_request_pending_{false};
+  bool execution_enabled_{false};
   bool mission_submitted_{false};
   bool execution_active_{false};
   std::uint64_t submitted_revision_{0U};

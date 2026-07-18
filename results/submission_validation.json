@@ -1,23 +1,23 @@
 {
   "validation_type": "submission_candidate",
-  "tested_commit": "",
+  "tested_commit": "9289cdb2adf2d260c2cb41cd8e7cdf66d0114120",
   "tested_branch": "chore/submission-finalization",
-  "tested_at": "",
+  "tested_at": "2026-07-18T18:58:39+08:00",
   "environment": {
     "os": "Ubuntu 22.04.5 LTS",
     "ros_distribution": "Humble"
   },
   "build": {
-    "status": "not_run",
+    "status": "passed",
     "packages_expected": 6,
-    "packages_completed": null
+    "packages_completed": 6
   },
   "tests": {
-    "status": "not_run",
-    "tests": null,
-    "failures": null,
-    "errors": null,
-    "skipped": null
+    "status": "passed",
+    "tests": 288,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
   },
   "manual_acceptance": {
     "status": "completed_by_user",

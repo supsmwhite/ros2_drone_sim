@@ -172,7 +172,7 @@ StaticEnvironment
 
 ### 自动测试
 
-上一里程碑全量回归：构建 6 个 package 成功；`288 tests, 0 errors, 0 failures, 0 skipped`。提交候选版本的实际构建与全量测试单独记录在 `results/submission_validation.json`；在最终回归完成前状态必须保持 `not_run`，通过后其中 `tested_commit` 必须指向测试前的元数据提交，而不是后续验证记录提交。
+提交候选版本已在测试前元数据提交 `9289cdb2adf2d260c2cb41cd8e7cdf66d0114120` 上完成最终回归：构建 6 个 package 成功；`288 tests, 0 errors, 0 failures, 0 skipped`。实际环境、时间与统计记录在 `results/submission_validation.json`；其中 `tested_commit` 指向被测试提交，而不是后续验证记录提交。
 
 `results/` 中既有量化指标属于开发阶段实验数据，必须保留其原始 `git_commit` 等来源字段；提交收尾不得手工改写旧 SHA，也不得声称所有长时间实验已在提交候选上重跑。核心演示的人工视觉验收由用户在提交收尾前完成，与自动回归分开记录。
 

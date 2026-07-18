@@ -188,7 +188,7 @@ ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=persistent_
 
 当前基线的三次独立 `0.30 N × 10 s` 撤力重复实验：恢复时间 `4.600580–4.601050 s`，反向超调 `0.107763–0.107767 m`；三次均无控制器饱和。
 
-上一里程碑全量回归为 `288 tests, 0 errors, 0 failures, 0 skipped`。提交候选版本的构建与全量测试将在 `results/submission_validation.json` 中单独记录；这里的开发阶段实验数据不会因提交收尾而重写来源 SHA，也不表示全部长时间实验已在提交候选上重新执行。核心演示的人工视觉验收由用户在提交收尾前完成。
+提交候选版本已在 `9289cdb2adf2d260c2cb41cd8e7cdf66d0114120` 上完成最终回归：构建 6 个 package 成功，`288 tests, 0 errors, 0 failures, 0 skipped`；真实环境、时间和统计见 `results/submission_validation.json`。这里的开发阶段实验数据不会因提交收尾而重写来源 SHA，也不表示全部长时间实验已在提交候选上重新执行。核心演示的人工视觉验收由用户在提交收尾前完成。
 
 正式数据见：
 

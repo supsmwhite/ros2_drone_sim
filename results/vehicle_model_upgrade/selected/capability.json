@@ -91,9 +91,9 @@
     }
   },
   "controller_envelope": {
-    "max_horizontal_acceleration_m_s2": 0.4,
-    "max_tilt_angle_rad": 0.08,
-    "tilt_limited_acceleration_m_s2": 0.7862099639854198
+    "max_horizontal_acceleration_m_s2": 0.8,
+    "max_tilt_angle_rad": 0.15,
+    "tilt_limited_acceleration_m_s2": 1.4821301861713794
   },
   "consistency": {
     "dynamics_vs_controller": {

@@ -1,0 +1,45 @@
+{
+  "colcon": {
+    "tests": 259,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "drone_bringup_launch_tests": 13
+  },
+  "default_multi_goal_launch_test": {
+    "complete_time_s": 138.942,
+    "maximum_tracking_error_m": 0.031196,
+    "minimum_clearance_m": 0.094690,
+    "controller_saturation_count": 0,
+    "final_error_m": 0.005580,
+    "final_speed_m_s": 0.002418
+  },
+  "formal_multi_goal_evaluation": {
+    "complete_time_s": 139.3091928329959,
+    "maximum_tracking_error_m": 0.02632771050836179,
+    "minimum_clearance_m": 0.0947382245345807,
+    "maximum_tilt_rad": 0.039229585697495385,
+    "maximum_rpm": 13067.535212862302,
+    "controller_saturation_count": 0,
+    "final_error_m": 0.00558957431236613,
+    "final_speed_m_s": 0.0024208585192608137
+  },
+  "interactive_navigation_e2e": {
+    "passed": true,
+    "task_time_s": 49.961,
+    "maximum_tracking_error_m": 0.021084,
+    "minimum_clearance_m": 0.241174,
+    "maximum_rpm": 13067.5,
+    "saturation_count": 0,
+    "final_error_m": 0.007045,
+    "final_speed_m_s": 0.002704
+  },
+  "preflight_failure": {
+    "passed": true,
+    "trajectory_setpoints": 0,
+    "rpm_messages": 404,
+    "maximum_command_rpm": 0.0,
+    "maximum_absolute_height_m": 0.0,
+    "maximum_horizontal_displacement_m": 0.0
+  }
+}

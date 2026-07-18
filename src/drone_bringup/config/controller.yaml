@@ -15,8 +15,8 @@ position_controller_node:
     horizontal_position_kp_y: 0.4
     horizontal_velocity_kd_x: 1.2
     horizontal_velocity_kd_y: 1.2
-    max_horizontal_acceleration: 0.4
-    max_tilt_angle: 0.08
+    max_horizontal_acceleration: 0.8
+    max_tilt_angle: 0.15
 
     altitude_kp: 3.0
     vertical_velocity_kd: 3.5

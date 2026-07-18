@@ -36,7 +36,7 @@ def generate_test_description():
             'force_x': 0.30,
             'force_y': 0.0,
             'force_z': 0.0,
-            'disturbance_duration': 0.40,
+            'disturbance_duration': 0.60,
             'recovery_duration': 0.40,
             'force_publish_rate': 50.0,
             'force_arrow_scale': 1.5,
@@ -73,7 +73,7 @@ class TestDisturbanceDemoNode(unittest.TestCase):
             node.create_subscription(PoseStamped, '/drone/goal', goal_messages.append, 20),
         ]
 
-        def spin_for(duration, publish_settled_odom=False):
+        def spin_for(duration, publish_settled_odom=False, saturated=False):
             deadline = time.monotonic() + duration
             while time.monotonic() < deadline:
                 if publish_settled_odom:
@@ -88,6 +88,8 @@ class TestDisturbanceDemoNode(unittest.TestCase):
                     diagnostics = ControllerDiagnostics()
                     diagnostics.horizontal_i_acceleration_x = -0.10
                     diagnostics.horizontal_i_acceleration_y = 0.02
+                    diagnostics.horizontal_saturated = saturated
+                    diagnostics.mixer_saturated = saturated
                     diagnostics_publisher.publish(diagnostics)
                 rclpy.spin_once(node, timeout_sec=0.01)
 
@@ -117,19 +119,19 @@ class TestDisturbanceDemoNode(unittest.TestCase):
                                 for message in wrench_messages))
             self.assertTrue(goal_messages)
             self.assertAlmostEqual(goal_messages[-1].pose.position.z, 1.5)
-            self.assertTrue(any('WAIT_FOR_ODOM' in text for text in marker_texts()))
+            self.assertTrue(any(text == 'TAKEOFF / SETTLING' for text in marker_texts()))
             self.assertTrue(all(
                 marker_values_are_finite(marker)
                 for array in marker_messages for marker in array.markers))
 
             wrench_messages.clear()
             marker_messages.clear()
-            spin_for(0.75, publish_settled_odom=True)
+            spin_for(0.65, publish_settled_odom=True)
             self.assertTrue(any(force_tuple(message) == (0.30, 0.0, 0.0)
                                 for message in wrench_messages))
             active_arrays = [
                 array for array in marker_messages
-                if any('DISTURBANCE_ACTIVE' in marker.text for marker in array.markers)]
+                if any('GUST ACTIVE' in marker.text for marker in array.markers)]
             self.assertTrue(active_arrays)
             self.assertTrue(any(
                 marker.ns == 'equivalent_external_force' and
@@ -142,20 +144,42 @@ class TestDisturbanceDemoNode(unittest.TestCase):
                 marker.points[1].x < marker.points[0].x
                 for array in active_arrays for marker in array.markers))
             self.assertTrue(any(
-                'Equivalent External Force: [0.30, 0.00, 0.00] N' in text
+                'F=[0.30, 0.00, 0.00] N' in text
                 for text in marker_texts()))
+            normal_active_texts = [text for text in marker_texts() if 'GUST ACTIVE' in text]
+            self.assertTrue(normal_active_texts)
+            countdown_texts = [text for text in marker_texts() if text.startswith('GUST IN ')]
+            self.assertTrue(countdown_texts)
+            self.assertTrue(all(len(text.splitlines()) == 1 for text in countdown_texts))
+            self.assertTrue(all(len(text.splitlines()) <= 3 for text in normal_active_texts))
+            self.assertTrue(all('SATURATION' not in text for text in normal_active_texts))
+            self.assertTrue(all('DISTURBANCE_ACTIVE' not in text for text in normal_active_texts))
             self.assertTrue(all(
                 marker_values_are_finite(marker)
                 for array in marker_messages for marker in array.markers))
 
+            marker_messages.clear()
+            spin_for(0.06, publish_settled_odom=True, saturated=True)
+            warning_texts = [text for text in marker_texts() if 'WARNING:' in text]
+            self.assertTrue(warning_texts)
+            self.assertTrue(any(
+                'H SATURATION | MIXER SATURATION' in text for text in warning_texts))
+            self.assertTrue(all(len(text.splitlines()) <= 4 for text in warning_texts))
+
             wrench_messages.clear()
             marker_messages.clear()
-            spin_for(0.65, publish_settled_odom=True)
+            spin_for(0.85, publish_settled_odom=True)
             self.assertTrue(wrench_messages)
             self.assertTrue(all(force_tuple(message) == (0.0, 0.0, 0.0)
                                 for message in wrench_messages[-5:]))
             self.assertTrue(any(
                 'RECOVERY' in text or 'COMPLETE' in text for text in marker_texts()))
+            recovery_texts = [text for text in marker_texts() if text.startswith('RECOVERY')]
+            complete_texts = [text for text in marker_texts() if text.startswith('COMPLETE')]
+            self.assertTrue(recovery_texts)
+            self.assertTrue(complete_texts)
+            self.assertTrue(all(len(text.splitlines()) <= 2 for text in recovery_texts))
+            self.assertTrue(all(len(text.splitlines()) == 1 for text in complete_texts))
             self.assertTrue(any(
                 marker.ns == 'equivalent_external_force' and marker.action == Marker.DELETE
                 for array in marker_messages for marker in array.markers))

@@ -299,19 +299,6 @@ private:
     }
   }
 
-  std::string stage_name() const
-  {
-    switch (stage_) {
-      case Stage::WaitForOdom: return "WAIT_FOR_ODOM";
-      case Stage::TakeoffAndSettle: return "TAKEOFF_AND_SETTLE";
-      case Stage::Countdown: return "COUNTDOWN";
-      case Stage::DisturbanceActive: return "DISTURBANCE_ACTIVE";
-      case Stage::Recovery: return "RECOVERY";
-      case Stage::Complete: return "COMPLETE";
-    }
-    return "UNKNOWN";
-  }
-
   void publish_goal(const rclcpp::Time & stamp)
   {
     geometry_msgs::msg::PoseStamped message;
@@ -453,33 +440,51 @@ private:
 
   std::string status_text(const TimePoint & now) const
   {
-    const bool active = stage_ == Stage::DisturbanceActive;
-    const double displayed_force_x = active ? force_x_ : 0.0;
-    const double displayed_force_y = active ? force_y_ : 0.0;
-    const double displayed_force_z = active ? force_z_ : 0.0;
-    const double magnitude = std::hypot(displayed_force_x, displayed_force_y, displayed_force_z);
-    const double remaining = active ?
-      std::max(0.0, disturbance_duration_ - elapsed_since(stage_started_, now)) : 0.0;
-    const double countdown = stage_ == Stage::Countdown ?
-      std::max(0.0, start_delay_ - elapsed_since(stage_started_, now)) : 0.0;
-    const std::string disturbance_state = active ? "ACTIVE" :
-      (stage_ == Stage::Recovery ? "RECOVERY" : "OFF");
-
     std::ostringstream stream;
-    stream << "External disturbance: " << disturbance_state << " (" << stage_name() << ")\n"
-           << "Equivalent External Force: " << format_vector(
-      displayed_force_x, displayed_force_y, displayed_force_z, 2) << " N\n"
-           << "Force magnitude: " << std::fixed << std::setprecision(2) << magnitude << " N\n"
-           << "Countdown to disturbance: " << std::setprecision(1) << countdown << " s\n"
-           << "Remaining disturbance time: " << std::setprecision(1) << remaining << " s\n"
-           << "Horizontal error: " << std::setprecision(3) <<
-      (has_odometry_ ? horizontal_error() : 0.0) << " m\n"
-           << "Horizontal I acceleration: " << format_vector_2d(integral_x_, integral_y_, 3)
-           << " m/s^2\n"
-           << "Saturation: H=" << static_cast<int>(horizontal_saturated_)
-           << " Z=" << static_cast<int>(altitude_saturated_)
-           << " Att=" << static_cast<int>(attitude_saturated_)
-           << " Mix=" << static_cast<int>(mixer_saturated_);
+    if (stage_ == Stage::WaitForOdom || stage_ == Stage::TakeoffAndSettle) {
+      stream << "TAKEOFF / SETTLING";
+    } else if (stage_ == Stage::Countdown) {
+      const double countdown = std::max(
+        0.0, start_delay_ - elapsed_since(stage_started_, now));
+      stream << "GUST IN " << std::fixed << std::setprecision(1) << countdown << " s";
+    } else if (stage_ == Stage::DisturbanceActive) {
+      const double remaining = std::max(
+        0.0, disturbance_duration_ - elapsed_since(stage_started_, now));
+      stream << "GUST ACTIVE | " << std::fixed << std::setprecision(1) << remaining << " s\n"
+             << "F=" << format_vector(force_x_, force_y_, force_z_, 2)
+             << " N | e_xy=" << std::setprecision(3) << horizontal_error() << " m\n"
+             << "I_xy=" << format_vector_2d(integral_x_, integral_y_, 3) << " m/s^2";
+    } else if (stage_ == Stage::Recovery) {
+      stream << "RECOVERY | e_xy=" << std::fixed << std::setprecision(3)
+             << horizontal_error() << " m\n"
+             << "I_xy=" << format_vector_2d(integral_x_, integral_y_, 3) << " m/s^2";
+    } else {
+      stream << "COMPLETE | e_xy=" << std::fixed << std::setprecision(3)
+             << horizontal_error() << " m";
+    }
+
+    std::string warning;
+    const auto append_warning = [&warning](const std::string & label) {
+        if (!warning.empty()) {
+          warning += " | ";
+        }
+        warning += label + " SATURATION";
+      };
+    if (horizontal_saturated_) {
+      append_warning("H");
+    }
+    if (altitude_saturated_) {
+      append_warning("Z");
+    }
+    if (attitude_saturated_) {
+      append_warning("ATT");
+    }
+    if (mixer_saturated_) {
+      append_warning("MIXER");
+    }
+    if (!warning.empty()) {
+      stream << "\nWARNING: " << warning;
+    }
     return stream.str();
   }
 
@@ -496,7 +501,7 @@ private:
     marker.pose.position.x = has_odometry_ ? position_.x : target_x_;
     marker.pose.position.y = has_odometry_ ? position_.y : target_y_;
     marker.pose.position.z = (has_odometry_ ? position_.z : target_z_) + 0.85;
-    marker.scale.z = 0.20;
+    marker.scale.z = 0.16;
     marker.color.a = 1.00F;
     if (stage_ == Stage::DisturbanceActive) {
       marker.color.r = 1.00F;

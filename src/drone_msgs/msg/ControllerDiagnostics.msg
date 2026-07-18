@@ -1,5 +1,15 @@
 float64 horizontal_acceleration_x
 float64 horizontal_acceleration_y
+float64 horizontal_p_acceleration_x
+float64 horizontal_p_acceleration_y
+float64 horizontal_d_acceleration_x
+float64 horizontal_d_acceleration_y
+float64 horizontal_i_acceleration_x
+float64 horizontal_i_acceleration_y
+float64 horizontal_feedforward_acceleration_x
+float64 horizontal_feedforward_acceleration_y
+float64 horizontal_raw_acceleration_x
+float64 horizontal_raw_acceleration_y
 float64 collective_thrust
 float64 roll_torque
 float64 pitch_torque
@@ -10,3 +20,7 @@ bool horizontal_saturated
 bool altitude_saturated
 bool attitude_saturated
 bool mixer_saturated
+bool horizontal_integral_enabled
+bool horizontal_integral_frozen
+bool horizontal_integral_reset
+bool horizontal_anti_windup_active

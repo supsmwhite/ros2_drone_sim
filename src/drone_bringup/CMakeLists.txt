@@ -70,6 +70,11 @@ if(BUILD_TESTING)
     test/test_external_wrench.py
     TIMEOUT 40
   )
+
+  add_launch_test(
+    test/test_horizontal_integral_node.py
+    TIMEOUT 40
+  )
 endif()
 
 install(

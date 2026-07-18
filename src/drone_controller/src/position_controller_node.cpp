@@ -29,6 +29,7 @@ public:
   {
     // 节点自身的三个循环参数：控制频率、Odom 超时时长、支持的目标 frame。
     const double control_frequency = declare_parameter<double>("control_frequency", 100.0);
+    control_dt_ = 1.0 / control_frequency;
     odometry_timeout_ = declare_parameter<double>("odometry_timeout", 0.2);
     supported_goal_frame_ = declare_parameter<std::string>("supported_goal_frame", "map");
     setpoint_source_ = declare_parameter<std::string>("setpoint_source", "pose_goal");
@@ -48,6 +49,18 @@ public:
       goal_subscription_ = create_subscription<geometry_msgs::msg::PoseStamped>(
         "/drone/goal", 10,
         [this](const geometry_msgs::msg::PoseStamped::SharedPtr message) {
+          if (!latest_goal_) {
+            pose_goal_transition_active_ = true;
+          } else {
+            const double dx = message->pose.position.x - latest_goal_->pose.position.x;
+            const double dy = message->pose.position.y - latest_goal_->pose.position.y;
+            if (std::isfinite(dx) && std::isfinite(dy) &&
+              std::hypot(dx, dy) > horizontal_integral_reset_distance_)
+            {
+              reset_horizontal_integrator();
+              pose_goal_transition_active_ = true;
+            }
+          }
           latest_goal_ = *message;
         });
     } else {
@@ -55,6 +68,15 @@ public:
         create_subscription<drone_msgs::msg::TrajectorySetpoint>(
         "/drone/trajectory_setpoint", 10,
         [this](const drone_msgs::msg::TrajectorySetpoint::SharedPtr message) {
+          const rclcpp::Time setpoint_stamp(message->header.stamp);
+          if (latest_trajectory_stamp_ && setpoint_stamp.nanoseconds() > 0 &&
+            setpoint_stamp < *latest_trajectory_stamp_)
+          {
+            reset_horizontal_integrator();
+          }
+          if (setpoint_stamp.nanoseconds() > 0) {
+            latest_trajectory_stamp_ = setpoint_stamp;
+          }
           latest_trajectory_setpoint_ = *message;
           latest_trajectory_setpoint_reception_time_ = now();
         });
@@ -103,6 +125,39 @@ private:
         "horizontal_velocity_kd_x", parameters.horizontal.velocity_kd.x()),
       declare_parameter<double>(
         "horizontal_velocity_kd_y", parameters.horizontal.velocity_kd.y()));
+    parameters.horizontal.enable_integral = declare_parameter<bool>(
+      "enable_horizontal_integral", parameters.horizontal.enable_integral);
+    parameters.horizontal.position_ki = Eigen::Vector2d(
+      declare_parameter<double>(
+        "horizontal_position_ki_x", parameters.horizontal.position_ki.x()),
+      declare_parameter<double>(
+        "horizontal_position_ki_y", parameters.horizontal.position_ki.y()));
+    parameters.horizontal.integral_acceleration_limit = declare_parameter<double>(
+      "horizontal_integral_acceleration_limit",
+      parameters.horizontal.integral_acceleration_limit);
+    parameters.horizontal.anti_windup_gain = declare_parameter<double>(
+      "horizontal_anti_windup_gain", parameters.horizontal.anti_windup_gain);
+    parameters.horizontal.integral_capture_radius = declare_parameter<double>(
+      "horizontal_integral_capture_radius", parameters.horizontal.integral_capture_radius);
+    horizontal_integral_reset_distance_ = declare_parameter<double>(
+      "horizontal_integral_reset_distance", 1.0);
+    horizontal_disturbance_change_threshold_ = declare_parameter<double>(
+      "horizontal_disturbance_change_threshold", 0.15);
+    horizontal_disturbance_detection_error_floor_ = declare_parameter<double>(
+      "horizontal_disturbance_detection_error_floor", 0.005);
+    horizontal_integrator_unloading_duration_ = declare_parameter<double>(
+      "horizontal_integrator_unloading_duration", 8.0);
+    if (!std::isfinite(horizontal_integral_reset_distance_) ||
+      horizontal_integral_reset_distance_ <= 0.0 ||
+      !std::isfinite(horizontal_disturbance_change_threshold_) ||
+      horizontal_disturbance_change_threshold_ <= 0.0 ||
+      !std::isfinite(horizontal_disturbance_detection_error_floor_) ||
+      horizontal_disturbance_detection_error_floor_ < 0.0 ||
+      !std::isfinite(horizontal_integrator_unloading_duration_) ||
+      horizontal_integrator_unloading_duration_ <= 0.0)
+    {
+      throw std::invalid_argument("Invalid horizontal integral reset distance");
+    }
     parameters.horizontal.max_horizontal_acceleration = declare_parameter<double>(
       "max_horizontal_acceleration", parameters.horizontal.max_horizontal_acceleration);
     parameters.horizontal.max_tilt_angle =
@@ -166,6 +221,18 @@ private:
     motor_rpm_publisher_->publish(drone_msgs::msg::MotorRPM{});
   }
 
+  void reset_horizontal_integrator()
+  {
+    if (position_controller_) {
+      position_controller_->reset_horizontal_integrator();
+    }
+    horizontal_integral_reset_for_diagnostics_ = true;
+    horizontal_integrator_unloading_until_.reset();
+    previous_velocity_world_.reset();
+    previous_velocity_stamp_.reset();
+    previous_horizontal_acceleration_.reset();
+  }
+
   // 每个控制周期（默认 100 Hz）执行一次，是本节点的核心。
   // 整体结构是一条“安全检查链”：任一环不满足就立即 publish_zero_rpm() 并 return，
   // 只有全部通过才会真正调用 PositionController::compute()。
@@ -173,12 +240,14 @@ private:
   {
     // 检查 1：尚未收到当前模式所需的 setpoint，或者轨迹 setpoint 已超时。
     if (setpoint_source_ == "pose_goal" && !latest_goal_) {
+      reset_horizontal_integrator();
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Waiting for /drone/goal; RPM=0");
       return;
     }
     if (setpoint_source_ == "trajectory") {
       if (!latest_trajectory_setpoint_ || !latest_trajectory_setpoint_reception_time_) {
+        reset_horizontal_integrator();
         publish_zero_rpm();
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 1000, "Waiting for /drone/trajectory_setpoint; RPM=0");
@@ -186,6 +255,7 @@ private:
       }
       const double setpoint_age = (now() - *latest_trajectory_setpoint_reception_time_).seconds();
       if (!std::isfinite(setpoint_age) || setpoint_age > trajectory_setpoint_timeout_) {
+        reset_horizontal_integrator();
         publish_zero_rpm();
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 1000,
@@ -196,6 +266,7 @@ private:
 
     // 检查 2：尚未收到任何 Odom。
     if (!latest_odometry_ || !latest_odometry_reception_time_) {
+      reset_horizontal_integrator();
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Waiting for /drone/odom; RPM=0");
       return;
@@ -204,6 +275,9 @@ private:
     // 但这里检查的是控制器读到的 Odom 是否新鲜，两者方向相反）。
     const double odometry_age = (now() - *latest_odometry_reception_time_).seconds();
     if (!std::isfinite(odometry_age) || odometry_age > odometry_timeout_) {
+      previous_velocity_world_.reset();
+      previous_velocity_stamp_.reset();
+      previous_horizontal_acceleration_.reset();
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 1000, "Odometry stale (%.3f s); RPM=0", odometry_age);
@@ -217,6 +291,7 @@ private:
     const std::string & frame = setpoint_source_ == "pose_goal" ?
       latest_goal_->header.frame_id : latest_trajectory_setpoint_->header.frame_id;
     if (!frame.empty() && frame != supported_goal_frame_) {
+      reset_horizontal_integrator();
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 1000, "Unsupported setpoint frame '%s'; RPM=0", frame.c_str());
@@ -230,6 +305,7 @@ private:
         goal_pose.orientation.y, goal_pose.orientation.z);
       Eigen::Quaterniond desired_level_orientation;
       if (!level_orientation_from_goal_yaw(goal_orientation, desired_level_orientation)) {
+        reset_horizontal_integrator();
         publish_zero_rpm();
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid goal quaternion; RPM=0");
         return;
@@ -253,6 +329,7 @@ private:
     if (!desired_position_world.allFinite() || !desired_velocity_world.allFinite() ||
       !desired_acceleration_world.allFinite() || !std::isfinite(desired_yaw))
     {
+      reset_horizontal_integrator();
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid setpoint; RPM=0");
       return;
@@ -267,6 +344,7 @@ private:
       current_pose.orientation.w, current_pose.orientation.x,
       current_pose.orientation.y, current_pose.orientation.z);
     if (!std::isfinite(desired_yaw)) {
+      reset_horizontal_integrator();
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid goal yaw; RPM=0");
       return;
@@ -280,6 +358,7 @@ private:
     Eigen::Vector3d velocity_world;
     if (!world_velocity_from_body(current_orientation, velocity_body, velocity_world))
     {
+      reset_horizontal_integrator();
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid odometry state; RPM=0");
       return;
@@ -297,8 +376,64 @@ private:
     input.current_angular_velocity_body = Eigen::Vector3d(
       odometry.twist.twist.angular.x, odometry.twist.twist.angular.y,
       odometry.twist.twist.angular.z);
-    const PositionControllerResult result = position_controller_->compute(input);
+    const bool ground_standby = input.current_position_world.z() <= 0.1;
+    if (ground_standby) {
+      reset_horizontal_integrator();
+    }
+    const bool fast_trajectory =
+      setpoint_source_ == "trajectory" &&
+      input.desired_velocity_world.head<2>().norm() > 0.1;
+    const double pose_goal_horizontal_error =
+      (input.desired_position_world - input.current_position_world).head<2>().norm();
+    const double current_horizontal_speed = input.current_velocity_world.head<2>().norm();
+    if (setpoint_source_ == "pose_goal" && pose_goal_transition_active_ &&
+      pose_goal_horizontal_error <= 0.1 && current_horizontal_speed <= 0.05)
+    {
+      pose_goal_transition_active_ = false;
+    }
+    const rclcpp::Time odometry_stamp(odometry.header.stamp);
+    if (previous_velocity_world_ && previous_velocity_stamp_ &&
+      odometry_stamp > *previous_velocity_stamp_)
+    {
+      const double state_dt = (odometry_stamp - *previous_velocity_stamp_).seconds();
+      if (std::isfinite(state_dt) && state_dt > 0.0 && state_dt <= 0.1) {
+        const Eigen::Vector2d measured_acceleration =
+          (velocity_world.head<2>() - previous_velocity_world_->head<2>()) / state_dt;
+        if (previous_horizontal_acceleration_ && measured_acceleration.allFinite()) {
+          const Eigen::Vector2d acceleration_change =
+            measured_acceleration - *previous_horizontal_acceleration_;
+          const Eigen::Vector2d position_error =
+            (input.desired_position_world - input.current_position_world).head<2>();
+          const bool change_points_toward_goal =
+            position_error.norm() > horizontal_disturbance_detection_error_floor_ &&
+            acceleration_change.dot(position_error) > 0.0;
+          const bool integral_is_loaded =
+            position_controller_->horizontal_integral_acceleration_world().norm() > 0.05;
+          if (acceleration_change.norm() > horizontal_disturbance_change_threshold_ &&
+            (change_points_toward_goal || integral_is_loaded))
+          {
+            horizontal_integrator_unloading_until_ =
+              now() + rclcpp::Duration::from_seconds(horizontal_integrator_unloading_duration_);
+          }
+        }
+        previous_horizontal_acceleration_ = measured_acceleration;
+      }
+    }
+    previous_velocity_world_ = velocity_world;
+    previous_velocity_stamp_ = odometry_stamp;
+    const bool unloading_integrator = horizontal_integrator_unloading_until_ &&
+      now() < *horizontal_integrator_unloading_until_;
+    const bool unload_applied = unloading_integrator &&
+      position_controller_->back_calculate_horizontal_integrator_to_zero(control_dt_);
+    const bool integrator_enabled =
+      !ground_standby && !fast_trajectory && !unloading_integrator &&
+      !pose_goal_transition_active_;
+    PositionControllerResult result =
+      position_controller_->compute(input, control_dt_, integrator_enabled);
+    result.horizontal_anti_windup_active =
+      result.horizontal_anti_windup_active || unload_applied;
     if (!result.valid) {
+      reset_horizontal_integrator();
       publish_zero_rpm();
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Invalid control result; RPM=0");
       return;
@@ -315,6 +450,22 @@ private:
     drone_msgs::msg::ControllerDiagnostics diagnostics;
     diagnostics.horizontal_acceleration_x = result.desired_horizontal_acceleration_world.x();
     diagnostics.horizontal_acceleration_y = result.desired_horizontal_acceleration_world.y();
+    diagnostics.horizontal_p_acceleration_x =
+      result.horizontal_proportional_acceleration_world.x();
+    diagnostics.horizontal_p_acceleration_y =
+      result.horizontal_proportional_acceleration_world.y();
+    diagnostics.horizontal_d_acceleration_x =
+      result.horizontal_derivative_acceleration_world.x();
+    diagnostics.horizontal_d_acceleration_y =
+      result.horizontal_derivative_acceleration_world.y();
+    diagnostics.horizontal_i_acceleration_x = result.horizontal_integral_acceleration_world.x();
+    diagnostics.horizontal_i_acceleration_y = result.horizontal_integral_acceleration_world.y();
+    diagnostics.horizontal_feedforward_acceleration_x =
+      result.horizontal_feedforward_acceleration_world.x();
+    diagnostics.horizontal_feedforward_acceleration_y =
+      result.horizontal_feedforward_acceleration_world.y();
+    diagnostics.horizontal_raw_acceleration_x = result.horizontal_raw_acceleration_world.x();
+    diagnostics.horizontal_raw_acceleration_y = result.horizontal_raw_acceleration_world.y();
     diagnostics.collective_thrust = result.collective_thrust;
     diagnostics.roll_torque = result.torque_body.x();
     diagnostics.pitch_torque = result.torque_body.y();
@@ -325,7 +476,12 @@ private:
     diagnostics.altitude_saturated = result.altitude_saturated;
     diagnostics.attitude_saturated = result.attitude_saturated;
     diagnostics.mixer_saturated = result.mixer_saturated;
+    diagnostics.horizontal_integral_enabled = result.horizontal_integral_enabled;
+    diagnostics.horizontal_integral_frozen = result.horizontal_integral_frozen;
+    diagnostics.horizontal_integral_reset = horizontal_integral_reset_for_diagnostics_;
+    diagnostics.horizontal_anti_windup_active = result.horizontal_anti_windup_active;
     diagnostics_publisher_->publish(diagnostics);
+    horizontal_integral_reset_for_diagnostics_ = false;
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 1000,
       "position target=[%.3f, %.3f, %.3f] current=[%.3f, %.3f, %.3f] "
@@ -352,13 +508,25 @@ private:
 
   std::unique_ptr<PositionController> position_controller_;
   double odometry_timeout_{0.2};
+  double control_dt_{0.01};
   double trajectory_setpoint_timeout_{0.2};
+  double horizontal_integral_reset_distance_{1.0};
+  double horizontal_disturbance_change_threshold_{0.15};
+  double horizontal_disturbance_detection_error_floor_{0.005};
+  double horizontal_integrator_unloading_duration_{8.0};
+  bool horizontal_integral_reset_for_diagnostics_{true};
+  bool pose_goal_transition_active_{false};
   std::string supported_goal_frame_{"map"};
   std::string setpoint_source_{"pose_goal"};
   std::optional<geometry_msgs::msg::PoseStamped> latest_goal_;
   std::optional<drone_msgs::msg::TrajectorySetpoint> latest_trajectory_setpoint_;
   std::optional<nav_msgs::msg::Odometry> latest_odometry_;
   std::optional<rclcpp::Time> latest_trajectory_setpoint_reception_time_;
+  std::optional<rclcpp::Time> latest_trajectory_stamp_;
+  std::optional<rclcpp::Time> horizontal_integrator_unloading_until_;
+  std::optional<Eigen::Vector3d> previous_velocity_world_;
+  std::optional<rclcpp::Time> previous_velocity_stamp_;
+  std::optional<Eigen::Vector2d> previous_horizontal_acceleration_;
   std::optional<rclcpp::Time> latest_odometry_reception_time_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_subscription_;
   rclcpp::Subscription<drone_msgs::msg::TrajectorySetpoint>::SharedPtr

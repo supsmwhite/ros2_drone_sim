@@ -1,0 +1,21 @@
+{
+  "kind": "disturbance_0p3",
+  "completed": true,
+  "rise_time_s": null,
+  "overshoot_m": null,
+  "settling_time_s": 10.690270021994365,
+  "maximum_horizontal_offset_m": 0.315115221397798,
+  "final_error_m": 0.013630784953693732,
+  "final_speed_m_s": 0.0053812556641278176,
+  "maximum_tilt_rad": 0.030381143310013126,
+  "maximum_rpm": 10856.014474105745,
+  "maximum_horizontal_acceleration_request_m_s2": 0.29952322794405745,
+  "saturation_counts": {
+    "horizontal": 0,
+    "altitude": 0,
+    "attitude": 0,
+    "mixer": 0
+  },
+  "diagnostic_samples": 1269,
+  "state_samples": 2538
+}

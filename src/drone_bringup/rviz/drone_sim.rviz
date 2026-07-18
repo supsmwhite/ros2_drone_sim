@@ -101,7 +101,7 @@ Visualization Manager:
       Axes Radius: 0.05
       Class: rviz_default_plugins/Pose
       Color: 255; 40; 40
-      Enabled: true
+      Enabled: false
       Head Length: 0.22
       Head Radius: 0.09
       Name: Goal Pose
@@ -115,6 +115,84 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /drone/goal
+      Value: false
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/multi_goal/goal_markers
+      Name: Multi-Goal Markers
+      Namespaces: {}
+      Value: true
+    - Class: rviz_default_plugins/InteractiveMarkers
+      Enabled: true
+      Interactive Markers Namespace: /drone/interactive_goals/goal_editor
+      Name: Interactive Goal Candidate
+      Show Axes: false
+      Show Descriptions: true
+      Show Visual Aids: false
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/interactive_goals/goal_markers
+      Name: Interactive Goal List
+      Namespaces: {}
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 70; 150; 255
+      Enabled: true
+      Head Diameter: 0.06
+      Head Length: 0.08
+      Length: 0.3
+      Line Style: Lines
+      Line Width: 0.055
+      Name: Interactive Goal Preview
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 70; 150; 255
+      Pose Style: None
+      Radius: 0.03
+      Shaft Diameter: 0.02
+      Shaft Length: 0.08
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/interactive_goals/preview_path
+      Value: true
+    - Alpha: 1
+      Axes Length: 0.5
+      Axes Radius: 0.05
+      Class: rviz_default_plugins/Pose
+      Color: 255; 80; 20
+      Enabled: true
+      Head Length: 0.22
+      Head Radius: 0.09
+      Name: Current Multi-Goal
+      Shape: Arrow
+      Shaft Length: 0.45
+      Shaft Radius: 0.035
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/multi_goal/current_goal_pose
       Value: true
     - Alpha: 1
       Buffer Length: 1
@@ -159,7 +237,7 @@ Visualization Manager:
       Buffer Length: 1
       Class: rviz_default_plugins/Path
       Color: 255; 220; 40
-      Enabled: true
+      Enabled: false
       Head Diameter: 0.06
       Head Length: 0.08
       Length: 0.3
@@ -182,12 +260,12 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /drone/planned_path
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/Path
       Color: 255; 60; 210
-      Enabled: true
+      Enabled: false
       Head Diameter: 0.06
       Head Length: 0.08
       Length: 0.3
@@ -210,7 +288,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /drone/simplified_path
-      Value: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 35; 38; 45
@@ -238,25 +316,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 3.8
+      Distance: 17.5
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.06
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.8
-        Y: 0.4
-        Z: 0.5
+        X: 6.75
+        Y: 2.25
+        Z: 1.5
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.01
-      Pitch: 0.55
+      Pitch: 0.70
       Target Frame: map
       Value: Orbit (rviz)
-      Yaw: 0.8
+      Yaw: 1.15
     Saved: ~
 Window Geometry:
   Displays:

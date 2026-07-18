@@ -1,0 +1,151 @@
+{
+  "sources": {
+    "dynamics": "src/drone_bringup/config/dynamics.yaml",
+    "controller": "src/drone_bringup/config/controller.yaml",
+    "xacro": "src/drone_bringup/urdf/drone.urdf.xacro"
+  },
+  "basic_parameters": {
+    "mass_kg": 1.0,
+    "inertia_kg_m2": [
+      0.02,
+      0.02,
+      0.04
+    ],
+    "arm_length_m": 0.2,
+    "thrust_coefficient_n_per_rad_s_squared": 1.91e-06,
+    "drag_torque_coefficient_nm_per_rad_s_squared": 2.6e-07,
+    "motor_time_constant_s": 0.05,
+    "minimum_rpm": 0.0,
+    "maximum_rpm": 20000.0,
+    "hover_rpm": 10818.948177199656
+  },
+  "thrust_capability": {
+    "single_motor_max_thrust_n": 8.378197513813632,
+    "four_motor_max_total_thrust_n": 33.51279005525453,
+    "weight_n": 9.80665,
+    "thrust_to_weight_ratio": 3.417353536146852,
+    "hover_rpm_fraction_of_max": 0.5409474088599828,
+    "remaining_rpm_fraction": 0.4590525911400172,
+    "remaining_thrust_fraction_of_max": 0.7073759008476705
+  },
+  "tilt_capability": [
+    {
+      "tilt_angle_rad": 0.08,
+      "horizontal_force_n": 0.7862099639854198,
+      "horizontal_acceleration_m_s2": 0.7862099639854198,
+      "height_holding_total_thrust_n": 9.83811518177999,
+      "height_holding_rpm": 10836.29087547056,
+      "exceeds_max_rpm": false
+    },
+    {
+      "tilt_angle_rad": 0.12,
+      "horizontal_force_n": 1.182479357263247,
+      "horizontal_acceleration_m_s2": 1.182479357263247,
+      "height_holding_total_thrust_n": 9.877684022727882,
+      "height_holding_rpm": 10858.060756688772,
+      "exceeds_max_rpm": false
+    },
+    {
+      "tilt_angle_rad": 0.15,
+      "horizontal_force_n": 1.4821301861713794,
+      "horizontal_acceleration_m_s2": 1.4821301861713794,
+      "height_holding_total_thrust_n": 9.918018658545687,
+      "height_holding_rpm": 10880.20712963288,
+      "exceeds_max_rpm": false
+    },
+    {
+      "tilt_angle_rad": 0.2,
+      "horizontal_force_n": 1.987906369721123,
+      "horizontal_acceleration_m_s2": 1.987906369721123,
+      "height_holding_total_thrust_n": 10.006105933742546,
+      "height_holding_rpm": 10928.41681728959,
+      "exceeds_max_rpm": false
+    },
+    {
+      "tilt_angle_rad": 0.25,
+      "horizontal_force_n": 2.5040488517422754,
+      "horizontal_acceleration_m_s2": 2.5040488517422754,
+      "height_holding_total_thrust_n": 10.121296600456475,
+      "height_holding_rpm": 10991.140985212427,
+      "exceeds_max_rpm": false
+    }
+  ],
+  "torque_capability": {
+    "roll": {
+      "physical_max_nm": 2.369712110455157,
+      "controller_limit_nm": 1.0,
+      "controller_fraction": 0.4219921886662964,
+      "classification": "低于物理能力"
+    },
+    "pitch": {
+      "physical_max_nm": 2.369712110455157,
+      "controller_limit_nm": 1.0,
+      "controller_fraction": 0.4219921886662964,
+      "classification": "低于物理能力"
+    },
+    "yaw": {
+      "physical_max_nm": 2.2809752393628737,
+      "controller_limit_nm": 0.2,
+      "controller_fraction": 0.08768179353663848,
+      "classification": "低于物理能力"
+    }
+  },
+  "controller_envelope": {
+    "max_horizontal_acceleration_m_s2": 0.8,
+    "max_tilt_angle_rad": 0.15,
+    "tilt_limited_acceleration_m_s2": 1.4821301861713794
+  },
+  "consistency": {
+    "dynamics_vs_controller": {
+      "arm_length": {
+        "dynamics": 0.2,
+        "controller": 0.2,
+        "consistent": true
+      },
+      "thrust_coefficient": {
+        "dynamics": 1.91e-06,
+        "controller": 1.91e-06,
+        "consistent": true
+      },
+      "drag_torque_coefficient": {
+        "dynamics": 2.6e-07,
+        "controller": 2.6e-07,
+        "consistent": true
+      },
+      "min_rpm": {
+        "dynamics": 0.0,
+        "controller": 0.0,
+        "consistent": true
+      },
+      "max_rpm": {
+        "dynamics": 20000.0,
+        "controller": 20000.0,
+        "consistent": true
+      },
+      "mass": {
+        "dynamics": 1.0,
+        "controller": 1.0,
+        "consistent": true
+      }
+    },
+    "xacro_arm_length": {
+      "xacro": 0.2,
+      "dynamics": 0.2,
+      "consistent": true
+    },
+    "xacro_role": "visual geometry only; it contains no inertial, RPM, thrust, or drag-torque data",
+    "xacro_missing_physical_fields": [
+      "mass",
+      "inertia",
+      "RPM limits",
+      "thrust coefficient",
+      "drag torque coefficient"
+    ]
+  },
+  "numerics": {
+    "integration": "fixed-step semi-implicit Euler",
+    "frequency_hz": 200.0,
+    "time_step_s": 0.005,
+    "limitations": "first-order accuracy; contact is a z-only constraint; quaternion is normalized each step"
+  }
+}

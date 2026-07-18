@@ -1,0 +1,60 @@
+[INFO] [launch]: All log files can be found below /home/peter/.ros/log/2026-07-17-22-45-45-999865-peter-acer-17864
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [quadrotor_dynamics_node-1]: process started with pid [17876]
+[INFO] [position_controller_node-2]: process started with pid [17878]
+[INFO] [robot_state_publisher-3]: process started with pid [17880]
+[position_controller_node-2] [INFO] [1784299546.099102454] [position_controller_node]: 3D position controller started at 100.0 Hz (source=pose_goal, odom timeout 0.200 s)
+[robot_state_publisher-3] [INFO] [1784299546.099341784] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-3] [INFO] [1784299546.099391605] [robot_state_publisher]: got segment front_marker_link
+[robot_state_publisher-3] [INFO] [1784299546.099396346] [robot_state_publisher]: got segment m1_arm_link
+[robot_state_publisher-3] [INFO] [1784299546.099398916] [robot_state_publisher]: got segment m1_motor_link
+[robot_state_publisher-3] [INFO] [1784299546.099401528] [robot_state_publisher]: got segment m1_rotor_link
+[robot_state_publisher-3] [INFO] [1784299546.099404003] [robot_state_publisher]: got segment m2_arm_link
+[robot_state_publisher-3] [INFO] [1784299546.099406314] [robot_state_publisher]: got segment m2_motor_link
+[robot_state_publisher-3] [INFO] [1784299546.099408699] [robot_state_publisher]: got segment m2_rotor_link
+[robot_state_publisher-3] [INFO] [1784299546.099411107] [robot_state_publisher]: got segment m3_arm_link
+[robot_state_publisher-3] [INFO] [1784299546.099413455] [robot_state_publisher]: got segment m3_motor_link
+[robot_state_publisher-3] [INFO] [1784299546.099415820] [robot_state_publisher]: got segment m3_rotor_link
+[robot_state_publisher-3] [INFO] [1784299546.099418034] [robot_state_publisher]: got segment m4_arm_link
+[robot_state_publisher-3] [INFO] [1784299546.099420293] [robot_state_publisher]: got segment m4_motor_link
+[robot_state_publisher-3] [INFO] [1784299546.099422512] [robot_state_publisher]: got segment m4_rotor_link
+[quadrotor_dynamics_node-1] [INFO] [1784299546.101698571] [quadrotor_dynamics_node]: Dynamics started at 200.0 Hz; nominal steady-state hover RPM is 10818.9; ground contact is enabled at z=0.000 m; motor command watchdog is enabled (0.300 s)
+[quadrotor_dynamics_node-1] [INFO] [1784299546.101756647] [quadrotor_dynamics_node]: External wrench input is enabled (frame=map, force_limit=2.000 N, timeout=0.200 s, torque_limit=0.000 N*m; torque must be zero)
+[position_controller_node-2] [WARN] [1784299546.109254484] [position_controller_node]: Waiting for /drone/goal; RPM=0
+[INFO] [ros2-4]: process started with pid [17917]
+[position_controller_node-2] [WARN] [1784299547.109316932] [position_controller_node]: Waiting for /drone/goal; RPM=0
+[ros2-4] publisher: beginning loop
+[ros2-4] publishing #1: geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id='map'), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=1.5), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+[ros2-4]
+[position_controller_node-2] [INFO] [1784299547.859335758] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 0.000] world_v=[0.000, 0.000, 0.000] a_xy=[0.000, 0.000] thrust=14.307 rpm=[13067.5, 13067.5, 13067.5, 13067.5] saturated=false
+[INFO] [ros2-4]: process has finished cleanly [pid 17917]
+[position_controller_node-2] [INFO] [1784299548.859385437] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 0.710] world_v=[0.000, 0.000, 0.873] a_xy=[0.000, 0.000] thrust=9.122 rpm=[10434.5, 10434.5, 10434.5, 10434.5] saturated=false
+[position_controller_node-2] [INFO] [1784299549.859505715] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.265] world_v=[0.000, 0.000, 0.300] a_xy=[0.000, 0.000] thrust=9.460 rpm=[10626.0, 10626.0, 10626.0, 10626.0] saturated=false
+[position_controller_node-2] [INFO] [1784299550.859580561] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.436] world_v=[0.000, 0.000, 0.084] a_xy=[0.000, 0.000] thrust=9.705 rpm=[10762.6, 10762.6, 10762.6, 10762.6] saturated=false
+[position_controller_node-2] [INFO] [1784299551.869506608] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.483] world_v=[0.000, 0.000, 0.023] a_xy=[0.000, 0.000] thrust=9.779 rpm=[10803.8, 10803.8, 10803.8, 10803.8] saturated=false
+[position_controller_node-2] [INFO] [1784299552.869636899] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.495] world_v=[0.000, 0.000, 0.006] a_xy=[0.000, 0.000] thrust=9.799 rpm=[10814.9, 10814.9, 10814.9, 10814.9] saturated=false
+[position_controller_node-2] [INFO] [1784299553.869714765] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.499] world_v=[0.000, 0.000, 0.002] a_xy=[0.000, 0.000] thrust=9.805 rpm=[10817.8, 10817.8, 10817.8, 10817.8] saturated=false
+[position_controller_node-2] [INFO] [1784299554.869748748] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.500] world_v=[0.000, 0.000, 0.000] a_xy=[0.000, 0.000] thrust=9.806 rpm=[10818.7, 10818.7, 10818.7, 10818.7] saturated=false
+[position_controller_node-2] [INFO] [1784299555.879745511] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.095, 0.000, 1.500] world_v=[0.168, 0.000, 0.000] a_xy=[-0.240, -0.000] thrust=9.809 rpm=[10824.2, 10816.6, 10816.6, 10824.2] saturated=false
+[position_controller_node-2] [INFO] [1784299556.889689576] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.280, -0.000, 1.500] world_v=[0.182, -0.000, 0.000] a_xy=[-0.331, 0.000] thrust=9.812 rpm=[10821.1, 10822.9, 10822.9, 10821.1] saturated=false
+[position_controller_node-2] [INFO] [1784299557.899782422] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.347, -0.000, 1.500] world_v=[-0.029, 0.000, 0.000] a_xy=[-0.104, 0.000] thrust=9.807 rpm=[10816.3, 10822.1, 10822.1, 10816.3] saturated=false
+[position_controller_node-2] [INFO] [1784299558.909893811] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.280, 0.000, 1.500] world_v=[-0.086, 0.000, -0.000] a_xy=[-0.009, -0.000] thrust=9.807 rpm=[10819.6, 10818.3, 10818.3, 10819.6] saturated=false
+[position_controller_node-2] [INFO] [1784299559.919830947] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.193, 0.000, 1.500] world_v=[-0.080, 0.000, -0.000] a_xy=[0.019, -0.000] thrust=9.807 rpm=[10819.2, 10818.8, 10818.8, 10819.2] saturated=false
+[position_controller_node-2] [INFO] [1784299560.929865974] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.123, 0.000, 1.500] world_v=[-0.059, -0.000, -0.000] a_xy=[0.022, 0.000] thrust=9.807 rpm=[10819.0, 10818.9, 10818.9, 10819.0] saturated=false
+[position_controller_node-2] [INFO] [1784299561.939798856] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.074, -0.000, 1.500] world_v=[-0.039, -0.000, -0.000] a_xy=[0.017, 0.000] thrust=9.807 rpm=[10819.0, 10819.0, 10819.0, 10819.0] saturated=false
+[position_controller_node-2] [INFO] [1784299562.939919471] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.043, -0.000, 1.500] world_v=[-0.024, 0.000, -0.000] a_xy=[0.012, 0.000] thrust=9.807 rpm=[10818.9, 10819.0, 10819.0, 10818.9] saturated=false
+[position_controller_node-2] [INFO] [1784299563.950079226] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.024, -0.000, 1.500] world_v=[-0.014, -0.000, -0.000] a_xy=[0.007, 0.000] thrust=9.807 rpm=[10818.9, 10819.0, 10819.0, 10818.9] saturated=false
+[position_controller_node-2] [INFO] [1784299564.959800886] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.013, -0.000, 1.500] world_v=[-0.008, -0.000, -0.000] a_xy=[0.004, 0.000] thrust=9.807 rpm=[10818.9, 10819.0, 10819.0, 10818.9] saturated=false
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-3]: sending signal 'SIGINT' to process[robot_state_publisher-3]
+[INFO] [position_controller_node-2]: sending signal 'SIGINT' to process[position_controller_node-2]
+[INFO] [quadrotor_dynamics_node-1]: sending signal 'SIGINT' to process[quadrotor_dynamics_node-1]
+[robot_state_publisher-3] [INFO] [1784299565.673672041] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[quadrotor_dynamics_node-1] [INFO] [1784299565.673672348] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[position_controller_node-2] [INFO] [1784299565.673675192] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-3] [INFO] [1784299565.676957407] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[position_controller_node-2] [INFO] [1784299565.677880237] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[quadrotor_dynamics_node-1] [INFO] [1784299565.678566965] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [quadrotor_dynamics_node-1]: process has finished cleanly [pid 17876]
+[INFO] [robot_state_publisher-3]: process has finished cleanly [pid 17880]
+[INFO] [position_controller_node-2]: process has finished cleanly [pid 17878]

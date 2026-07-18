@@ -1,0 +1,3 @@
+controller,persistent_last_3s_error_m,short_0p3_max_offset_m,short_0p3_recovery_s,short_0p8_max_offset_m,short_0p8_recovery_s,release_reverse_overshoot_m,peak_integral_m_s2,horizontal_saturation_samples,multi_goal_max_tracking_error_m,multi_goal_minimum_clearance_m
+PD baseline,0.7493401619764486,0.34862495025956364,5.725052303001576,0.9502046031036644,7.5431878629970015,0.0,0.0,142,,
+selected PID-like,0.08198858876551117,0.33145486043485123,8.066148326004623,0.9370104721650468,7.5363497119979,0.10776677914853008,0.35,154,0.028843114771961914,0.09430956688337133

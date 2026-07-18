@@ -3,14 +3,17 @@
 #include <cstddef>
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 #include "drone_dynamics/quadrotor_model.hpp"
 #include "drone_msgs/msg/motor_rpm.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
+#include "geometry_msgs/msg/wrench_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/imu.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "tf2_ros/transform_broadcaster.h"
 
 namespace drone_dynamics
@@ -43,6 +46,10 @@ public:
     enable_motor_command_timeout_ =
       declare_parameter<bool>("enable_motor_command_timeout", true);
     motor_command_timeout_ = declare_parameter<double>("motor_command_timeout", 0.30);
+    enable_external_wrench_ = declare_parameter<bool>("enable_external_wrench", false);
+    external_wrench_timeout_ = declare_parameter<double>("external_wrench_timeout", 0.20);
+    max_external_force_ = declare_parameter<double>("max_external_force", 2.0);
+    max_external_torque_ = declare_parameter<double>("max_external_torque", 0.0);
 
     if (!std::isfinite(simulation_frequency) || simulation_frequency <= 0.0) {
       throw std::invalid_argument("simulation_frequency must be finite and greater than zero");
@@ -56,6 +63,12 @@ public:
     if (!std::isfinite(motor_command_timeout_) || motor_command_timeout_ <= 0.0) {
       throw std::invalid_argument(
               "motor_command_timeout must be finite and greater than zero");
+    }
+    if (!std::isfinite(external_wrench_timeout_) || external_wrench_timeout_ <= 0.0 ||
+      !std::isfinite(max_external_force_) || max_external_force_ <= 0.0 ||
+      !std::isfinite(max_external_torque_) || max_external_torque_ < 0.0)
+    {
+      throw std::invalid_argument("Invalid external wrench limits or timeout");
     }
 
     // 模型使用固定仿真步长 dt=1/f，而不是直接使用两次回调之间有抖动的墙钟差值。
@@ -85,7 +98,20 @@ public:
     odometry_publisher_ = create_publisher<nav_msgs::msg::Odometry>("/drone/odom", 10);
     imu_publisher_ = create_publisher<sensor_msgs::msg::Imu>("/drone/imu", 10);
     path_publisher_ = create_publisher<nav_msgs::msg::Path>("/drone/path", 10);
+    const rclcpp::QoS wrench_status_qos = rclcpp::QoS(1).reliable().transient_local();
+    external_wrench_active_publisher_ = create_publisher<std_msgs::msg::Bool>(
+      "/drone/external_wrench/active", wrench_status_qos);
+    external_wrench_applied_publisher_ = create_publisher<geometry_msgs::msg::WrenchStamped>(
+      "/drone/external_wrench/applied", wrench_status_qos);
+    if (enable_external_wrench_) {
+      external_wrench_subscription_ = create_subscription<geometry_msgs::msg::WrenchStamped>(
+        "/drone/external_wrench", 10,
+        [this](const geometry_msgs::msg::WrenchStamped::SharedPtr message) {
+          handle_external_wrench(*message);
+        });
+    }
     transform_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+    publish_external_wrench_state(now());
 
     // create_wall_timer 需要 chrono duration；将 double 秒转换成纳秒周期。
     const auto timer_period = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -104,6 +130,12 @@ public:
       simulation_frequency, hover_rpm,
       parameters.enable_ground_contact ? "enabled" : "disabled", parameters.ground_z,
       enable_motor_command_timeout_ ? "enabled" : "disabled", motor_command_timeout_);
+    RCLCPP_INFO(
+      get_logger(),
+      "External wrench input is %s (frame=map, force_limit=%.3f N, timeout=%.3f s, "
+      "torque_limit=%.3f N*m; torque must be zero)",
+      enable_external_wrench_ ? "enabled" : "disabled", max_external_force_,
+      external_wrench_timeout_, max_external_torque_);
   }
 
 private:
@@ -131,6 +163,20 @@ private:
     parameters.min_rpm = declare_parameter<double>("min_rpm", parameters.min_rpm);
     parameters.max_rpm = declare_parameter<double>("max_rpm", parameters.max_rpm);
     parameters.gravity = declare_parameter<double>("gravity", parameters.gravity);
+    parameters.enable_aerodynamic_drag = declare_parameter<bool>(
+      "enable_aerodynamic_drag", parameters.enable_aerodynamic_drag);
+    parameters.linear_drag = Eigen::Vector3d(
+      declare_parameter<double>("linear_drag_x", parameters.linear_drag.x()),
+      declare_parameter<double>("linear_drag_y", parameters.linear_drag.y()),
+      declare_parameter<double>("linear_drag_z", parameters.linear_drag.z()));
+    parameters.quadratic_drag = Eigen::Vector3d(
+      declare_parameter<double>("quadratic_drag_x", parameters.quadratic_drag.x()),
+      declare_parameter<double>("quadratic_drag_y", parameters.quadratic_drag.y()),
+      declare_parameter<double>("quadratic_drag_z", parameters.quadratic_drag.z()));
+    parameters.angular_damping = Eigen::Vector3d(
+      declare_parameter<double>("angular_damping_roll", parameters.angular_damping.x()),
+      declare_parameter<double>("angular_damping_pitch", parameters.angular_damping.y()),
+      declare_parameter<double>("angular_damping_yaw", parameters.angular_damping.z()));
     parameters.enable_ground_contact =
       declare_parameter<bool>("enable_ground_contact", parameters.enable_ground_contact);
     parameters.ground_z = declare_parameter<double>("ground_z", parameters.ground_z);
@@ -145,6 +191,7 @@ private:
   void simulation_step()
   {
     check_motor_command_timeout();
+    check_external_wrench_timeout();
 
     // 每次定时器回调只推进一个固定 dt。Odom、IMU 和 TF 每个仿真步都发布，
     // 因而名义频率与 simulation_frequency 相同。
@@ -160,6 +207,79 @@ private:
     if (simulation_step_count_ % static_cast<std::size_t>(path_publish_divider_) == 0U) {
       publish_path(stamp);
     }
+  }
+
+  void handle_external_wrench(const geometry_msgs::msg::WrenchStamped & message)
+  {
+    const Eigen::Vector3d force(
+      message.wrench.force.x, message.wrench.force.y, message.wrench.force.z);
+    const Eigen::Vector3d torque(
+      message.wrench.torque.x, message.wrench.torque.y, message.wrench.torque.z);
+    if (message.header.frame_id != "map") {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "Rejected external wrench with unsupported frame '%s'; expected map",
+        message.header.frame_id.c_str());
+      return;
+    }
+    if (!force.allFinite() || !torque.allFinite()) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 1000, "Rejected non-finite external wrench");
+      return;
+    }
+    if (force.norm() > max_external_force_ + 1.0e-12) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "Rejected external force magnitude %.3f N above %.3f N limit",
+        force.norm(), max_external_force_);
+      return;
+    }
+    if (torque.norm() > max_external_torque_ + 1.0e-12 || torque.norm() > 1.0e-12) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "Rejected external torque magnitude %.3f N*m; first version requires zero torque",
+        torque.norm());
+      return;
+    }
+
+    model_->set_external_wrench(force, torque);
+    applied_external_force_world_ = force;
+    external_wrench_active_ = force.norm() > 1.0e-12;
+    last_external_wrench_time_ = std::chrono::steady_clock::now();
+    publish_external_wrench_state(now());
+  }
+
+  void check_external_wrench_timeout()
+  {
+    if (!enable_external_wrench_ || !external_wrench_active_) {
+      return;
+    }
+    const double age = std::chrono::duration<double>(
+      std::chrono::steady_clock::now() - last_external_wrench_time_).count();
+    if (age <= external_wrench_timeout_) {
+      return;
+    }
+    model_->set_external_wrench(Eigen::Vector3d::Zero());
+    applied_external_force_world_.setZero();
+    external_wrench_active_ = false;
+    publish_external_wrench_state(now());
+    RCLCPP_WARN(
+      get_logger(), "External wrench timed out after %.3f s; disturbance cleared", age);
+  }
+
+  void publish_external_wrench_state(const rclcpp::Time & stamp)
+  {
+    std_msgs::msg::Bool active;
+    active.data = external_wrench_active_;
+    external_wrench_active_publisher_->publish(active);
+
+    geometry_msgs::msg::WrenchStamped applied;
+    applied.header.stamp = stamp;
+    applied.header.frame_id = "map";
+    applied.wrench.force.x = applied_external_force_world_.x();
+    applied.wrench.force.y = applied_external_force_world_.y();
+    applied.wrench.force.z = applied_external_force_world_.z();
+    external_wrench_applied_publisher_->publish(applied);
   }
 
   // 使用不受 ROS 时间跳变影响的单调时钟检查命令新鲜度。超时只修改模型的
@@ -335,6 +455,13 @@ private:
   bool motor_command_timed_out_{false};
   std::chrono::steady_clock::time_point last_motor_command_time_{};
   std::chrono::steady_clock::time_point motor_command_timeout_started_{};
+  bool enable_external_wrench_{false};
+  double external_wrench_timeout_{0.20};
+  double max_external_force_{2.0};
+  double max_external_torque_{0.0};
+  bool external_wrench_active_{false};
+  Eigen::Vector3d applied_external_force_world_{Eigen::Vector3d::Zero()};
+  std::chrono::steady_clock::time_point last_external_wrench_time_{};
 
   // ROS2 通信对象。用成员变量持有 shared_ptr，保证订阅、发布器和定时器
   // 在节点整个生命周期内持续有效。
@@ -342,6 +469,11 @@ private:
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_publisher_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher_;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_publisher_;
+  rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr
+    external_wrench_subscription_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr external_wrench_active_publisher_;
+  rclcpp::Publisher<geometry_msgs::msg::WrenchStamped>::SharedPtr
+    external_wrench_applied_publisher_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> transform_broadcaster_;
   rclcpp::TimerBase::SharedPtr simulation_timer_;
 };

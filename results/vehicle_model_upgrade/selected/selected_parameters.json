@@ -1,0 +1,35 @@
+{
+  "aerodynamics": {
+    "enable_aerodynamic_drag": true,
+    "linear_drag_n_per_m_s": {
+      "x": 0.01,
+      "y": 0.01,
+      "z": 0.01
+    },
+    "quadratic_drag_n_per_m_s_squared": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "angular_damping_nm_per_rad_s": {
+      "roll": 0.01,
+      "pitch": 0.01,
+      "yaw": 0.02
+    }
+  },
+  "controller": {
+    "max_horizontal_acceleration_m_s2": 0.8,
+    "max_tilt_angle_rad": 0.15,
+    "horizontal_position_kp": 0.4,
+    "horizontal_velocity_kd": 1.2
+  },
+  "selection": "first scanned envelope eliminating step saturation with adequate tilt margin; low drag refined after 0.20 failed multi-goal tracking",
+  "rejected": {
+    "coarse_drag_linear_xy": 0.2,
+    "coarse_drag_multi_goal_max_tracking_error_m": 0.25002751799609124,
+    "aggressive_envelope": [
+      1.5,
+      0.2
+    ]
+  }
+}

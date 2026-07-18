@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 
 namespace drone_dynamics
@@ -18,6 +19,11 @@ constexpr double kRpmToRadiansPerSecond = 0.10471975511965977;
 bool is_positive_finite(const double value)
 {
   return std::isfinite(value) && value > 0.0;
+}
+
+bool is_nonnegative_finite_vector(const Eigen::Vector3d & value)
+{
+  return value.array().isFinite().all() && (value.array() >= 0.0).all();
 }
 
 }  // namespace
@@ -46,12 +52,48 @@ void QuadrotorModel::reset()
     state_.position_world.z() = parameters_.ground_z;
   }
   commanded_motor_angular_velocity_rad_s_.fill(0.0);
+  external_force_world_.setZero();
+  external_torque_body_.setZero();
   body_wrench_ = BodyWrench{};
+  aerodynamic_drag_force_world_.setZero();
+  aerodynamic_damping_torque_body_.setZero();
 
   // 地面关闭时，零推力初始加速度为自由落体；地面开启时，地面支持力
   // 与重力平衡，静止状态的实际世界系加速度为 0。
   linear_acceleration_world_ = parameters_.enable_ground_contact ?
     Eigen::Vector3d::Zero() : Eigen::Vector3d(0.0, 0.0, -parameters_.gravity);
+}
+
+void QuadrotorModel::set_state(const QuadrotorState & state)
+{
+  if (!state.position_world.allFinite() || !state.velocity_world.allFinite() ||
+    !state.orientation_body_to_world.coeffs().allFinite() ||
+    state.orientation_body_to_world.squaredNorm() <= 0.0 ||
+    !state.angular_velocity_body.allFinite())
+  {
+    throw std::invalid_argument("quadrotor state must be finite with a valid orientation");
+  }
+  const double maximum_angular_velocity = rpm_to_rad_s(parameters_.max_rpm);
+  for (const double motor_speed : state.motor_angular_velocity_rad_s) {
+    if (!std::isfinite(motor_speed) || motor_speed < 0.0 ||
+      motor_speed > maximum_angular_velocity)
+    {
+      throw std::invalid_argument("motor angular velocity is outside physical limits");
+    }
+  }
+  state_ = state;
+  state_.orientation_body_to_world.normalize();
+}
+
+void QuadrotorModel::set_external_wrench(
+  const Eigen::Vector3d & external_force_world,
+  const Eigen::Vector3d & external_torque_body)
+{
+  if (!external_force_world.allFinite() || !external_torque_body.allFinite()) {
+    throw std::invalid_argument("external wrench components must be finite");
+  }
+  external_force_world_ = external_force_world;
+  external_torque_body_ = external_torque_body;
 }
 
 // 输入：四个电机目标转速，单位 RPM，顺序固定为 M1、M2、M3、M4。
@@ -102,16 +144,23 @@ void QuadrotorModel::step(const double dt)
   // 第 5 步：把机体推力旋转到 map 世界系，加上世界系向下的重力，
   // 再除以质量，得到质心的世界系线加速度。
   const Eigen::Vector3d gravity_world(0.0, 0.0, -parameters_.gravity);
+  aerodynamic_drag_force_world_ = calculate_aerodynamic_drag_force_world(
+    state_.velocity_world, state_.orientation_body_to_world);
   linear_acceleration_world_ =
-    state_.orientation_body_to_world * thrust_body / parameters_.mass + gravity_world;
+    (state_.orientation_body_to_world * thrust_body + external_force_world_ +
+    aerodynamic_drag_force_world_) /
+    parameters_.mass + gravity_world;
 
   // 第 6 步：用当前机体系角速度和转动惯量计算角动量。
   const Eigen::Vector3d angular_momentum =
     parameters_.inertia.asDiagonal() * state_.angular_velocity_body;
 
   // 第 7 步：根据三轴力矩、转动惯量和刚体耦合项计算机体系角加速度。
+  aerodynamic_damping_torque_body_ = calculate_aerodynamic_damping_torque_body(
+    state_.angular_velocity_body);
   const Eigen::Vector3d angular_acceleration = parameters_.inertia.cwiseInverse().asDiagonal() *
-    (body_wrench_.torque - state_.angular_velocity_body.cross(angular_momentum));
+    (body_wrench_.torque + external_torque_body_ + aerodynamic_damping_torque_body_ -
+    state_.angular_velocity_body.cross(angular_momentum));
 
   // 第 8 步：用线加速度更新世界系速度，再用新速度更新世界系位置。
   state_.velocity_world += linear_acceleration_world_ * dt;
@@ -162,6 +211,57 @@ const QuadrotorState & QuadrotorModel::state() const
 const BodyWrench & QuadrotorModel::body_wrench() const
 {
   return body_wrench_;
+}
+
+const Eigen::Vector3d & QuadrotorModel::aerodynamic_drag_force_world() const
+{
+  return aerodynamic_drag_force_world_;
+}
+
+const Eigen::Vector3d & QuadrotorModel::aerodynamic_damping_torque_body() const
+{
+  return aerodynamic_damping_torque_body_;
+}
+
+Eigen::Vector3d QuadrotorModel::calculate_aerodynamic_drag_force_world(
+  const Eigen::Vector3d & velocity_world,
+  const Eigen::Quaterniond & orientation_body_to_world) const
+{
+  if (!velocity_world.allFinite() || !orientation_body_to_world.coeffs().allFinite() ||
+    orientation_body_to_world.squaredNorm() <= 0.0)
+  {
+    throw std::invalid_argument("aerodynamic drag state must be finite with a valid orientation");
+  }
+  if (!parameters_.enable_aerodynamic_drag) {
+    return Eigen::Vector3d::Zero();
+  }
+  const Eigen::Quaterniond normalized_orientation = orientation_body_to_world.normalized();
+  const Eigen::Vector3d velocity_body = normalized_orientation.conjugate() * velocity_world;
+  Eigen::Vector3d drag_force_body;
+  for (Eigen::Index axis = 0; axis < 3; ++axis) {
+    // long double keeps squaring every finite double defined. Clamp only the
+    // representable diagnostic force; normal flight remains far from this guard.
+    const long double velocity = static_cast<long double>(velocity_body[axis]);
+    const long double force =
+      -static_cast<long double>(parameters_.linear_drag[axis]) * velocity -
+      static_cast<long double>(parameters_.quadratic_drag[axis]) *
+      std::abs(velocity) * velocity;
+    const long double limit = static_cast<long double>(std::numeric_limits<double>::max()) / 4.0L;
+    drag_force_body[axis] = static_cast<double>(std::clamp(force, -limit, limit));
+  }
+  return normalized_orientation * drag_force_body;
+}
+
+Eigen::Vector3d QuadrotorModel::calculate_aerodynamic_damping_torque_body(
+  const Eigen::Vector3d & angular_velocity_body) const
+{
+  if (!angular_velocity_body.allFinite()) {
+    throw std::invalid_argument("angular velocity must be finite");
+  }
+  if (!parameters_.enable_aerodynamic_drag) {
+    return Eigen::Vector3d::Zero();
+  }
+  return -parameters_.angular_damping.cwiseProduct(angular_velocity_body);
 }
 
 // 输入：无。读取：linear_acceleration_world_。修改：无。
@@ -227,6 +327,12 @@ void QuadrotorModel::validate_parameters() const
   }
   if (!is_positive_finite(parameters_.gravity)) {
     throw std::invalid_argument("gravity must be finite and greater than zero");
+  }
+  if (!is_nonnegative_finite_vector(parameters_.linear_drag) ||
+    !is_nonnegative_finite_vector(parameters_.quadratic_drag) ||
+    !is_nonnegative_finite_vector(parameters_.angular_damping))
+  {
+    throw std::invalid_argument("aerodynamic drag and damping coefficients must be finite and non-negative");
   }
   if (!std::isfinite(parameters_.ground_z)) {
     throw std::invalid_argument("ground_z must be finite");

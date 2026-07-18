@@ -30,10 +30,14 @@ CollisionChecker default_checker()
 {
   return CollisionChecker(
     StaticEnvironment(
-      box(-1.0, 9.0, -2.5, 7.5, -0.5, 5.0),
+      box(-1.0, 14.5, -2.5, 7.0, -0.5, 5.0),
       {
-        box(2.1, 2.9, -0.5, 2.5, 0.0, 3.0),
-        box(5.6, 6.4, 2.5, 5.5, 0.0, 3.0),
+        box(2.2, 3.0, -2.5, 1.5, 0.0, 4.7),
+        box(4.2, 5.0, 1.8, 6.5, 0.0, 4.7),
+        box(6.3, 7.1, -0.8, 2.4, 0.0, 4.7),
+        box(8.5, 9.3, 1.0, 6.5, 0.0, 4.7),
+        box(11.0, 11.8, -1.5, -0.2, 0.0, 4.7),
+        box(11.0, 11.8, 1.7, 4.2, 0.0, 4.7),
       }),
     0.35);
 }
@@ -92,7 +96,7 @@ TEST(AStarPlanner, CollidingStartReturnsInvalidStart)
 {
   const auto checker = default_checker();
   const AStarResult result = AStarPlanner(checker, 0.25, 200000U).plan(
-    Eigen::Vector3d(2.5, 1.0, 1.5), Eigen::Vector3d(8.0, 5.0, 1.5));
+    Eigen::Vector3d(2.6, -0.5, 1.5), Eigen::Vector3d(12.1, 1.1, 1.5));
   EXPECT_EQ(result.status, PlanningStatus::kInvalidStart);
   EXPECT_FALSE(result.success());
   EXPECT_TRUE(result.path_world.empty());
@@ -102,7 +106,7 @@ TEST(AStarPlanner, CollidingGoalReturnsInvalidGoal)
 {
   const auto checker = default_checker();
   const AStarResult result = AStarPlanner(checker, 0.25, 200000U).plan(
-    Eigen::Vector3d(0.0, 0.0, 1.5), Eigen::Vector3d(6.0, 4.0, 1.5));
+    Eigen::Vector3d(0.0, 0.0, 1.5), Eigen::Vector3d(4.6, 4.15, 1.5));
   EXPECT_EQ(result.status, PlanningStatus::kInvalidGoal);
   EXPECT_FALSE(result.success());
   EXPECT_TRUE(result.path_world.empty());
@@ -123,8 +127,18 @@ TEST(AStarPlanner, DefaultPlanningDemoFindsSafeBlockedPath)
 {
   const auto checker = default_checker();
   const Eigen::Vector3d start(0.0, 0.0, 1.5);
-  const Eigen::Vector3d goal(8.0, 5.0, 1.5);
+  const Eigen::Vector3d goal(13.2, 5.5, 1.5);
   ASSERT_TRUE(checker.segment_in_collision(start, goal));
+  const AStarResult result = AStarPlanner(checker, 0.25, 200000U).plan(start, goal);
+  expect_safe_path(checker, result, start, goal);
+  EXPECT_GT(result.path_length, (goal - start).norm());
+}
+
+TEST(AStarPlanner, ExpandedTerminalWorkspaceReachesHighYGoal)
+{
+  const auto checker = default_checker();
+  const Eigen::Vector3d start(0.0, 0.0, 1.5);
+  const Eigen::Vector3d goal(12.1, 5.5, 1.5);
   const AStarResult result = AStarPlanner(checker, 0.25, 200000U).plan(start, goal);
   expect_safe_path(checker, result, start, goal);
   EXPECT_GT(result.path_length, (goal - start).norm());
@@ -135,7 +149,7 @@ TEST(AStarPlanner, RepeatedPlanningIsExactlyDeterministic)
   const auto checker = default_checker();
   const AStarPlanner planner(checker, 0.25, 200000U);
   const Eigen::Vector3d start(0.0, 0.0, 1.5);
-  const Eigen::Vector3d goal(8.0, 5.0, 1.5);
+  const Eigen::Vector3d goal(13.2, 5.5, 1.5);
   const AStarResult first = planner.plan(start, goal);
   const AStarResult second = planner.plan(start, goal);
   ASSERT_TRUE(first.success());

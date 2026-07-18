@@ -36,6 +36,9 @@ struct MixerResult
   // 固定电机顺序，必须与 drone_msgs/MotorRPM.msg 及 QuadrotorModel 完全一致，
   // 不允许在本文件内单独调整编号或符号。
   std::array<double, 4> motor_rpm{};
+  // 裁剪前带符号等效 RPM；负值表示解析分配请求了负单电机推力。
+  std::array<double, 4> unclipped_motor_rpm{};
+  std::array<bool, 4> motor_clipped{};
   bool valid{true};       // 输入非法（NaN/Inf 等）时为 false，此时 motor_rpm 无意义。
   bool saturated{false};  // 推力为负、单电机推力为负或 RPM 超出范围被限幅时为 true。
 };

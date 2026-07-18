@@ -11,6 +11,7 @@ import signal
 import subprocess
 import threading
 import time
+import yaml
 
 import matplotlib
 
@@ -29,27 +30,43 @@ from std_msgs.msg import Bool, Float64, UInt32
 
 
 START = (0.0, 0.0, 1.5)
-ORIGINAL_OBSTACLES = (
-    ((2.1, -0.5, 0.0), (2.9, 2.5, 3.0)),
-    ((5.6, 2.5, 0.0), (6.4, 5.5, 3.0)),
-)
-BASE_INFLATED_OBSTACLES = (
-    ((1.85, -0.75, -0.25), (3.15, 2.75, 3.25)),
-    ((5.35, 2.25, -0.25), (6.65, 5.75, 3.25)),
-)
+
+
+def load_environment_geometry():
+    config_path = (Path(__file__).resolve().parents[1] / 'src' / 'drone_bringup' /
+                   'config' / 'environment.yaml')
+    with config_path.open(encoding='utf-8') as config_file:
+        parameters = yaml.safe_load(config_file)['/**']['ros__parameters']
+    values = parameters['obstacles']
+    if len(values) % 6 != 0:
+        raise ValueError('environment obstacle list must contain groups of six values')
+    original = []
+    for index in range(0, len(values), 6):
+        center = values[index:index + 3]
+        size = values[index + 3:index + 6]
+        lower = tuple(center[axis] - 0.5 * size[axis] for axis in range(3))
+        upper = tuple(center[axis] + 0.5 * size[axis] for axis in range(3))
+        original.append((lower, upper))
+    radius = float(parameters['safety_radius'])
+    inflated = tuple(
+        (tuple(value - radius for value in lower),
+         tuple(value + radius for value in upper))
+        for lower, upper in original
+    )
+    return tuple(original), inflated
+
+
+ORIGINAL_OBSTACLES, BASE_INFLATED_OBSTACLES = load_environment_geometry()
 SCENARIOS = {
     'scenario_a_default': {
-        'goal': (8.0, 5.0, 1.5),
         'config': 'astar_evaluation_scenario_a.yaml',
         'domain_id': 110,
     },
     'scenario_b_horizontal': {
-        'goal': (8.0, 6.5, 1.5),
         'config': 'astar_evaluation_scenario_b.yaml',
         'domain_id': 111,
     },
     'scenario_c_3d': {
-        'goal': (8.0, 5.0, 4.0),
         'config': 'astar_evaluation_scenario_c.yaml',
         'domain_id': 112,
     },
@@ -389,10 +406,31 @@ def validated_reference_extrema(log_text, collector):
     )
 
 
+def trajectory_refinement_details(log_text):
+    matches = re.findall(
+        r'planned trajectory generated: raw_points=(\d+) simplified_points=(\d+) '
+        r'initial_simplified_points=(\d+) refinements=(\d+).*?'
+        r'velocity_scale=([0-9.eE+-]+) duration_scale=([0-9.eE+-]+)',
+        log_text,
+    )
+    if not matches:
+        return None
+    raw, final, initial, refinements, velocity_scale, duration_scale = matches[-1]
+    return {
+        'raw_path_points_from_generator': int(raw),
+        'initial_simplified_path_points': int(initial),
+        'final_refined_waypoints': int(final),
+        'refinement_iterations': int(refinements),
+        'selected_velocity_scale_from_generator': float(velocity_scale),
+        'selected_duration_scale': float(duration_scale),
+    }
+
+
 def write_csv(output_directory, rows):
     with (output_directory / 'trajectory.csv').open(
             'w', newline='', encoding='utf-8') as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=CSV_FIELDS)
+        writer = csv.DictWriter(
+            csv_file, fieldnames=CSV_FIELDS, lineterminator='\n')
         writer.writeheader()
         writer.writerows(rows)
 
@@ -524,13 +562,17 @@ def run_scenario(repo_root, scenario_name, scenario, output_root, timeout):
     output_directory.mkdir(parents=True, exist_ok=True)
     config_path = (
         repo_root / 'src' / 'drone_bringup' / 'config' / scenario['config'])
+    with config_path.open(encoding='utf-8') as config_file:
+        planner_parameters = yaml.safe_load(config_file)[
+            'astar_planner_node']['ros__parameters']
+    goal = tuple(float(value) for value in planner_parameters['goal'])
     environment = os.environ.copy()
     environment['ROS_DOMAIN_ID'] = str(scenario['domain_id'])
     command = [
         'ros2', 'launch', 'drone_bringup', 'static_avoidance_sim.launch.py',
         'use_rviz:=false', f'astar_config:={config_path}',
     ]
-    print(f'\n=== {scenario_name}: domain={scenario["domain_id"]} goal={scenario["goal"]} ===')
+    print(f'\n=== {scenario_name}: domain={scenario["domain_id"]} goal={goal} ===')
     launch_start = time.monotonic()
     process = subprocess.Popen(
         command,
@@ -546,7 +588,7 @@ def run_scenario(repo_root, scenario_name, scenario, output_root, timeout):
     context = Context()
     rclpy.init(context=context, domain_id=scenario['domain_id'])
     collector = EvaluationCollector(
-        scenario_name, scenario['goal'], launch_start, context)
+        scenario_name, goal, launch_start, context)
     executor = SingleThreadedExecutor(context=context)
     executor.add_node(collector)
     runtime_error = None
@@ -585,13 +627,13 @@ def run_scenario(repo_root, scenario_name, scenario, output_root, timeout):
     final_position_error = math.inf
     if collector.latest_position is not None:
         final_position_error = norm3(tuple(
-            collector.latest_position[index] - scenario['goal'][index]
+            collector.latest_position[index] - goal[index]
             for index in range(3)))
     metrics = {
         'scenario': scenario_name,
         'ros_domain_id': scenario['domain_id'],
         'start': list(START),
-        'goal': list(scenario['goal']),
+        'goal': list(goal),
         'astar_config': str(config_path.relative_to(repo_root)),
         'planning_result_receive_time_s': collector.planning_result_receive_time,
         'planning_success': collector.planning_success is True,
@@ -623,6 +665,9 @@ def run_scenario(repo_root, scenario_name, scenario, output_root, timeout):
         'nonfinite_observed': collector.nonfinite_observed,
         'runtime_error': runtime_error,
     }
+    refinement_details = trajectory_refinement_details(log_text)
+    if refinement_details is not None:
+        metrics.update(refinement_details)
     if runtime_error is not None:
         collector._record_error(runtime_error)
     validate_metrics(metrics, collector)

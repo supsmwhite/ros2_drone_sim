@@ -105,6 +105,7 @@ HoverControllerResult HoverController::compute(const HoverControllerInput & inpu
     return invalid_result(result);
   }
   result.motor_rpm = mixer_result.motor_rpm;
+  result.unclipped_motor_rpm = mixer_result.unclipped_motor_rpm;
   // 最后一道保险：即使 Mixer 自认 valid，也再次确认四个 RPM 均为有限值，
   // 避免任何未预期的浮点异常泄露到 /drone/motor_rpm_cmd。
   for (const double rpm : result.motor_rpm) {

@@ -1,0 +1,14 @@
+{
+  "enable_horizontal_integral": true,
+  "horizontal_position_ki_x": 0.15,
+  "horizontal_position_ki_y": 0.15,
+  "horizontal_integral_acceleration_limit": 0.35,
+  "horizontal_anti_windup_gain": 2.0,
+  "horizontal_integrator_unload_gain": 2.0,
+  "horizontal_integral_capture_radius": 0.5,
+  "horizontal_integral_reset_distance": 1.0,
+  "max_horizontal_acceleration": 0.8,
+  "max_tilt_angle": 0.15,
+  "horizontal_position_kp": 0.4,
+  "horizontal_velocity_kd": 1.2
+}

@@ -331,4 +331,279 @@ TEST(HorizontalPositionController, OrientationIsProperAndBodyZMatchesAcceleratio
     kTolerance);
 }
 
+drone_controller::HorizontalPositionControllerParameters integral_parameters()
+{
+  drone_controller::HorizontalPositionControllerParameters parameters;
+  parameters.position_kp = Eigen::Vector2d(0.4, 0.4);
+  parameters.velocity_kd = Eigen::Vector2d(1.2, 1.2);
+  parameters.enable_integral = true;
+  parameters.position_ki = Eigen::Vector2d(0.1, 0.1);
+  parameters.integral_acceleration_limit = 0.35;
+  parameters.anti_windup_gain = 1.0;
+  parameters.integrator_unload_gain = 2.0;
+  parameters.integral_capture_radius = 0.5;
+  parameters.max_horizontal_acceleration = 0.8;
+  parameters.max_tilt_angle = 0.15;
+  return parameters;
+}
+
+TEST(HorizontalPositionControllerIntegral, ZeroKiIsExactlyPdCompatible)
+{
+  auto parameters = integral_parameters();
+  parameters.position_ki.setZero();
+  drone_controller::HorizontalPositionController controller(parameters);
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world = Eigen::Vector2d(0.2, -0.1);
+  input.current_velocity_world = Eigen::Vector2d(0.03, -0.04);
+  input.desired_acceleration_world = Eigen::Vector2d(0.01, 0.02);
+  const auto pd = controller.compute(input);
+  const auto pi = controller.compute(input, 0.01, true);
+  EXPECT_EQ(pd.desired_acceleration_world.x(), pi.desired_acceleration_world.x());
+  EXPECT_EQ(pd.desired_acceleration_world.y(), pi.desired_acceleration_world.y());
+  EXPECT_TRUE(controller.integral_acceleration_world().isZero());
+}
+
+TEST(HorizontalPositionControllerIntegral, ConstantErrorAccumulatesAcceleration)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  for (int index = 0; index < 100; ++index) {
+    ASSERT_TRUE(controller.compute(input, 0.01, true).valid);
+  }
+  EXPECT_NEAR(controller.integral_acceleration_world().x(), 0.02, 1.0e-12);
+  EXPECT_NEAR(controller.integral_acceleration_world().y(), 0.0, kTolerance);
+}
+
+TEST(HorizontalPositionControllerIntegral, AxisSignsFollowPositionError)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world = Eigen::Vector2d(-0.2, 0.3);
+  ASSERT_TRUE(controller.compute(input, 0.1, true).valid);
+  EXPECT_LT(controller.integral_acceleration_world().x(), 0.0);
+  EXPECT_GT(controller.integral_acceleration_world().y(), 0.0);
+}
+
+TEST(HorizontalPositionControllerIntegral, IndependentIntegralVectorLimitIsEnforced)
+{
+  auto parameters = integral_parameters();
+  parameters.position_ki = Eigen::Vector2d(10.0, 10.0);
+  parameters.integral_acceleration_limit = 0.25;
+  drone_controller::HorizontalPositionController controller(parameters);
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world = Eigen::Vector2d(0.3, 0.3);
+  ASSERT_TRUE(controller.compute(input, 1.0, true).valid);
+  EXPECT_NEAR(controller.integral_acceleration_world().norm(), 0.25, kTolerance);
+}
+
+TEST(HorizontalPositionControllerIntegral, BackCalculationActsDuringSaturation)
+{
+  auto parameters = integral_parameters();
+  parameters.integral_capture_radius = 10.0;
+  drone_controller::HorizontalPositionController controller(parameters);
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 4.0;
+  const auto result = controller.compute(input, 0.1, true);
+  ASSERT_TRUE(result.valid);
+  EXPECT_TRUE(result.saturated);
+  EXPECT_TRUE(result.saturation_backcalc_active);
+  EXPECT_FALSE(result.integrator_unloading_active);
+  EXPECT_TRUE(result.anti_windup_active);
+  EXPECT_LT(controller.integral_acceleration_world().x(), 0.0);
+}
+
+TEST(HorizontalPositionControllerIntegral, OpposingErrorUnloadsStoredIntegral)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.4;
+  for (int index = 0; index < 100; ++index) {
+    controller.compute(input, 0.01, true);
+  }
+  const double stored = controller.integral_acceleration_world().x();
+  input.desired_position_world.x() = -0.4;
+  const auto result = controller.compute(input, 0.01, true);
+  EXPECT_TRUE(result.integrator_unloading_active);
+  EXPECT_TRUE(result.anti_windup_active);
+  EXPECT_GT(controller.integral_acceleration_world().x(), 0.0);
+  EXPECT_LT(controller.integral_acceleration_world().norm(), std::abs(stored));
+}
+
+TEST(HorizontalPositionControllerIntegral, RecoveringMotionAccumulatesSameSideBias)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.current_position_world.x() = 0.2;
+  input.current_velocity_world.x() = -0.1;
+  const auto result = controller.compute(input, 0.1, true);
+  EXPECT_FALSE(result.integral_frozen);
+  EXPECT_LT(controller.integral_acceleration_world().x(), 0.0);
+}
+
+TEST(HorizontalPositionControllerIntegral, ExplicitOpposingErrorUnloadingPreservesDirection)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world = Eigen::Vector2d(-0.2, 0.1);
+  controller.compute(input, 1.0, true);
+  const Eigen::Vector2d stored = controller.integral_acceleration_world();
+  ASSERT_GT(stored.norm(), 0.0);
+  EXPECT_TRUE(controller.unwind_integrator_if_opposing_error(-stored, 0.1));
+  const Eigen::Vector2d unloaded = controller.integral_acceleration_world();
+  EXPECT_LT(unloaded.norm(), stored.norm());
+  EXPECT_GT(unloaded.dot(stored), 0.0);
+  EXPECT_NEAR(unloaded.x() / unloaded.y(), stored.x() / stored.y(), kTolerance);
+}
+
+TEST(HorizontalPositionControllerIntegral, SameDirectionErrorDoesNotActivelyUnload)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  controller.compute(input, 0.5, true);
+  const double stored = controller.integral_acceleration_world().norm();
+  const auto result = controller.compute(input, 0.1, true);
+  EXPECT_FALSE(result.integrator_unloading_active);
+  EXPECT_GT(controller.integral_acceleration_world().norm(), stored);
+}
+
+TEST(HorizontalPositionControllerIntegral, ZeroErrorHoldsStoredIntegral)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  controller.compute(input, 0.5, true);
+  const Eigen::Vector2d stored = controller.integral_acceleration_world();
+  input.desired_position_world.setZero();
+  const auto result = controller.compute(input, 0.1, true);
+  EXPECT_FALSE(result.integrator_unloading_active);
+  EXPECT_TRUE(controller.integral_acceleration_world().isApprox(stored, kTolerance));
+}
+
+TEST(HorizontalPositionControllerIntegral, ZeroUnloadGainDisablesActiveUnloading)
+{
+  auto parameters = integral_parameters();
+  parameters.integrator_unload_gain = 0.0;
+  drone_controller::HorizontalPositionController controller(parameters);
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  controller.compute(input, 0.5, true);
+  const Eigen::Vector2d stored = controller.integral_acceleration_world();
+  input.desired_position_world.x() = -0.2;
+  EXPECT_FALSE(controller.unwind_integrator_if_opposing_error(
+    input.desired_position_world, 0.1));
+  EXPECT_TRUE(controller.integral_acceleration_world().isApprox(stored, kTolerance));
+}
+
+TEST(HorizontalPositionControllerIntegral, UnsaturatedOutputDoesNotActivateBackCalculation)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.1;
+  const auto result = controller.compute(input, 0.1, true);
+  ASSERT_TRUE(result.valid);
+  EXPECT_FALSE(result.saturated);
+  EXPECT_FALSE(result.saturation_backcalc_active);
+}
+
+TEST(HorizontalPositionControllerIntegral, InvalidExplicitUnloadDoesNotPolluteState)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  controller.compute(input, 0.5, true);
+  const Eigen::Vector2d stored = controller.integral_acceleration_world();
+  Eigen::Vector2d invalid_error(-1.0, std::numeric_limits<double>::quiet_NaN());
+  EXPECT_FALSE(controller.unwind_integrator_if_opposing_error(invalid_error, 0.1));
+  EXPECT_FALSE(controller.unwind_integrator_if_opposing_error(-stored, 0.0));
+  EXPECT_FALSE(controller.unwind_integrator_if_opposing_error(
+    -stored, std::numeric_limits<double>::infinity()));
+  EXPECT_TRUE(controller.integral_acceleration_world().isApprox(stored, kTolerance));
+}
+
+TEST(HorizontalPositionControllerIntegral, ResetClearsState)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  controller.compute(input, 0.1, true);
+  ASSERT_GT(controller.integral_acceleration_world().norm(), 0.0);
+  controller.reset_integrator();
+  EXPECT_TRUE(controller.integral_acceleration_world().isZero());
+}
+
+TEST(HorizontalPositionControllerIntegral, DisabledCycleFreezesExistingState)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  controller.compute(input, 0.1, true);
+  const Eigen::Vector2d stored = controller.integral_acceleration_world();
+  const auto result = controller.compute(input, 1.0, false);
+  EXPECT_TRUE(result.integral_frozen);
+  EXPECT_TRUE(controller.integral_acceleration_world().isApprox(stored, kTolerance));
+}
+
+TEST(HorizontalPositionControllerIntegral, InvalidInputDoesNotPolluteState)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  controller.compute(input, 0.1, true);
+  const Eigen::Vector2d stored = controller.integral_acceleration_world();
+  input.current_position_world.y() = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_FALSE(controller.compute(input, 0.1, true).valid);
+  EXPECT_TRUE(controller.integral_acceleration_world().isApprox(stored, kTolerance));
+}
+
+TEST(HorizontalPositionControllerIntegral, InvalidDtDoesNotPolluteState)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  controller.compute(input, 0.1, true);
+  const Eigen::Vector2d stored = controller.integral_acceleration_world();
+  for (const double dt : {0.0, -0.1, std::numeric_limits<double>::quiet_NaN()}) {
+    EXPECT_FALSE(controller.compute(input, dt, true).valid);
+    EXPECT_TRUE(controller.integral_acceleration_world().isApprox(stored, kTolerance));
+  }
+}
+
+TEST(HorizontalPositionControllerIntegral, CaptureRadiusFreezesPositionAccumulation)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.6;
+  const auto result = controller.compute(input, 1.0, true);
+  EXPECT_TRUE(result.integral_frozen);
+  EXPECT_TRUE(controller.integral_acceleration_world().isZero());
+}
+
+TEST(HorizontalPositionControllerIntegral, StableSmallErrorRemainsFiniteAndBounded)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world = Eigen::Vector2d(0.01, -0.01);
+  for (int index = 0; index < 10000; ++index) {
+    ASSERT_TRUE(controller.compute(input, 0.01, true).valid);
+  }
+  EXPECT_TRUE(controller.integral_acceleration_world().allFinite());
+  EXPECT_LE(controller.integral_acceleration_world().norm(), 0.35 + kTolerance);
+}
+
+TEST(HorizontalPositionControllerIntegral, GloballyDisabledIntegralKeepsExactPdBehavior)
+{
+  auto parameters = integral_parameters();
+  parameters.enable_integral = false;
+  drone_controller::HorizontalPositionController controller(parameters);
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world = Eigen::Vector2d(0.2, 0.1);
+  const auto pd = controller.compute(input);
+  const auto disabled = controller.compute(input, 0.2, true);
+  EXPECT_EQ(pd.desired_acceleration_world.x(), disabled.desired_acceleration_world.x());
+  EXPECT_EQ(pd.desired_acceleration_world.y(), disabled.desired_acceleration_world.y());
+  EXPECT_FALSE(disabled.integral_enabled);
+}
+
 }  // namespace

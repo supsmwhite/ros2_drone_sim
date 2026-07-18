@@ -51,6 +51,61 @@ TEST(QuadrotorModelTest, ZeroRpmFreeFall)
   EXPECT_NEAR(model.specific_force_body().norm(), 0.0, 1.0e-10);
 }
 
+TEST(QuadrotorModelTest, ZeroExternalWrenchPreservesNominalHoverBehavior)
+{
+  const QuadrotorParameters parameters = fast_motor_parameters();
+  QuadrotorModel baseline(parameters);
+  QuadrotorModel explicit_zero(parameters);
+  const double hover_rpm = nominal_hover_rpm(parameters);
+  baseline.set_motor_rpm_command({hover_rpm, hover_rpm, hover_rpm, hover_rpm});
+  explicit_zero.set_motor_rpm_command({hover_rpm, hover_rpm, hover_rpm, hover_rpm});
+  explicit_zero.set_external_wrench(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
+
+  for (int step = 0; step < 100; ++step) {
+    baseline.step(0.01);
+    explicit_zero.step(0.01);
+  }
+  EXPECT_TRUE(baseline.state().position_world.isApprox(
+    explicit_zero.state().position_world, 0.0));
+  EXPECT_TRUE(baseline.state().velocity_world.isApprox(
+    explicit_zero.state().velocity_world, 0.0));
+  EXPECT_TRUE(baseline.state().angular_velocity_body.isApprox(
+    explicit_zero.state().angular_velocity_body, 0.0));
+}
+
+TEST(QuadrotorModelTest, WorldForceProducesMatchingHorizontalAccelerationWithoutAngularAcceleration)
+{
+  QuadrotorParameters parameters = fast_motor_parameters();
+  QuadrotorModel positive(parameters);
+  QuadrotorModel negative(parameters);
+  const double hover_rpm = nominal_hover_rpm(parameters);
+  positive.set_motor_rpm_command({hover_rpm, hover_rpm, hover_rpm, hover_rpm});
+  negative.set_motor_rpm_command({hover_rpm, hover_rpm, hover_rpm, hover_rpm});
+  positive.set_external_wrench(Eigen::Vector3d(0.8, 0.0, 0.0));
+  negative.set_external_wrench(Eigen::Vector3d(-0.8, 0.0, 0.0));
+
+  positive.step(0.01);
+  negative.step(0.01);
+  EXPECT_NEAR(positive.linear_acceleration_world().x(), 0.8 / parameters.mass, 1.0e-12);
+  EXPECT_NEAR(negative.linear_acceleration_world().x(), -0.8 / parameters.mass, 1.0e-12);
+  EXPECT_NEAR(positive.state().angular_velocity_body.norm(), 0.0, 1.0e-12);
+  EXPECT_NEAR(negative.state().angular_velocity_body.norm(), 0.0, 1.0e-12);
+}
+
+TEST(QuadrotorModelTest, NonFiniteExternalWrenchIsRejected)
+{
+  QuadrotorModel model(fast_motor_parameters());
+  EXPECT_THROW(
+    model.set_external_wrench(
+      Eigen::Vector3d(std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0)),
+    std::invalid_argument);
+  EXPECT_THROW(
+    model.set_external_wrench(
+      Eigen::Vector3d::Zero(),
+      Eigen::Vector3d(0.0, std::numeric_limits<double>::infinity(), 0.0)),
+    std::invalid_argument);
+}
+
 TEST(QuadrotorModelTest, GroundContactKeepsZeroRpmVehicleStationary)
 {
   QuadrotorParameters parameters = fast_motor_parameters();
@@ -307,6 +362,131 @@ TEST(QuadrotorModelTest, MotorResponseUsesRpmLimitsAndStableFirstOrderUpdate)
 
   EXPECT_DOUBLE_EQ(motor_speed[0], 0.0);
   EXPECT_NEAR(motor_speed[1], expected_max_motor_speed, 1.0e-10);
+}
+
+TEST(QuadrotorModelTest, TranslationalDragHasCorrectDirectionMagnitudeAndZeroBehavior)
+{
+  QuadrotorParameters parameters = fast_motor_parameters();
+  parameters.enable_aerodynamic_drag = true;
+  parameters.linear_drag = Eigen::Vector3d(0.2, 0.3, 0.4);
+  parameters.quadratic_drag = Eigen::Vector3d(0.05, 0.0, 0.0);
+  QuadrotorModel model(parameters);
+
+  EXPECT_TRUE(model.calculate_aerodynamic_drag_force_world(
+    Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()).isZero(0.0));
+  const Eigen::Vector3d positive = model.calculate_aerodynamic_drag_force_world(
+    Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  const Eigen::Vector3d negative = model.calculate_aerodynamic_drag_force_world(
+    Eigen::Vector3d(-1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  const Eigen::Vector3d faster = model.calculate_aerodynamic_drag_force_world(
+    Eigen::Vector3d(2.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  EXPECT_NEAR(positive.x(), -0.25, 1.0e-12);
+  EXPECT_NEAR(negative.x(), 0.25, 1.0e-12);
+  EXPECT_GT(std::abs(faster.x()), std::abs(positive.x()));
+  EXPECT_LE(Eigen::Vector3d(2.0, -1.0, 0.5).dot(
+    model.calculate_aerodynamic_drag_force_world(
+      Eigen::Vector3d(2.0, -1.0, 0.5), Eigen::Quaterniond::Identity())), 0.0);
+}
+
+TEST(QuadrotorModelTest, DisabledAerodynamicsExactlyPreservesOldBehavior)
+{
+  QuadrotorParameters baseline_parameters = fast_motor_parameters();
+  QuadrotorParameters disabled_parameters = baseline_parameters;
+  disabled_parameters.enable_aerodynamic_drag = false;
+  disabled_parameters.linear_drag.setConstant(100.0);
+  disabled_parameters.quadratic_drag.setConstant(100.0);
+  disabled_parameters.angular_damping.setConstant(100.0);
+  QuadrotorModel baseline(baseline_parameters);
+  QuadrotorModel disabled(disabled_parameters);
+  QuadrotorState state;
+  state.velocity_world = Eigen::Vector3d(1.0, -2.0, 0.5);
+  state.angular_velocity_body = Eigen::Vector3d(0.2, -0.3, 0.4);
+  baseline.set_state(state);
+  disabled.set_state(state);
+  baseline.step(0.005);
+  disabled.step(0.005);
+  EXPECT_TRUE(baseline.state().position_world.isApprox(disabled.state().position_world, 0.0));
+  EXPECT_TRUE(baseline.state().velocity_world.isApprox(disabled.state().velocity_world, 0.0));
+  EXPECT_TRUE(baseline.state().angular_velocity_body.isApprox(
+    disabled.state().angular_velocity_body, 0.0));
+  EXPECT_TRUE(disabled.aerodynamic_drag_force_world().isZero(0.0));
+  EXPECT_TRUE(disabled.aerodynamic_damping_torque_body().isZero(0.0));
+}
+
+TEST(QuadrotorModelTest, AngularDampingOpposesRatesAndIsZeroAtRest)
+{
+  QuadrotorParameters parameters;
+  parameters.enable_aerodynamic_drag = true;
+  parameters.angular_damping = Eigen::Vector3d(0.01, 0.02, 0.04);
+  QuadrotorModel model(parameters);
+  EXPECT_TRUE(model.calculate_aerodynamic_damping_torque_body(
+    Eigen::Vector3d::Zero()).isZero(0.0));
+  const Eigen::Vector3d torque = model.calculate_aerodynamic_damping_torque_body(
+    Eigen::Vector3d(2.0, 0.0, -3.0));
+  EXPECT_NEAR(torque.x(), -0.02, 1.0e-12);
+  EXPECT_NEAR(torque.y(), 0.0, 1.0e-12);
+  EXPECT_NEAR(torque.z(), 0.12, 1.0e-12);
+}
+
+TEST(QuadrotorModelTest, DragDoesNotIncreaseTranslationalKineticEnergy)
+{
+  QuadrotorParameters parameters = fast_motor_parameters();
+  parameters.gravity = 1.0e-9;
+  parameters.enable_aerodynamic_drag = true;
+  parameters.linear_drag = Eigen::Vector3d(0.2, 0.2, 0.2);
+  parameters.quadratic_drag = Eigen::Vector3d(0.02, 0.02, 0.02);
+  QuadrotorModel model(parameters);
+  QuadrotorState state;
+  state.velocity_world = Eigen::Vector3d(2.0, -1.0, 0.0);
+  model.set_state(state);
+  const double initial_energy = 0.5 * parameters.mass * state.velocity_world.squaredNorm();
+  model.step(0.005);
+  const double final_energy = 0.5 * parameters.mass *
+    model.state().velocity_world.squaredNorm();
+  EXPECT_LE(final_energy, initial_energy + 1.0e-10);
+}
+
+TEST(QuadrotorModelTest, AerodynamicParametersRejectNegativeAndNonFiniteValues)
+{
+  QuadrotorParameters parameters;
+  parameters.linear_drag.x() = -0.1;
+  EXPECT_THROW(QuadrotorModel model(parameters), std::invalid_argument);
+  parameters.linear_drag.x() = 0.0;
+  parameters.quadratic_drag.y() = std::numeric_limits<double>::infinity();
+  EXPECT_THROW(QuadrotorModel model(parameters), std::invalid_argument);
+  parameters.quadratic_drag.y() = 0.0;
+  parameters.angular_damping.z() = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_THROW(QuadrotorModel model(parameters), std::invalid_argument);
+}
+
+TEST(QuadrotorModelTest, ExtremeFiniteVelocityProducesFiniteDrag)
+{
+  QuadrotorParameters parameters;
+  parameters.enable_aerodynamic_drag = true;
+  parameters.linear_drag.setConstant(0.3);
+  parameters.quadratic_drag.setConstant(0.3);
+  QuadrotorModel model(parameters);
+  const Eigen::Vector3d force = model.calculate_aerodynamic_drag_force_world(
+    Eigen::Vector3d(1.0e200, -1.0e200, 1.0e200), Eigen::Quaterniond::Identity());
+  EXPECT_TRUE(force.allFinite());
+  EXPECT_LT(force.x(), 0.0);
+  EXPECT_GT(force.y(), 0.0);
+}
+
+TEST(QuadrotorModelTest, AerodynamicDragDoesNotDisturbStationaryHoverBalance)
+{
+  QuadrotorParameters parameters = fast_motor_parameters();
+  parameters.enable_aerodynamic_drag = true;
+  parameters.linear_drag.setConstant(0.3);
+  parameters.quadratic_drag.setConstant(0.1);
+  parameters.angular_damping.setConstant(0.02);
+  QuadrotorModel model(parameters);
+  const double hover_rpm = nominal_hover_rpm(parameters);
+  model.set_motor_rpm_command({hover_rpm, hover_rpm, hover_rpm, hover_rpm});
+  model.step(0.005);
+  EXPECT_NEAR(model.linear_acceleration_world().norm(), 0.0, 1.0e-10);
+  EXPECT_TRUE(model.aerodynamic_drag_force_world().isZero(0.0));
+  EXPECT_TRUE(model.aerodynamic_damping_torque_body().isZero(0.0));
 }
 
 }  // namespace

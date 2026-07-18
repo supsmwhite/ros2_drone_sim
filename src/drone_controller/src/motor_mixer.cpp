@@ -95,11 +95,20 @@ MixerResult MotorMixer::mix(const WrenchCommand & command) const
     if (!std::isfinite(motor_thrust[index])) {
       return invalid_result();
     }
+    const double signed_omega = std::copysign(
+      std::sqrt(std::abs(motor_thrust[index]) / parameters_.thrust_coefficient),
+      motor_thrust[index]);
+    result.unclipped_motor_rpm[index] = signed_omega * 60.0 / kTwoPi;
+    if (!std::isfinite(result.unclipped_motor_rpm[index])) {
+      return invalid_result();
+    }
+
     // 单电机解得的推力也可能为负（例如力矩请求过大且总推力过小时），
     // 同样钳零并标记饱和，保证下面 sqrt 不会对负数开方。
     if (motor_thrust[index] < 0.0) {
       motor_thrust[index] = 0.0;
       result.saturated = true;
+      result.motor_clipped[index] = true;
     }
 
     // 第 3 步：由单电机推力反推转速：F=k_F*omega^2 → omega=sqrt(F/k_F)，
@@ -114,6 +123,7 @@ MixerResult MotorMixer::mix(const WrenchCommand & command) const
     const double clamped_rpm = std::clamp(rpm, parameters_.min_rpm, parameters_.max_rpm);
     if (clamped_rpm != rpm) {
       result.saturated = true;
+      result.motor_clipped[index] = true;
     }
     result.motor_rpm[index] = clamped_rpm;
   }

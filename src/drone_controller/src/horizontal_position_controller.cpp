@@ -34,11 +34,22 @@ HorizontalPositionController::HorizontalPositionController(
 {
   if (!vector_is_finite(parameters_.position_kp) ||
     !vector_is_finite(parameters_.velocity_kd) ||
+    !vector_is_finite(parameters_.position_ki) ||
     (parameters_.position_kp.array() < 0.0).any() ||
     (parameters_.velocity_kd.array() < 0.0).any() ||
+    (parameters_.position_ki.array() < 0.0).any() ||
     !std::isfinite(parameters_.gravity) || parameters_.gravity <= 0.0 ||
     !std::isfinite(parameters_.max_horizontal_acceleration) ||
     parameters_.max_horizontal_acceleration <= 0.0 ||
+    !std::isfinite(parameters_.integral_acceleration_limit) ||
+    parameters_.integral_acceleration_limit <= 0.0 ||
+    parameters_.integral_acceleration_limit >= parameters_.max_horizontal_acceleration ||
+    !std::isfinite(parameters_.anti_windup_gain) ||
+    parameters_.anti_windup_gain < 0.0 ||
+    !std::isfinite(parameters_.integrator_unload_gain) ||
+    parameters_.integrator_unload_gain < 0.0 ||
+    !std::isfinite(parameters_.integral_capture_radius) ||
+    parameters_.integral_capture_radius <= 0.0 ||
     !std::isfinite(parameters_.max_tilt_angle) ||
     parameters_.max_tilt_angle <= 0.0 || parameters_.max_tilt_angle >= kHalfPi)
   {
@@ -90,6 +101,16 @@ HorizontalPositionControllerResult HorizontalPositionController::compute(
   }
 
   HorizontalPositionControllerResult result;
+  result.proportional_acceleration_world =
+    parameters_.position_kp.cwiseProduct(
+    input.desired_position_world - input.current_position_world);
+  result.derivative_acceleration_world =
+    parameters_.velocity_kd.cwiseProduct(
+    input.desired_velocity_world - input.current_velocity_world);
+  result.feedforward_acceleration_world = input.desired_acceleration_world;
+  result.raw_acceleration_world =
+    result.proportional_acceleration_world + result.derivative_acceleration_world +
+    result.feedforward_acceleration_world;
   long double scale = 1.0L;
   if (raw_norm > static_cast<long double>(acceleration_limit)) {
     scale = static_cast<long double>(acceleration_limit) / raw_norm;
@@ -161,6 +182,120 @@ HorizontalPositionControllerResult HorizontalPositionController::compute(
     return invalid_result();
   }
   return result;
+}
+
+HorizontalPositionControllerResult HorizontalPositionController::compute(
+  const HorizontalPositionControllerInput & input, const double dt,
+  const bool integrator_enabled)
+{
+  if (!std::isfinite(dt) || dt <= 0.0) {
+    return invalid_result();
+  }
+
+  if (!parameters_.enable_integral) {
+    return compute(input);
+  }
+
+  HorizontalPositionControllerInput provisional_input = input;
+  provisional_input.desired_acceleration_world += integral_acceleration_world_;
+  HorizontalPositionControllerResult provisional =
+    static_cast<const HorizontalPositionController &>(*this).compute(provisional_input);
+  if (!provisional.valid) {
+    return provisional;
+  }
+
+  const Eigen::Vector2d position_error =
+    input.desired_position_world - input.current_position_world;
+  const bool integrator_unloading_active =
+    integrator_enabled && unwind_integrator_if_opposing_error(position_error, dt);
+
+  // Re-evaluate saturation after deterministic unloading because the integral
+  // contribution used by the provisional result may have changed.
+  if (integrator_unloading_active) {
+    provisional_input.desired_acceleration_world =
+      input.desired_acceleration_world + integral_acceleration_world_;
+    provisional = static_cast<const HorizontalPositionController &>(*this).compute(
+      provisional_input);
+    if (!provisional.valid) {
+      return provisional;
+    }
+  }
+  const bool inside_capture_radius =
+    position_error.norm() <= parameters_.integral_capture_radius;
+  const bool integrate_position_error =
+    integrator_enabled && !integrator_unloading_active &&
+    inside_capture_radius && !provisional.saturated;
+  const Eigen::Vector2d saturation_residual =
+    provisional.desired_acceleration_world - provisional.raw_acceleration_world;
+  const bool saturation_anti_windup_active =
+    integrator_enabled && provisional.saturated &&
+    parameters_.anti_windup_gain > 0.0 &&
+    saturation_residual.squaredNorm() > 0.0;
+  Eigen::Vector2d candidate_integral = integral_acceleration_world_;
+  if (integrator_enabled) {
+    Eigen::Vector2d integral_derivative = Eigen::Vector2d::Zero();
+    if (integrate_position_error) {
+      integral_derivative += parameters_.position_ki.cwiseProduct(position_error);
+    }
+    if (saturation_anti_windup_active) {
+      integral_derivative += parameters_.anti_windup_gain * saturation_residual;
+    }
+    candidate_integral += integral_derivative * dt;
+    const double candidate_norm = candidate_integral.norm();
+    if (!vector_is_finite(candidate_integral) || !std::isfinite(candidate_norm)) {
+      return invalid_result();
+    }
+    if (candidate_norm > parameters_.integral_acceleration_limit) {
+      candidate_integral *= parameters_.integral_acceleration_limit / candidate_norm;
+    }
+  }
+
+  HorizontalPositionControllerInput final_input = input;
+  final_input.desired_acceleration_world += candidate_integral;
+  HorizontalPositionControllerResult result =
+    static_cast<const HorizontalPositionController &>(*this).compute(final_input);
+  if (!result.valid) {
+    return result;
+  }
+  integral_acceleration_world_ = candidate_integral;
+  result.integral_acceleration_world = integral_acceleration_world_;
+  result.feedforward_acceleration_world = input.desired_acceleration_world;
+  result.raw_acceleration_world =
+    result.proportional_acceleration_world + result.derivative_acceleration_world +
+    result.integral_acceleration_world + result.feedforward_acceleration_world;
+  result.integral_enabled = true;
+  result.integral_frozen = !integrate_position_error;
+  result.saturation_backcalc_active = saturation_anti_windup_active;
+  result.integrator_unloading_active = integrator_unloading_active;
+  result.anti_windup_active =
+    saturation_anti_windup_active || integrator_unloading_active;
+  return result;
+}
+
+void HorizontalPositionController::reset_integrator()
+{
+  integral_acceleration_world_.setZero();
+}
+
+const Eigen::Vector2d & HorizontalPositionController::integral_acceleration_world() const
+{
+  return integral_acceleration_world_;
+}
+
+bool HorizontalPositionController::unwind_integrator_if_opposing_error(
+  const Eigen::Vector2d & position_error, const double dt)
+{
+  if (!parameters_.enable_integral || !vector_is_finite(position_error) ||
+    !std::isfinite(dt) || dt <= 0.0 || parameters_.integrator_unload_gain <= 0.0 ||
+    integral_acceleration_world_.squaredNorm() <=
+    kMinimumVectorNorm * kMinimumVectorNorm ||
+    position_error.dot(integral_acceleration_world_) >= 0.0)
+  {
+    return false;
+  }
+  const double scale = std::max(0.0, 1.0 - parameters_.integrator_unload_gain * dt);
+  integral_acceleration_world_ *= scale;
+  return true;
 }
 
 }  // namespace drone_controller

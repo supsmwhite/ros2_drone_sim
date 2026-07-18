@@ -1,412 +1,319 @@
 # ROS2 四旋翼无人机仿真系统
 
-## 目录
-
-- [项目简介](#项目简介)
-- [当前阶段](#当前阶段)
-- [总体方案](#总体方案)
-- [已实现功能](#已实现功能)
-- [已验证场景](#已验证场景)
-- [待完成场景](#待完成场景)
-- [项目结构](#项目结构)
-- [环境与依赖](#环境与依赖)
-- [编译与运行](#编译与运行)
-- [目标发布](#目标发布)
-- [安全保护与参数基线](#安全保护与参数基线)
-- [当前限制](#当前限制)
-- [文档说明](#文档说明)
-
 ## 项目简介
 
-本项目是一个基于 Ubuntu 22.04 和 ROS2 Humble 的小型四旋翼无人机仿真系统。系统以四个电机目标 RPM 为动力学输入，计算无人机的位置、速度、姿态和角速度，并通过 ROS2 Topic、TF 和 RViz2 形成可观察的闭环仿真环境。
+这是一个运行于 Ubuntu 22.04、ROS2 Humble 的四旋翼闭环仿真项目。系统使用四电机目标 RPM 驱动刚体动力学，覆盖位置、高度和姿态控制，并通过 Odom、IMU、TF 与 RViz2 展示飞行状态。
 
-核心算法与 ROS2 通信层分离，动力学、控制器、Motor Mixer、多目标点任务管理、分段五次轨迹、静态环境碰撞检查、三维栅格 A*、视线简化、安全规划轨迹生成、静态避障执行与有序多目标静态避障均可独立测试。
+项目已形成从任务输入、三维静态规划、安全连续轨迹到跟踪执行的完整链路，也支持多目标任务、RViz 三维目标编辑，以及质心处外部集中扰力和抗扰恢复实验。算法核心与 ROS2 节点适配层分离，关键模块具有单元、集成和真实 Launch 端到端测试。
 
-## 当前阶段
+## 当前里程碑
 
-动力学、高度/yaw、单目标三维位置闭环、第一版多目标点顺序飞行、连续轨迹生成与跟踪、静态三维 AABB 环境、统一碰撞查询、三维 26 邻域 A*、确定性视线简化、安全规划轨迹生成、单目标静态避障和有序多目标静态避障均已完成。新任务节点从实际地面 Odom 起飞，在空中导航地板以上逐段规划，稳定到达当前目标后才切换下一目标。三个独立静态避障场景仍保留可复现评测、结构化指标和数据曲线。
+当前阶段已完成：
 
-## 总体方案
+- 基础悬停与单目标三维位置控制；
+- 无障碍多目标顺序飞行；
+- 分段五次连续轨迹生成与跟踪；
+- 有限三维静态环境和统一碰撞检查；
+- 三维 26 邻域 A*；
+- 路径简化、安全连续轨迹生成及动态约束验证；
+- 单目标和多目标静态避障；
+- RViz 三维目标编辑、预览、预检和执行；
+- 质心处外部集中等效力注入与可视化；
+- 水平位置受限积分、积分卸载和 anti-windup；
+- 自动测试、可复现实验工具和结构化结果记录。
 
-### 当前已实现运行链路
-
-```text
-mission.yaml → waypoint_manager_node
-  ├─→ /drone/mission/current_waypoint_index
-  ├─→ /drone/mission/complete
-  └─→ /drone/goal
-  ↓
-position_controller_node
-  ↓
-PositionController
-  ├─→ HorizontalPositionController
-  └─→ HoverController
-       ├─→ AltitudeController
-       ├─→ AttitudeController
-       └─→ MotorMixer
-  ↓
-/drone/motor_rpm_cmd
-  ↓
-quadrotor_dynamics_node
-  ↓
-QuadrotorModel
-  ↓
-/drone/odom、/drone/imu、/drone/path、map -> base_link TF
-  ↓
-控制反馈 + RViz2 可视化
-```
-
-连续轨迹是独立的第二条上游链路：
-
-```text
-trajectory.yaml → trajectory_mission_node ← /drone/odom
-  ├─→ /drone/trajectory_setpoint (position/velocity/acceleration/yaw)
-  ├─→ /drone/trajectory/current_segment
-  ├─→ /drone/trajectory/complete
-  └─→ /drone/reference_path
-  ↓
-position_controller_node (setpoint_source=trajectory)
-  ↓
-同一 PositionController、HoverController、Mixer 和动力学闭环
-```
-
-静态环境是与控制链路解耦的监测链路：
-
-```text
-environment.yaml → static_environment_node
-  ├─→ /drone/environment/markers
-  └─← /drone/odom → /drone/environment/in_collision
-
-StaticEnvironment + CollisionChecker
-  ├─→ 安全半径收缩后的工作空间
-  ├─→ 安全半径膨胀后的 AABB 障碍物
-  └─→ 点与线段碰撞查询
-```
-
-规划轨迹生成与执行链路：
-
-```text
-/drone/planned_path（A* 原始栅格路径）
-  ↓ PathSimplifier（0.35 m 有效规划半径）
-/drone/simplified_path（视线简化折线）
-  ↓ PlannedTrajectoryBuilder + PiecewiseQuinticTrajectory
-  ↓ 多候选中间速度比例、动态约束和密集碰撞验证
-/drone/reference_path（连续参考轨迹）
-  ↓ planned_trajectory_node（准备起点、稳态时间采样、Odom 失效时暂停）
-/drone/trajectory_setpoint
-  ↓ position_controller_node → /drone/motor_rpm_cmd → quadrotor_dynamics_node
-```
-
-`execution_enabled=false` 时链路止于 `/drone/reference_path`，保持只显示行为；只有静态避障 Launch 显式设为 `true` 时才发布执行 setpoint。
-
-有序多目标静态避障使用一条独占执行链路：
-
-```text
-首次有效 /drone/odom
-  → 原地垂直起飞到 z=1.5 m（使用原环境与 0.35 m 有效半径检查）
-  → 从稳定后的实际 Odom 规划当前目标
-  → AStarPlanner → PathSimplifier → PlannedTrajectoryBuilder
-  → /drone/trajectory_setpoint → PositionController → 动力学
-  → 目标处停稳 1.0 s → 从新的实际 Odom 规划下一目标
-```
-
-`multi_goal_static_avoidance_node` 直接组合已有三个纯算法类，不同时启动 `astar_planner_node`、`planned_trajectory_node`、固定轨迹任务或 waypoint 任务。地面只用于动力学接触与起飞；A* 空中导航工作空间的安全最低高度为 `0.50 m`，不会从地面状态直接开始规划。
-
-节点将 Odom 的完整机体系线速度旋转到世界系后用于 x/y/z 反馈。目标 roll/pitch 仍被忽略，只使用目标四元数中的 yaw；期望 roll/pitch 由水平位置控制器生成。
-
-### 最终目标链路
-
-```text
-三维目标点或多目标点
-  ↓
-地图、路径规划与避障
-  ↓
-安全轨迹或 Waypoint
-  ↓
-x/y/z 位置控制 + 姿态控制
-  ↓
-Motor Mixer 与四电机 RPM
-  ↓
-四旋翼动力学
-  ↓
-状态反馈、RViz2 可视化与实验评测
-```
-
-## 已实现功能
-
-- 六个 `ament_cmake` package：`drone_msgs`、`drone_dynamics`、`drone_controller`、`drone_mission`、`drone_planning`、`drone_bringup`；
-- 自定义 `drone_msgs/msg/MotorRPM` 消息；
-- 自定义 `drone_msgs/msg/TrajectorySetpoint` 消息，包含世界系位置、速度、加速度和 yaw；
-- 四旋翼刚体动力学、电机一阶响应、RPM 限幅、X 型推力与力矩模型；
-- 可配置的简化水平地面约束；
-- `/drone/odom`、`/drone/imu`、`/drone/path` 和 `map -> base_link` TF；
-- 与动力学符号一致的 Motor Mixer、姿态/角速度控制器和高度控制器；
-- 高度控制器、姿态控制器和 Mixer 组成的 `HoverController`，并已接入 ROS2 控制节点；
-- 世界系 x/y 位置和速度反馈的 `HorizontalPositionController`；
-- 组合水平位置与现有 Hover 链路的 `PositionController`；
-- 水平与高度控制链路支持三维期望加速度前馈，默认 `pose_goal` 模式保持原有零速度、零加速度目标语义；
-- 使用真实控制器、Mixer、电机一阶响应和刚体动力学的 20 秒姿态闭环稳定性测试；
-- 通过真实 ROS2 Launch、节点和 Topic 的可重复单目标三维端到端 smoke test；
-- 与 ROS2 无关的顺序 `WaypointManager`、ROS2 任务节点、任务状态 Topic 和参数化五点任务；
-- 通过真实 ROS2 节点和 Topic 的可重复多目标点端到端回归测试；
-- 与 ROS2 无关的 C² 分段五次轨迹、稳态时间驱动的轨迹任务节点，以及核对连续性、跟踪误差和完成保持的真实 ROS2 端到端回归测试；
-- 与 ROS2 无关的有限三维工作空间、静态 AABB 障碍物和保守球形无人机碰撞模型，支持点与三维线段查询；
-- 静态环境 ROS2 节点、瞬态本地 MarkerArray、实时碰撞状态监测和独立 Domain 96 集成测试；
-- 与 ROS2 无关的三维 26 邻域 A*，对候选节点和每条邻接边复用 `CollisionChecker`，并提供独立 Domain 97 规划集成测试；
-- 与 ROS2 无关的确定性最远可见点 `PathSimplifier`，严格验证输入点、原始边和所有简化边；
-- `PiecewiseQuinticTrajectory` 支持兼容式中间速度缩放，默认 `1.0` 保持旧行为，`0.0` 提供逐段直线且 waypoint 停速的确定性保底；
-- 与 ROS2 无关的 `PlannedTrajectoryBuilder`，依次尝试多个速度比例，只接受通过有限性、速度、加速度、采样点和采样连线碰撞检查的轨迹；
-- `/drone/simplified_path`、安全 `/drone/reference_path` 和轨迹生成指标的 transient-local 发布，以及独立 Domain 98 集成测试；
-- `planned_trajectory_node` 的起点准备、稳态时钟执行、Odom 超时暂停、结束保持和段/完成状态发布；
-- `static_avoidance_sim.launch.py` 的唯一 A*→规划轨迹→控制器→动力学链路，以及独立 Domain 99 真实端到端安全回归；
-- 三个独立规划配置和 `tools/evaluate_static_avoidance.py` 顺序评测工具；每个场景使用独立 ROS Domain，保存 JSON、CSV、XY 路径、位置跟踪、跟踪误差和净空曲线，不加入默认 `colcon test`；
-- `multi_goal_static_avoidance_node` 的首次 Odom 起飞检查、导航地板、有序逐段规划、目标停稳切换、Odom 超时暂停和最终持续保持；
-- `multi_goal_static_avoidance_sim.launch.py` 的唯一多目标规划执行链路，以及独立 Domain 113 三目标真实闭环安全回归；
-- MotorRPM 命令超时保护；
-- Xacro 四旋翼模型、robot_state_publisher 和 RViz2 基础可视化；
-- `basic_sim.launch.py` 一键启动动力学、控制器、机器人模型发布和 RViz2；`mission_sim.launch.py` 启动离散顺序任务，`trajectory_sim.launch.py` 启动连续轨迹任务，`environment_sim.launch.py` 启动静态环境监测，`planning_sim.launch.py` 再增加一次性 A* 规划与路径显示。
-
-## 已验证场景
-
-- 零 RPM 自由落体，以及正常 Launch 下零 RPM 保持在简化地面；
-- 对称推力和独立 roll、pitch、yaw 力矩方向；
-- 从地面自动起飞到 `1.5 m` 并稳定悬停；
-- 高度在 `0 → 1.5 m`、`1.5 → 2.0 m`、`2.0 → 1.5 m` 间自动升降；
-- yaw 转向能够快速接近目标，用户在 RViz2 中确认基本无超调；
-- `0.02 rad` 正负 roll/pitch 固定命令和水平姿态均通过 20 秒完整闭环测试；
-- 原地 `1.5 m` 悬停、`(0.5,0,1.5)` 小目标和 `(2,1,1.5)` 单目标三维飞行均通过真实 ROS2 数值验收；
-- `(2,1,1.5)` 连续观察 27 秒后的三维误差约 `1.37e-7 m`，水平速度约 `7.84e-8 m/s`，无非有限值、姿态发散、RPM 边界值或日志饱和；
-- 可重复的 ROS2 单目标端到端 smoke test 已验证 `(2,1,1.5)` 连续满足位置和速度条件 `2.0 s` 后继续观测 `3.0 s`，且没有离开稳定区域；
-- 五点任务 `(0,0,1.5,0) → (2,0,1.5,0) → (2,1.5,2.0,π/2) → (0,1.5,1.5,π) → (0,0,1.5,0)` 已按索引 `0→1→2→3→4` 完成；自动回归中最终误差 `0.034256 m`、线速度 `0.021543 m/s`，完成后仍持续发布最终目标；
-- 同一五点的连续轨迹回归中，准备悬停后约 `3.576 s` 开始轨迹，约 `27.576 s` 完成；参考最大速度 `0.558524 m/s`、最大加速度 `0.271903 m/s²`，采样最大跟踪误差 `0.030507 m`，最终误差 `0.002669 m`、速度 `0.001033 m/s`；四段边界均通过位置、速度和加速度连续性检查，三个中间点的参考速度均非零；
-- 静态环境碰撞检查已验证安全点、膨胀障碍物、收缩工作空间、非有限输入，以及线段穿越、相切、角点、平行、端点命中、零长度和极短线段；ROS2 集成测试验证了 Marker 分类以及安全、碰撞、恢复和非法 Odom 抑制发布；
-- 默认规划演示环境约为 `10 × 10 × 5.5 m`，包含两个错开的墙状障碍物并保持 `0.25 m` 安全半径；标准起点 `(0,0,1.5)` 和终点 `(8,5,1.5)` 均安全，起终点直线发生碰撞，同时已用一条墙顶上方的已知安全折线证明场景可行；该折线不是规划结果；
-- 默认场景的三维 26 邻域 A* 已找到安全原始栅格路径；环境显示使用 `0.25 m` 基础无人机安全半径，规划再增加 `0.10 m` 的规划与执行预留裕量，因此 A* 按 `0.35 m` 有效规划半径检查候选点和相邻边；确定性结果为 `40` 个路径点、长度 `11.978138 m`、扩展 `6013` 个节点，最大高度 `1.6 m`；
-- 默认原始路径可确定性简化为 `5` 个点，折线长度由 `11.978138 m` 降为 `11.175430 m`；连续轨迹选择 `velocity_scale=1.00`，总时长 `31.929800 s`，采样最大速度 `0.534070 m/s`、最大加速度 `0.346694 m/s²`，`1598` 个验证采样及其相邻连线均通过 `0.35 m` 有效规划碰撞模型；
-- 用户已在 RViz2 中人工确认黄色 A* 原始栅格路径、粉色视线简化折线和蓝色连续参考轨迹能够同时显示；蓝色连续参考轨迹整体平滑，符合当前路径轨迹化预期。视觉观察不用于精确测量安全距离，几何安全仍以自动碰撞验证为依据；
-- Domain 99 静态避障执行回归中，无人机先在 `(0,0,1.5)` 稳定，再按 `0→1→2→3` 执行规划轨迹并到达 `(8,5,1.5)`；采样最大跟踪误差 `0.030705 m`、对基础 `0.25 m` 膨胀障碍物的最小采样净空 `0.168625 m`、最终误差 `0.005969 m`、最终速度 `0.001466 m/s`，完成后继续保持至少 `3.0 s`，控制器日志未出现饱和；
-- 用户已在 RViz2 中观察静态避障完整执行，整体运动和绕障效果符合预期。精确碰撞净空、跟踪误差和最终误差仍以自动回归指标为准；
-- 静态避障多场景评测结果如下。三场景均为 start `(0,0,1.5)`，实际 Odom 点和连续线段均未进入基础 `0.25 m` 膨胀障碍物，环境碰撞为 false，控制器 `saturated=true` 次数为 0：
-
-| 场景 | goal | 原始路径（点 / m） | 简化路径（点 / m） | 轨迹（s / scale） | 参考峰值（m/s / m/s²） | 最大跟踪误差 / 最小净空（m） | 最终误差 / 速度（m / m/s） |
-|---|---|---:|---:|---:|---:|---:|---:|
-| A 默认侧向 | `(8,5,1.5)` | `40 / 11.978138` | `5 / 11.175430` | `31.929800 / 1.00` | `0.534070 / 0.346694` | `0.031085 / 0.168657` | `0.005925 / 0.001458` |
-| B 水平终点 | `(8,6.5,1.5)` | `40 / 11.771031` | `4 / 10.903096` | `31.151703 / 1.00` | `0.536058 / 0.187298` | `0.029715 / 0.224399` | `0.004722 / 0.001580` |
-| C 三维高度 | `(8,5,4.0)` | `36 / 11.382612` | `3 / 10.310132` | `29.457521 / 1.00` | `0.540075 / 0.146427` | `0.030504 / 0.314797` | `0.001930 / 0.000818` |
-
-- Domain 113 有序多目标回归从实际地面 Odom 原地起飞，依次到达 P1 `(4,0,1.5)`、P2 `(8,5,1.5)`、P3 `(4,6.5,3.5)`；目标索引严格为 `0→1→2`，已访问计数严格为 `0→1→2→3`，每段均从稳定后的实际 Odom 重新规划。三段最大同期跟踪误差分别为 `0.016959/0.007322/0.008700 m`，实际最小采样净空 `0.147244 m`，最终误差 `0.001617 m`、最终速度 `0.000730 m/s`；全程无碰撞、无非有限值，控制器日志未出现 `saturated=true`，完成后消息流和最终 setpoint 继续保持至少 `3.0 s`；
-- 用户已在 RViz2 中运行默认四目标任务，确认无人机能够依次到达配置中的四个目标点；每到达一个目标并稳定后，系统自动从当前实际位置规划并执行下一段，最终目标完成后持续悬停。该人工观察用于确认任务流程和可视化表现；跟踪误差、碰撞净空、最终误差和控制饱和仍以自动测试数据为准；
-- RViz2 人工运行已确认三维工作空间边界、两个原始障碍物和透明安全膨胀区域可见，无人机模型与环境处于同一 `map` 坐标系；初始位置的碰撞状态为 `false`；
-- RViz2 显示无人机模型、TF、历史 Path 和目标 Pose；
-- 控制器退出后约 `0.30 s` 触发 MotorRPM watchdog，目标转速归零；控制器重启并重新发送目标后闭环恢复；
-- 当前工作区最近一次完整测试结果为 `209 tests, 0 errors, 0 failures, 0 skipped`。
-
-## 待完成场景
-
-- 实验结果整理与最终项目报告；
-- 长时间、扰动和极限工况稳定性验证；
-- 局部规划、动态障碍与在线重规划属于可选扩展，不作为当前主线必做内容。
-
-`/drone/path` 是动力学实际状态的历史位姿；`/drone/planned_path` 是 A* 原始栅格路径；`/drone/simplified_path` 是视线简化折线；`/drone/reference_path` 是连续参考轨迹。四者用途不同；只显示 Launch 不驱动无人机，静态避障 Launch 才启用规划轨迹执行。
-
-## 项目结构
-
-```text
-ros2_drone_sim/
-├── README.md
-├── docs/
-│   ├── AI_CONTEXT.md
-│   └── ai_usage.md
-├── src/
-│   ├── drone_msgs/
-│   ├── drone_dynamics/
-│   ├── drone_controller/
-│   ├── drone_mission/
-│   ├── drone_planning/
-│   └── drone_bringup/
-├── tools/
-├── results/
-└── report/
-```
-
-- `drone_msgs`：项目自定义 ROS2 消息；
-- `drone_dynamics`：纯动力学模型、ROS2 动力学节点及单元测试；
-- `drone_controller`：高度、姿态、Mixer、HoverController 和 ROS2 控制节点；
-- `drone_mission`：与 ROS2 无关的顺序 WaypointManager、C² 分段五次轨迹、对应任务节点及单元测试；
-- `drone_planning`：静态 AABB 环境、点/线段碰撞检查、A*、视线简化、安全轨迹组合层及对应 ROS2 节点；
-- `drone_bringup`：参数、Launch、Xacro 和 RViz2 配置；
-- `tools`：辅助测试工具；
-- `results`、`report`：实验结果和报告预留目录。
-
-## 环境与依赖
-
-已验证环境：
-
-- Ubuntu 22.04.5；
-- ROS2 Humble；
-- g++ 11.4.0，C++17；
-- CMake 3.22.1；
-- Eigen3 3.4.0；
-- colcon、rosdep、ament_cmake、tf2、RViz2 和常用 ROS2 消息包。
-
-## 编译与运行
+## 快速开始
 
 ```bash
 cd ~/ros2_drone_sim
 source /opt/ros/humble/setup.bash
-
-colcon build --symlink-install \
-  --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-
+colcon build --symlink-install
 source install/setup.bash
+```
+
+常用一键入口：
+
+```bash
 ros2 launch drone_bringup basic_sim.launch.py
 ```
 
-默认 Launch 会启动：
-
-- `/quadrotor_dynamics_node`；
-- `/position_controller_node`；
-- `/robot_state_publisher`；
-- `/rviz2`。
-
-无图形界面启动：
-
-```bash
-ros2 launch drone_bringup basic_sim.launch.py use_rviz:=false
-```
-
-启动默认五点顺序任务（默认包含 RViz2）：
+基础动力学、位置控制器、模型和 RViz2；等待 `/drone/goal`。
 
 ```bash
 ros2 launch drone_bringup mission_sim.launch.py
 ```
 
-任务配置位于 `src/drone_bringup/config/mission.yaml`，无图形界面时可增加 `use_rviz:=false`。
-
-启动默认五点连续轨迹（默认包含 RViz2）：
+运行无障碍离散多目标顺序任务。
 
 ```bash
 ros2 launch drone_bringup trajectory_sim.launch.py
 ```
 
-轨迹配置位于 `src/drone_bringup/config/trajectory.yaml`，默认四段各 `6.0 s`。节点先在 P0 连续稳定 `1.0 s`，再按稳态时钟推进轨迹；Odom 超时或无效时暂停轨迹时间。无图形界面时同样可增加 `use_rviz:=false`。
-
-启动静态三维环境（不会自动启动 waypoint 或轨迹任务）：
-
-```bash
-ros2 launch drone_bringup environment_sim.launch.py
-```
-
-环境配置位于 `src/drone_bringup/config/environment.yaml`。默认 workspace 为 `[-1,9] × [-2.5,7.5] × [-0.5,5] m`，两个错开的墙状障碍物为 `(0,0,1.5) → (8,5,1.5)`、`0.25 m` 栅格分辨率的 A* 场景预留周围和上方通道；起终点和分辨率只配置在 `astar.yaml`，没有复制进环境参数。`/drone/environment/markers` 显示工作空间、原始障碍物和透明的安全膨胀区；`/drone/environment/in_collision` 只在收到有限且未超时的 Odom 时发布。无图形界面时可增加 `use_rviz:=false`。
-
-启动默认三维 A* 规划与显示：
-
-```bash
-ros2 launch drone_bringup planning_sim.launch.py
-```
-
-规划参数位于 `src/drone_bringup/config/astar.yaml`；环境几何仍只来自共用的 `environment.yaml`。静态环境 Marker 和碰撞状态使用 `0.25 m` 基础无人机安全半径，A* 通过 `planning_margin=0.10 m` 使用 `0.35 m` 有效规划半径，为后续轨迹跟踪和执行预留额外净空。节点启动时规划一次，并以 transient-local QoS 发布 `/drone/planned_path`、`/drone/planning/success` 和 `/drone/planning/expanded_nodes`。当前发布的是未经简化或平滑的原始栅格路径，无人机不会自动沿该路径飞行。
-
-启动原始路径、简化折线和经过验证的连续参考轨迹显示：
-
-```bash
-ros2 launch drone_bringup planned_trajectory_sim.launch.py
-```
-
-规划轨迹配置位于 `src/drone_bringup/config/planned_trajectory.yaml`，环境几何与安全参数继续来自 `environment.yaml`，规划裕量继续来自 `astar.yaml`，没有在新配置中复制。节点只处理收到的第一条合法原始路径；默认以 `0.35 m/s` 名义速度生成各段时间，依次尝试 `[1.0, 0.75, 0.5, 0.25, 0.0]`，并以 `0.02 s` 周期验证速度、加速度和 `0.35 m` 有效半径下的碰撞安全。`0.35 m/s` 是在保持明确分段时间公式和 `0.35 m/s²` 加速度上限不变时的默认可行值；`0.45 m/s` 在默认简化路径上实测峰值加速度约 `0.573 m/s²`，无法通过同一验收约束。默认 `execution_enabled=false`，因此该命令不发布 `/drone/trajectory_setpoint`。
-
-启动完整静态避障执行（默认包含 RViz2）：
+运行无障碍分段五次连续轨迹任务。
 
 ```bash
 ros2 launch drone_bringup static_avoidance_sim.launch.py
 ```
 
-该 Launch 不包含固定五点的 `trajectory_sim.launch.py`，而是直接启动动力学、轨迹模式控制器、robot_state_publisher、可选 RViz2、静态环境、A* 和启用执行的 `planned_trajectory_node`。无人机先持续跟踪规划起点；位置误差 `<0.20 m`、线速度 `<0.15 m/s` 连续保持 `1.0 s` 后才启动轨迹时钟。Odom 无效或超过 `0.25 s` 时轨迹时间暂停，结束后持续发布最终位置与零速度、零加速度。执行状态通过 `/drone/planned_trajectory/current_segment` 和 `/drone/planned_trajectory/complete` 发布。
-
-`static_avoidance_sim.launch.py` 的可选 `astar_config` 参数默认仍指向 `config/astar.yaml`，因此原启动命令不变。三个评测场景分别使用 `astar_evaluation_scenario_a.yaml`、`astar_evaluation_scenario_b.yaml` 和 `astar_evaluation_scenario_c.yaml`，避免运行时改写默认配置。顺序执行完整评测：
-
-```bash
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-python3 tools/evaluate_static_avoidance.py
-```
-
-评测工具为三个场景分别使用 Domain `110/111/112`，逐一启动并关闭完整 Launch，在 `results/static_avoidance/<scenario_name>/` 保存 `metrics.json`、`trajectory.csv`、`xy_path.png`、`position_tracking.png`、`tracking_error.png` 和 `clearance.png`。它是较长的实验工作流，不属于默认 `colcon test`；Domain 99 端到端测试仍是快速、确定性的核心安全回归。
-
-启动有序多目标静态避障（默认包含 RViz2）：
+运行单目标三维静态避障。
 
 ```bash
 ros2 launch drone_bringup multi_goal_static_avoidance_sim.launch.py
 ```
 
-默认任务配置 `multi_goal_mission.yaml` 依次包含 `(4,0,1.5)`、`(8,5,1.5)`、`(4,6.5,3.5)` 和 `(0,4,1.5)` 四个零 yaw 目标；可用 `mission_config:=<绝对路径>` 载入独立任务 YAML。节点启动时一次性读取目标列表，以首次有效 Odom 的 x/y 为起飞锚点，先发布 `z=1.5 m` 的静止 setpoint；位置与速度连续稳定 `1.0 s` 后，才从当时实际 Odom 规划 P1。每个目标同样采用“到达、停稳、切换”语义，Odom 无效或超时会暂停当前轨迹时钟，最终持续保持最后目标。任务状态可通过 `/drone/multi_goal/current_goal_index`、`current_segment`、`complete`、`success` 和 `visited_goals` 五个 Topic 观察。
-
-导航地板 `0.50 m` 是规划阶段的安全球心最低高度，与动力学地面接触不是同一概念：起飞竖直段单独使用原始环境检查，空中各段使用原始 workspace 最低 z 加 `0.35 m` 有效半径得到的安全地板。多目标任务专用配置采用 `nominal_speed=0.25 m/s` 且保持 `max_reference_acceleration=0.35 m/s²`；真实首段在 `0.35` 和 `0.30 m/s` 下均无法通过同一动态约束，而 `0.25 m/s` 可行。原有单目标 `planned_trajectory.yaml` 的 `0.35 m/s`、控制器、动力学、基础安全半径、规划裕量和 A* 分辨率均未改变。
-
-常用检查：
+运行正式三目标静态避障任务。
 
 ```bash
-ros2 node list
-ros2 topic list
-ros2 topic echo /drone/odom --once
-ros2 run tf2_ros tf2_echo map base_link
+ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py
 ```
 
-## 目标发布
-
-`/drone/goal` 使用 `geometry_msgs/msg/PoseStamped`。例如发布 `1.5 m` 高度、零 yaw 目标：
+在 RViz 中自行选择多个目标，预览后执行导航。
 
 ```bash
+ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=short_gust
+```
+
+运行带外力、误差和水平积分箭头的短时扰动演示。
+
+不同仿真 Launch 不要同时运行在同一个 ROS Domain。
+
+## 典型演示
+
+### 基础悬停
+
+`disturbance_hover_sim.launch.py` 会自动发布 `(0,0,1.5)` 悬停目标；除非另有节点向外力 Topic 发布消息，否则不会主动施加外力。
+
+```bash
+ros2 launch drone_bringup disturbance_hover_sim.launch.py
+```
+
+### 单目标 `(2,1,1.5)`
+
+终端 1：
+
+```bash
+ros2 launch drone_bringup basic_sim.launch.py
+```
+
+终端 2：
+
+```bash
+source /home/peter/ros2_drone_sim/install/setup.bash
+
 ros2 topic pub --once /drone/goal geometry_msgs/msg/PoseStamped \
-"{header: {frame_id: map}, pose: {position: {x: 0.0, y: 0.0, z: 1.5}, orientation: {w: 1.0}}}"
+  "{header: {frame_id: map}, pose: {position: {x: 2.0, y: 1.0, z: 1.5}, orientation: {w: 1.0}}}"
 ```
 
-当前控制器使用目标 x/y/z 和四元数中的 yaw。目标 frame 支持空字符串或 `map`。
+这是当前核心演示中唯一必须使用第二个终端输入目标的基础实验。
 
-例如发布已验收的单目标三维位置：
+### 任务、轨迹与避障
+
+- 无障碍多目标任务：`ros2 launch drone_bringup mission_sim.launch.py`
+- 无障碍连续轨迹：`ros2 launch drone_bringup trajectory_sim.launch.py`
+- 单目标静态避障：`ros2 launch drone_bringup static_avoidance_sim.launch.py`
+- 多目标静态避障：`ros2 launch drone_bringup multi_goal_static_avoidance_sim.launch.py`
+
+### RViz 交互导航
 
 ```bash
-ros2 topic pub --once /drone/goal geometry_msgs/msg/PoseStamped \
-"{header: {frame_id: map}, pose: {position: {x: 2.0, y: 1.0, z: 1.5}, orientation: {w: 1.0}}}"
+ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py
 ```
 
-RViz2 的 SetGoal 工具也发布到 `/drone/goal`，但 2D 操作不便于精确指定高度，因此高度验收更适合使用终端命令。
+在 RViz 工具栏选择 `Interact`，拖动 `goal_candidate` 的水平控制面和竖直箭头。右键依次使用 `Add Goal` 添加多个目标，选择 `Validate & Preview`；状态为 READY 且蓝色预览完整后，选择 `Execute Validated Mission`。执行前会从实际 Odom 再次预检完整序列，任一段无安全路径时均不起飞。
 
-`trajectory_sim.launch.py` 将控制器切换为 `setpoint_source=trajectory`，订阅 `/drone/trajectory_setpoint`。该模式使用消息中的 position、velocity、acceleration 和 yaw；轨迹消息无效或超过 `0.20 s` 未更新时发布零 RPM，不回退到 `/drone/goal`。
+### 扰动实验
 
-## 安全保护与参数基线
+短时 `+X 0.30 N × 2 s`：
 
-正常 Launch 的主要参数位于：
+```bash
+ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=short_gust
+```
 
-- `drone_bringup/config/dynamics.yaml`；
-- `drone_bringup/config/controller.yaml`。
+持续 `+X 0.30 N × 10 s` 并撤力恢复：
 
-当前稳定控制基线：
+```bash
+ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=persistent_release
+```
 
-- 控制频率：`100 Hz`；
-- 动力学频率：`200 Hz`；
-- 高度：`Kp=3.0`、`Kd=3.5`；
-- 水平位置：`Kp=0.4`、速度 `Kd=1.2`、最大加速度 `0.4 m/s²`、最大倾角 `0.08 rad`；
-- roll/pitch 姿态：`Kp=4.0`、角速度 `Kd=0.35`、最大力矩 `1.0 N·m`；
-- yaw：`Kp=1.0`、`Kd=0.40`、最大力矩 `0.20 N·m`；
-- 名义稳态悬停转速：约 `10818.9 RPM/电机`；
-- 地面约束：`enable_ground_contact=true`、`ground_z=0.0 m`；
-- MotorRPM watchdog：`enable_motor_command_timeout=true`、`motor_command_timeout=0.30 s`。
+红色箭头表示质心处集中等效外力，蓝色箭头表示水平积分产生的世界系加速度补偿；两者都不表示真实风速或完整风场。
 
-控制器在没有有效目标、Odom 缺失或超时、frame/四元数非法、算法结果无效时主动发布零 RPM。动力学 watchdog 在已收到过命令但后续超时后，只把目标 RPM 设为零；电机实际转速继续按既有一阶模型自然衰减。
+## 系统架构
+
+控制与动力学链：
+
+```text
+任务/目标/规划
+→ 位置控制器
+→ 高度与姿态控制器
+→ Motor Mixer
+→ 四电机 RPM
+→ 四旋翼动力学
+→ Odom/IMU/TF/RViz
+```
+
+静态规划链：
+
+```text
+静态环境
+→ CollisionChecker
+→ 3D A*
+→ PathSimplifier
+→ Piecewise Quintic Trajectory
+→ 跟踪执行
+```
+
+六个 ROS2 package 为 `drone_msgs`、`drone_dynamics`、`drone_controller`、`drone_mission`、`drone_planning` 和 `drone_bringup`。控制器输入可为 `/drone/goal` 或 `/drone/trajectory_setpoint`，输出 `/drone/motor_rpm_cmd`；动力学发布 `/drone/odom`、`/drone/imu`、`/drone/path` 和 `map → base_link` TF。
+
+控制律应准确理解为：水平位置 `P + D + 受限 I + 期望加速度前馈`；高度 `PD + 重力/前馈/倾角补偿`；姿态 `P + 角速度 D`；Mixer 为带 RPM 限制的 X 构型。整个飞控不是完整 PID。
+
+## 核心能力与验证结果
+
+正式多目标静态避障任务依次访问 `(13.2,5.5,1.5)`、`(7.0,5.0,4.0)`、`(0.8,0.7,2.0)`：
+
+| 指标 | 正式结果 |
+|---|---:|
+| Launch 到任务完成 | `139.203712 s` |
+| 最大跟踪误差 | `0.028843 m` |
+| 对基础膨胀障碍物最小净空 | `0.094310 m` |
+| 最终位置误差 | `0.001536 m` |
+| 最终速度 | `0.004355 m/s` |
+| 碰撞 / 控制器饱和 | `无 / 0` |
+
+持续 `0.30 N` 外力下，以末 3 秒平均误差作为稳态指标：
+
+| 控制基线 | 稳态误差 |
+|---|---:|
+| PD baseline（水平积分关闭） | `0.749340 m` |
+| 当前水平 PD+I+FF 正式基线 | `0.081989 m` |
+
+当前基线的三次独立 `0.30 N × 10 s` 撤力重复实验：恢复时间 `4.600580–4.601050 s`，反向超调 `0.107763–0.107767 m`；三次均无控制器饱和。
+
+本轮最终全量回归：`288 tests, 0 errors, 0 failures, 0 skipped`。
+
+正式数据见：
+
+- `results/horizontal_integral_upgrade/selected/`
+- `results/horizontal_integral_upgrade/repeat_results.json`
+
+历史候选和参数扫描保留在 `results/` 对应子目录，仅用于追溯，不作为当前控制基线。
+
+## 人工验收 A～J
+
+正常人工演示只运行“主命令”；Topic、频率和参数命令属于可选诊断。A～I 完成后只执行一次 J。
+
+### A. 编译与环境
+
+```bash
+cd /home/peter/ros2_drone_sim
+source /opt/ros/humble/setup.bash
+colcon build --symlink-install
+source install/setup.bash
+ros2 pkg list | grep '^drone_'
+```
+
+通过标准：构建成功，并发现六个项目 package。
+
+### B. 基础悬停
+
+```bash
+ros2 launch drone_bringup disturbance_hover_sim.launch.py
+```
+
+通过标准：自动起飞至 `z=1.5 m` 并稳定，无非有限值、明显姿态发散或持续饱和。
+
+### C. 单目标三维位置控制
+
+按“典型演示”的两终端步骤发布 `(2,1,1.5)`。通过标准：到达目标附近并稳定悬停。
+
+### D. 无障碍多目标顺序飞行
+
+```bash
+ros2 launch drone_bringup mission_sim.launch.py
+```
+
+通过标准：严格按序访问任务点，每点停稳后切换，最终完成并保持。
+
+### E. 短时扰动
+
+```bash
+ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=short_gust
+```
+
+通过标准：阶段、红色外力箭头、蓝色积分箭头和运动一致，撤力后完成恢复。
+
+### F. 持续扰动与撤力恢复
+
+```bash
+ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=persistent_release
+```
+
+通过标准：积分补偿方向正确，持续扰动偏差减小，撤力恢复平顺且最终收敛。
+
+### G. 静态多目标避障
+
+```bash
+ros2 launch drone_bringup multi_goal_static_avoidance_sim.launch.py
+```
+
+通过标准：P1→P2→P3 全部完成，无碰撞、主动外力、非有限值或持续饱和。
+
+### H. RViz 交互目标导航
+
+```bash
+ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py
+```
+
+使用 `Interact` 拖动候选，依次 `Add Goal`，再 `Validate & Preview` 和 `Execute Validated Mission`。通过标准：至少一组自行选择的多目标序列安全完成，非法目标被拒绝。
+
+### I. 预检失败安全
+
+```bash
+colcon test --packages-select drone_bringup \
+  --ctest-args -R test_interactive_preflight_failure --output-on-failure
+colcon test-result --verbose
+```
+
+通过标准：闭合墙场景报告无路径，测试无 failure/error，有效 setpoint 数为 0、RPM 为 0、无人机不离地。
+
+### J. 最终自动全量测试
+
+```bash
+colcon test
+colcon test-result --verbose
+```
+
+通过标准：`failures=0`、`errors=0`。失败时查看 `build/<package>/Testing/Temporary/LastTest.log` 和对应 `test_results/`。
+
+### 可选诊断
+
+```bash
+ros2 topic hz /drone/odom
+ros2 topic echo /drone/controller/diagnostics --once
+ros2 topic echo /drone/environment/in_collision --once
+ros2 topic echo /drone/interactive_goals/status
+ros2 topic echo /drone/interactive_mission/status
+ros2 topic echo /drone/external_wrench/applied
+ros2 param get /quadrotor_dynamics_node enable_external_wrench
+```
 
 ## 当前限制
 
-- `WaypointManager` 多目标模式仍采用“到点并稳定后离散切换”的 stop-settle-switch 策略；连续飞行由独立的 `trajectory_sim.launch.py` 提供，不改变该语义；
-- 地面模型只有质心 z 方向的无反弹、无摩擦刚性约束；
-- 动力学暂不包含空气阻力、旋翼陀螺效应和传感器噪声；
-- 当前控制器没有位置积分环和复杂反饱和机制；
-- 用户已在 RViz2 中人工确认五点任务能够依次到达，各 waypoint 附近停稳后再切换；当前仍是 stop-settle-switch，不是平滑轨迹；
-- 用户已在 RViz2 中人工确认无人机能够沿连续参考轨迹完成五点飞行，中间 waypoint 不再停稳后切换，整体运动连续；
-- 静态环境碰撞状态仍只报告几何结果，不会阻止电机或产生物理撞击响应；已验证的静态避障依靠规划轨迹与跟踪控制保持安全；
-- 尚未实现局部规划、在线重规划或动态障碍物；
-- 更大倾角、外部扰动、高角速度和最大 RPM 极限工况仍需继续验证。
+- 高度环和姿态环仍为 PD；只有水平位置环具有受限积分。
+- 外力是作用于质心的集中等效力，不是空间变化的完整风场。
+- 静态环境提供碰撞检查和状态监测，不模拟物理碰撞反作用。
+- 尚无动态障碍、局部规划和在线重规划。
+- 静态避障任务当前 yaw 为零或未结合路径方向规划。
+- 普通无障碍单目标通过 `/drone/goal` Topic 输入，缺少一键参数或交互入口。
+- 普通无障碍位置实验尚未单独显示目标 Marker。
 
-## 文档说明
+后三项主要影响展示和交互完整性，不影响当前已验证的规划、控制与安全链路。
 
-本 README 只记录稳定方案、已验证能力和可复现运行方式。供后续 AI 快速接手的当前技术上下文位于 `docs/AI_CONTEXT.md`，AI 使用记录位于 `docs/ai_usage.md`。
+## 后续优化
+
+近期展示与交互优化：
+
+1. 为普通单目标实验增加一键参数或交互输入，并显示目标点 Marker；
+2. 静态避障根据路径切线或目标要求设置 yaw；
+3. 整理整体报告和答辩材料。
+
+可选扩展：只有出现明确物理需求时再评估垂向持续扰动与高度积分；其后可研究动态障碍和在线重规划、更完整的时空风场、传感器噪声与状态估计。这些不是当前里程碑缺陷或默认必做项。

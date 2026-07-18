@@ -1,0 +1,37 @@
+{
+  "scenario": "hover",
+  "force_n": 0.0,
+  "parameters": {
+    "enabled": true,
+    "ki": 0.15,
+    "kaw": 2.0,
+    "limit_m_s2": 0.35,
+    "capture_radius_m": 0.5,
+    "reset_distance_m": 1.0
+  },
+  "dynamics_mass_kg": 1.0,
+  "maximum_horizontal_offset_m": 0.0,
+  "recovery_time_s": null,
+  "reverse_overshoot_m": 0.0,
+  "final_position_error_m": 5.452527318539069e-12,
+  "final_horizontal_error_m": 0.0,
+  "final_speed_m_s": 7.125899965809125e-12,
+  "final_altitude_m": 1.4999999999945475,
+  "last_3s_average_error_m": 0.0,
+  "last_3s_maximum_error_m": 0.0,
+  "last_3s_average_speed_m_s": 8.86826112169054e-11,
+  "last_3s_average_integral_x_m_s2": 0.0,
+  "peak_integral_acceleration_m_s2": 0.0,
+  "maximum_tilt_rad": 0.0,
+  "maximum_rpm": 10818.94817719486,
+  "saturation_counts": {
+    "horizontal": 0,
+    "altitude": 0,
+    "attitude": 0,
+    "mixer": 0
+  },
+  "anti_windup_samples": 0,
+  "integral_reset_samples": 0,
+  "sample_count": 3202,
+  "error": null
+}

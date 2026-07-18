@@ -40,6 +40,14 @@ struct QuadrotorParameters
   // 重力加速度大小 g，单位 m/s^2；重力向量在 ENU 世界系中为 [0,0,-g]。
   double gravity{9.80665};
 
+  // 集总机体空气动力学。平动系数在机体系逐轴作用；linear_drag 的单位为
+  // N/(m/s)，quadratic_drag 的单位为 N/(m/s)^2。angular_damping 的单位为
+  // N*m/(rad/s)。它们不是旋翼气动辨识参数。
+  bool enable_aerodynamic_drag{false};
+  Eigen::Vector3d linear_drag{Eigen::Vector3d::Zero()};
+  Eigen::Vector3d quadratic_drag{Eigen::Vector3d::Zero()};
+  Eigen::Vector3d angular_damping{Eigen::Vector3d::Zero()};
+
   // 是否启用只约束世界系 z 方向的简化刚性地面。
   // 默认关闭，保证纯模型默认仍可执行不受地面影响的自由落体测试。
   bool enable_ground_contact{false};
@@ -101,6 +109,10 @@ public:
   // 初始 z 使用 ground_z，关闭时初始位置为世界原点。
   void reset();
 
+  // 设置一个有限、物理合法的初始刚体状态，主要供可重复的离线实验和纯模型
+  // 测试使用。四元数会归一化；电机角速度仍须位于配置的物理范围。
+  void set_state(const QuadrotorState & state);
+
   // 设置四电机外部 RPM 指令。函数内部负责非法值处理、上下限和单位转换；
   // 它只更新目标值，实际电机转速由后续 step() 中的一阶响应逐渐逼近。
   void set_motor_rpm_command(const MotorValues & motor_rpm);
@@ -118,6 +130,18 @@ public:
   const QuadrotorParameters & parameters() const;
   const QuadrotorState & state() const;
   const BodyWrench & body_wrench() const;
+
+  // 最近一步的空气阻力（世界系）和角阻尼力矩（机体系）。开关关闭或对应
+  // 速度为零时严格返回零，便于纯模型测试和运行诊断。
+  const Eigen::Vector3d & aerodynamic_drag_force_world() const;
+  const Eigen::Vector3d & aerodynamic_damping_torque_body() const;
+
+  // 只计算给定状态下的集总气动力，不修改模型状态。
+  Eigen::Vector3d calculate_aerodynamic_drag_force_world(
+    const Eigen::Vector3d & velocity_world,
+    const Eigen::Quaterniond & orientation_body_to_world) const;
+  Eigen::Vector3d calculate_aerodynamic_damping_torque_body(
+    const Eigen::Vector3d & angular_velocity_body) const;
 
   // 最近一次 step() 计算出的世界系质心线加速度，单位 m/s^2，包含重力。
   const Eigen::Vector3d & linear_acceleration_world() const;
@@ -154,6 +178,8 @@ private:
 
   // 最近一个积分步的中间/输出量，缓存后可直接用于消息发布和测试。
   BodyWrench body_wrench_;
+  Eigen::Vector3d aerodynamic_drag_force_world_{Eigen::Vector3d::Zero()};
+  Eigen::Vector3d aerodynamic_damping_torque_body_{Eigen::Vector3d::Zero()};
   Eigen::Vector3d linear_acceleration_world_{Eigen::Vector3d::Zero()};
 };
 

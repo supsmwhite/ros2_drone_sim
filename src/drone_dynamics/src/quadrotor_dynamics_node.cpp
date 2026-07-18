@@ -163,6 +163,20 @@ private:
     parameters.min_rpm = declare_parameter<double>("min_rpm", parameters.min_rpm);
     parameters.max_rpm = declare_parameter<double>("max_rpm", parameters.max_rpm);
     parameters.gravity = declare_parameter<double>("gravity", parameters.gravity);
+    parameters.enable_aerodynamic_drag = declare_parameter<bool>(
+      "enable_aerodynamic_drag", parameters.enable_aerodynamic_drag);
+    parameters.linear_drag = Eigen::Vector3d(
+      declare_parameter<double>("linear_drag_x", parameters.linear_drag.x()),
+      declare_parameter<double>("linear_drag_y", parameters.linear_drag.y()),
+      declare_parameter<double>("linear_drag_z", parameters.linear_drag.z()));
+    parameters.quadratic_drag = Eigen::Vector3d(
+      declare_parameter<double>("quadratic_drag_x", parameters.quadratic_drag.x()),
+      declare_parameter<double>("quadratic_drag_y", parameters.quadratic_drag.y()),
+      declare_parameter<double>("quadratic_drag_z", parameters.quadratic_drag.z()));
+    parameters.angular_damping = Eigen::Vector3d(
+      declare_parameter<double>("angular_damping_roll", parameters.angular_damping.x()),
+      declare_parameter<double>("angular_damping_pitch", parameters.angular_damping.y()),
+      declare_parameter<double>("angular_damping_yaw", parameters.angular_damping.z()));
     parameters.enable_ground_contact =
       declare_parameter<bool>("enable_ground_contact", parameters.enable_ground_contact);
     parameters.ground_z = declare_parameter<double>("ground_z", parameters.ground_z);

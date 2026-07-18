@@ -28,6 +28,19 @@ quadrotor_dynamics_node:
 
     gravity: 9.80665
 
+    # Lumped body-axis aerodynamics. Linear: N/(m/s), quadratic: N/(m/s)^2,
+    # angular damping: N*m/(rad/s). Values remain zero until sweep selection.
+    enable_aerodynamic_drag: false
+    linear_drag_x: 0.0
+    linear_drag_y: 0.0
+    linear_drag_z: 0.0
+    quadratic_drag_x: 0.0
+    quadratic_drag_y: 0.0
+    quadratic_drag_z: 0.0
+    angular_damping_roll: 0.0
+    angular_damping_pitch: 0.0
+    angular_damping_yaw: 0.0
+
     # Simplified rigid horizontal ground used by the normal Launch workflow.
     enable_ground_contact: true
     ground_z: 0.0

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from datetime import datetime, timezone
 import json
 import math
 import os
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import xml.etree.ElementTree as ET
 
 import yaml
 
@@ -35,7 +37,7 @@ def load_yaml(path: Path) -> dict:
 
 
 def write_configs(directory: Path, *, enabled: bool, ki: float, kaw: float,
-                  limit: float, mass: float = 1.0) -> tuple[Path, Path]:
+                  unload_gain: float, limit: float, mass: float = 1.0) -> tuple[Path, Path]:
     controller = load_yaml(CONTROLLER)
     dynamics = load_yaml(DYNAMICS)
     cp = controller["position_controller_node"]["ros__parameters"]
@@ -46,11 +48,9 @@ def write_configs(directory: Path, *, enabled: bool, ki: float, kaw: float,
         "horizontal_position_ki_y": ki,
         "horizontal_integral_acceleration_limit": limit,
         "horizontal_anti_windup_gain": kaw,
+        "horizontal_integrator_unload_gain": unload_gain,
         "horizontal_integral_capture_radius": 0.50,
         "horizontal_integral_reset_distance": 1.0,
-        "horizontal_disturbance_change_threshold": 0.15,
-        "horizontal_disturbance_detection_error_floor": 0.005,
-        "horizontal_integrator_unloading_duration": 8.0,
     })
     dp["mass"] = mass
     controller_path = directory / "controller.yaml"
@@ -195,7 +195,10 @@ def worker(spec_path: Path) -> int:
             "integral_enabled": int(diag.horizontal_integral_enabled),
             "integral_frozen": int(diag.horizontal_integral_frozen),
             "integral_reset": int(diag.horizontal_integral_reset),
-            "anti_windup_active": int(diag.horizontal_anti_windup_active),
+            "saturation_backcalc_active": int(
+                diag.horizontal_saturation_backcalc_active),
+            "integrator_unloading_active": int(
+                diag.horizontal_integrator_unloading_active),
         })
 
     subscriptions = [
@@ -304,6 +307,13 @@ def worker(spec_path: Path) -> int:
                     recovery_time = window_start-recovery_start
                     break
     reverse_overshoot = max([0.0] + [-row["x_m"] for row in recovery])
+    disturbance_tail = []
+    if disturbance:
+        disturbance_tail_start = disturbance[-1]["time_s"] - 3.0
+        disturbance_tail = [
+            row for row in disturbance if row["time_s"] >= disturbance_tail_start]
+    unloading_recovery = [
+        row for row in recovery if row["integrator_unloading_active"]]
     metrics = {
         "scenario": spec["scenario"], "force_n": spec.get("force", 0.0),
         "parameters": spec["parameters"], "dynamics_mass_kg": spec.get("mass", 1.0),
@@ -319,11 +329,20 @@ def worker(spec_path: Path) -> int:
         "last_3s_average_speed_m_s": sum(row["speed_m_s"] for row in last3)/len(last3),
         "last_3s_average_integral_x_m_s2": sum(row["ix_m_s2"] for row in last3)/len(last3),
         "peak_integral_acceleration_m_s2": max(row["integral_norm_m_s2"] for row in samples),
+        "disturbance_last_3s_average_error_m": (
+            sum(row["horizontal_error_m"] for row in disturbance_tail) / len(disturbance_tail)
+            if disturbance_tail else None),
+        "integrator_unloading_start_s": (
+            unloading_recovery[0]["time_s"] - recovery_start
+            if unloading_recovery and recovery_start is not None else None),
         "maximum_tilt_rad": max(math.hypot(row["roll_rad"], row["pitch_rad"]) for row in samples),
         "maximum_rpm": max(row["max_rpm"] for row in samples),
         "saturation_counts": {name: sum(row[f"{name}_saturated"] for row in samples)
                               for name in ("horizontal", "altitude", "attitude", "mixer")},
-        "anti_windup_samples": sum(row["anti_windup_active"] for row in samples),
+        "saturation_backcalc_samples": sum(
+            row["saturation_backcalc_active"] for row in samples),
+        "integrator_unloading_samples": sum(
+            row["integrator_unloading_active"] for row in samples),
         "integral_reset_samples": sum(row["integral_reset"] for row in samples),
         "sample_count": len(samples), "error": error,
     }
@@ -335,14 +354,16 @@ def worker(spec_path: Path) -> int:
 
 
 def run_case(temporary: Path, output: Path, domain: int, *, name: str, scenario: str,
-             enabled: bool, ki: float, kaw: float, limit: float,
+             enabled: bool, ki: float, kaw: float, unload_gain: float, limit: float,
              force: float = 0.0, mass: float = 1.0) -> dict:
     case_temp = temporary / name
     case_temp.mkdir(parents=True)
-    controller, dynamics = write_configs(case_temp, enabled=enabled, ki=ki, kaw=kaw,
-                                          limit=limit, mass=mass)
+    controller, dynamics = write_configs(
+        case_temp, enabled=enabled, ki=ki, kaw=kaw,
+        unload_gain=unload_gain, limit=limit, mass=mass)
     output.mkdir(parents=True, exist_ok=True)
-    parameters = {"enabled": enabled, "ki": ki, "kaw": kaw, "limit_m_s2": limit,
+    parameters = {"enabled": enabled, "ki": ki, "kaw": kaw,
+                  "unload_gain": unload_gain, "limit_m_s2": limit,
                   "capture_radius_m": 0.5, "reset_distance_m": 1.0}
     spec = {"name": name, "scenario": scenario, "force": force, "mass": mass,
             "controller": str(controller), "dynamics": str(dynamics),
@@ -356,6 +377,8 @@ def run_case(temporary: Path, output: Path, domain: int, *, name: str, scenario:
     metrics = json.loads((output / "metrics.json").read_text(encoding="utf-8"))
     metrics["ros_domain_id"] = domain
     metrics["returncode"] = completed.returncode
+    (output / "metrics.json").write_text(
+        json.dumps(metrics, indent=2)+"\n", encoding="utf-8")
     return metrics
 
 
@@ -377,6 +400,7 @@ def write_selected_artifacts() -> None:
         "horizontal_position_ki_y": 0.15,
         "horizontal_integral_acceleration_limit": 0.35,
         "horizontal_anti_windup_gain": 2.0,
+        "horizontal_integrator_unload_gain": 2.0,
         "horizontal_integral_capture_radius": 0.5,
         "horizontal_integral_reset_distance": 1.0,
         "max_horizontal_acceleration": 0.8,
@@ -410,31 +434,106 @@ def write_selected_artifacts() -> None:
         writer = csv.DictWriter(stream, fieldnames=list(comparison_rows[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(comparison_rows)
+    test_xml_files = sorted(
+        ROOT.glob("build/*/test_results/**/*.xml"),
+        key=lambda path: str(path))
+    ctest_xml_files = []
+    for package_testing in sorted(ROOT.glob("build/*/Testing")):
+        candidates = list(package_testing.glob("*/Test.xml"))
+        if candidates:
+            ctest_xml_files.append(max(candidates, key=lambda path: path.stat().st_mtime_ns))
+
+    def relative(path: Path) -> str:
+        return str(path.relative_to(ROOT))
+
+    def full_test_summary(result_paths: list[Path], ctest_paths: list[Path]) -> dict | None:
+        if not result_paths and not ctest_paths:
+            return None
+        totals = {"tests": 0, "errors": 0, "failures": 0, "skipped": 0}
+        parsed = 0
+        for path in result_paths:
+            try:
+                root = ET.parse(path).getroot()
+            except (ET.ParseError, OSError):
+                continue
+            suites = [root] if root.tag == "testsuite" else list(root.findall("testsuite"))
+            for suite in suites:
+                totals["tests"] += int(suite.attrib.get("tests", 0))
+                totals["errors"] += int(suite.attrib.get("errors", 0))
+                totals["failures"] += int(suite.attrib.get("failures", 0))
+                totals["skipped"] += int(
+                    suite.attrib.get("skipped", suite.attrib.get("disabled", 0)))
+                parsed += 1
+        for path in ctest_paths:
+            try:
+                tests = ET.parse(path).getroot().findall("./Testing/Test")
+            except (ET.ParseError, OSError):
+                continue
+            for test in tests:
+                status = test.attrib.get("Status", "").lower()
+                totals["tests"] += 1
+                if status == "notrun":
+                    totals["skipped"] += 1
+                elif status != "passed":
+                    totals["failures"] += 1
+                parsed += 1
+        return totals if parsed else None
+
+    def named_test_result(fragment: str) -> tuple[dict | None, str | None]:
+        matches = [path for path in test_xml_files if fragment in path.name]
+        if not matches:
+            return None, None
+        path = max(matches, key=lambda item: item.stat().st_mtime_ns)
+        try:
+            root = ET.parse(path).getroot()
+        except (ET.ParseError, OSError):
+            return None, relative(path)
+        suites = [root] if root.tag == "testsuite" else list(root.findall("testsuite"))
+        tests = sum(int(suite.attrib.get("tests", 0)) for suite in suites)
+        errors = sum(int(suite.attrib.get("errors", 0)) for suite in suites)
+        failures = sum(int(suite.attrib.get("failures", 0)) for suite in suites)
+        skipped = sum(int(suite.attrib.get("skipped", 0)) for suite in suites)
+        return {
+            "status": "passed" if tests > 0 and errors == 0 and failures == 0 else "failed",
+            "tests": tests, "errors": errors, "failures": failures, "skipped": skipped,
+        }, relative(path)
+
+    interactive_navigation, interactive_source = named_test_result(
+        "test_interactive_goal_navigation_e2e")
+    preflight_failure, preflight_source = named_test_result(
+        "test_interactive_preflight_failure")
+    full_test = full_test_summary(test_xml_files, ctest_xml_files)
+    multi_goal_path = selected / "multi_goal" / "metrics.json"
+    repeat_results_path = BASE / "repeat_results.json"
+    repeat_results = (
+        json.loads(repeat_results_path.read_text(encoding="utf-8")).get("results", [])
+        if repeat_results_path.exists() else [])
+    git_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
+        text=True, stdout=subprocess.PIPE).stdout.strip()
     regression = {
+        "git_commit": git_commit,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_from": {
+            "full_test": [
+                relative(path) for path in test_xml_files + ctest_xml_files] or None,
+            "multi_goal": relative(multi_goal_path) if multi_goal_path.exists() else None,
+            "interactive_navigation": interactive_source,
+            "preflight_failure": preflight_source,
+            "release_repetitions": (
+                relative(repeat_results_path) if repeat_results_path.exists() else None),
+        },
         "pd_baseline": pd,
         "selected": pid,
         "mass_mismatch": {name: metrics(selected/name) for name in ("mass_1p1", "mass_1p2")},
         "constant_bias": {name: metrics(selected/name) for name in ("bias_0p15", "bias_0p3")},
         "multi_goal": multi_goal,
-        "interactive_navigation": {
-            "task_time_s": 49.960,
-            "maximum_tracking_error_m": 0.019958,
-            "minimum_clearance_m": 0.241833,
-            "maximum_rpm": 13067.5,
-            "final_error_m": 0.003702,
-            "final_speed_m_s": 0.004641,
-            "saturation_count": 0,
-            "passed": True,
-        },
-        "preflight_failure": {
-            "trajectory_setpoint_count": 0,
-            "rpm_message_count": 404,
-            "maximum_command_rpm": 0.0,
-            "maximum_altitude_m": 0.0,
-            "maximum_horizontal_displacement_m": 0.0,
-            "passed": True,
-        },
-        "full_test": {"tests": 276, "errors": 0, "failures": 0, "skipped": 0},
+        "release_repetitions": {
+            f"run_{index}": result for index, result in enumerate(repeat_results, start=1)
+        } if repeat_results else "not_run",
+        "interactive_navigation": interactive_navigation or "not_run",
+        "preflight_failure": preflight_failure or "not_run",
+        "full_test": full_test or "not_run",
     }
     (selected/"regression_summary.json").write_text(
         json.dumps(regression, indent=2)+"\n", encoding="utf-8")
@@ -465,6 +564,7 @@ def parent(arguments) -> int:
 
         def execute(output, **kwargs):
             nonlocal domain
+            kwargs.setdefault("unload_gain", arguments.unload_gain)
             result = run_case(temporary, output, domain, **kwargs)
             results.append(result)
             print(kwargs["name"], "ok" if result["returncode"] == 0 else "failed", flush=True)
@@ -514,6 +614,13 @@ def parent(arguments) -> int:
                     continue
                 execute(BASE/"selected"/label, name=label, scenario="bias", enabled=True,
                         ki=arguments.ki, kaw=arguments.kaw, limit=arguments.limit, force=force)
+        if arguments.stage == "repeat":
+            for run in range(1, 4):
+                execute(
+                    BASE/"selected"/f"release_run_{run}",
+                    name=f"selected_release_run_{run}", scenario="release",
+                    enabled=True, ki=arguments.ki, kaw=arguments.kaw,
+                    limit=arguments.limit, force=0.3)
     summary = BASE / f"{arguments.stage}_results.json"
     summary.write_text(json.dumps({"results": results}, indent=2)+"\n", encoding="utf-8")
     if arguments.stage in ("selected", "all"):
@@ -523,10 +630,13 @@ def parent(arguments) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--stage", choices=("baseline", "ki", "kaw", "limit", "selected", "all"),
+    parser.add_argument(
+        "--stage",
+        choices=("baseline", "ki", "kaw", "limit", "selected", "repeat", "all"),
                         default="all")
     parser.add_argument("--ki", type=float, default=0.10)
     parser.add_argument("--kaw", type=float, default=1.0)
+    parser.add_argument("--unload-gain", type=float, choices=(1.0, 2.0), default=2.0)
     parser.add_argument("--limit", type=float, default=0.35)
     parser.add_argument("--domain-start", type=int, default=150)
     parser.add_argument("--selected-only", default="")

@@ -45,7 +45,7 @@ python3 tools/evaluate_hover_disturbance.py --timeout 45
 
 Domain 119 最终实验使用 `+x 0.30 N × 2.0 s`，基线误差 `0.001424 m`，最大位置误差和水平偏移 `0.350191 m`，最大竖直误差 `0.000291 m`，最大速度 `0.188198 m/s`，最大 roll/pitch `0/0.033841 rad`，RPM 命令范围 `10784.1–10856.7`，饱和日志 `0`，恢复时间 `5.699643 s`，最终误差 `0.008458 m`、最终速度 `0.005322 m/s`，无 NaN/Inf 或姿态发散，验收通过。失败候选 `0.80 N × 2.0 s` 的最大水平偏移 `2.087771 m`、恢复时间 `10.679879 s`、饱和日志 `5`；候选结果被保留，控制器参数未修改。
 
-最终文件位于 `results/hover_disturbance/default/`：`launch.log`、`metrics.json`、`trajectory.csv` 和七张要求图像；失败候选位于 `results/hover_disturbance/candidates/force_0p8_duration_2p0/`。该功能是集中外力注入，不是完整空气动力学；未实现空间变化风场、随机阵风、气动阻力和非零 torque。
+最终文件位于 `results/hover_disturbance/default/`：`launch.log`、`metrics.json`、`trajectory.csv` 和七张要求图像；失败候选位于 `results/hover_disturbance/candidates/force_0p8_duration_2p0/`。该功能是集中外力注入，不是完整空气动力学；未实现空间变化风场、随机阵风和非零 torque。集总平动空气阻力与角阻尼由独立动力学模型提供。
 
 ## RViz 三维目标编辑器
 
@@ -353,11 +353,11 @@ tau_damping_body = -c_angular .* omega_body
 
 水平控制器已从无状态 PD 升级为 PID 类控制；高度与姿态仍是 PD。算法状态为世界系 `Eigen::Vector2d integral_acceleration_world_`，单位 `m/s²`。正式值：`Ki=[0.15,0.15] s^-2`、积分向量上限 `0.35 m/s²`、`Kaw=2.0`、capture `0.50 m`、pose reset distance `1.0 m`；P/D、`0.8 m/s²` 水平限制和 `0.15 rad` 倾角限制未改。禁用积分或 Ki=0 时严格退化为旧 PD 输出。
 
-误差积分与输出饱和回算为 `Ki·e + Kaw·(a_sat-a_raw)`；饱和时冻结 `Ki·e`、保留 back-calculation，并单独约束积分向量。节点 reset 覆盖启动、无目标、地面、大 pose 跳变、非法状态和停止输出；Odom 短超时、capture 外、快速 trajectory 和饱和阶段使用 freeze。轨迹采样只在时间回退/源切换语义下 reset，不会逐样本清零。连续 Odom 还用于检测等效水平加速度阶跃：已有积分储量的偏置撤销后，进入 `8 s` 显式 Kaw 去积分窗口；控制器不订阅 `/drone/external_wrench`。诊断区分 P/D/I/FF、raw/saturated、enabled/frozen/reset/anti-windup。
+误差积分与输出饱和回算为 `Ki·e + Kaw·(a_sat-a_raw)`；饱和时冻结 `Ki·e`、保留 back-calculation，并单独约束积分向量。节点 reset 覆盖启动、无目标、地面、大 pose 跳变、非法状态和停止输出；Odom 短超时、capture 外、快速 trajectory 和饱和阶段使用 freeze。轨迹采样只在时间回退/源切换语义下 reset，不会逐样本清零。主动卸载使用确定性条件 `position_error·integral_acceleration < 0`，以独立 `horizontal_integrator_unload_gain=2.0` 只缩小积分模长；误差为零时保持。该机制不订阅 `/drone/external_wrench`，也不使用 Odom 二阶差分或固定卸载窗口。诊断分别区分 saturation back-calculation 与 integrator unloading；旧 anti-windup 字段是两者逻辑或的兼容汇总。
 
-分阶段扫描严格为 Ki `0.05/0.10/0.15/0.20`、Kaw `0.5/1/2`、积分上限 `0.25/0.35/0.45`，最终选择 `0.15/2.0/0.35`。PD→最终：`0.3 N×2 s` 偏移/恢复 `0.34862/5.725→0.33352/5.500`；`0.8 N×2 s` 为 `0.95020/7.543→0.93680/7.536`。持续 `0.3 N×15 s` 最后 3 秒误差 `0.74934→0.08199 m`，最终方案均速 `0.01058 m/s`，无持续水平饱和。`0.3 N×10 s` 撤力后反向超调 `0.15857 m`，最终误差/速度 `0.00309/0.00373`。
+正式参数保持 `Ki/Kaw/limit=0.15/2.0/0.35`，本轮没有重新扫描。确定性卸载回归中，`0.3 N×2 s` 偏移/恢复为 `0.33145 m / 8.066 s`，`0.8 N×2 s` 为 `0.93701 m / 7.536 s`；后者有 `154` 个水平饱和及 saturation back-calculation 采样，均无高度/姿态/Mixer 饱和。三次独立 `0.3 N×10 s` 撤力实验反向超调极差约 `0.0000039 m`、恢复时间极差约 `0.00047 s`，最终误差/速度约 `0.00273 m / 0.00165 m/s`。
 
-最终无外力三目标回归为完成 `139.204 s`、最大跟踪误差 `0.026826 m`、最小净空 `0.094343 m`、最终误差/速度 `0.004221/0.005364`、饱和 `0`。质量失配 `1.10/1.20 kg` 时水平仍为零，但高度稳定在 `1.1731/0.8462 m`；这明确保留为高度积分/模型自适应的后续问题。外力输入仍是集中等效力，不是空间风场。结果位于 `results/horizontal_integral_upgrade/`。
+最终无外力三目标回归为完成 `139.204 s`、最大跟踪误差 `0.028843 m`、最小净空 `0.094310 m`、最终误差/速度 `0.001536/0.004355`、饱和 `0`。完整回归为 `282 tests, 0 errors, 0 failures, 0 skipped`。质量失配 `1.10/1.20 kg` 时水平仍为零，但高度稳定在 `1.1731/0.8462 m`；这明确保留为高度积分/模型自适应的后续问题。外力输入仍是集中等效力，不是空间风场。结果位于 `results/horizontal_integral_upgrade/`。
 
 最终全量回归 `276/276` 通过，错误/失败/跳过均为 `0`，bringup Launch 测试为 `14` 个。交互 E2E：`49.960 s`、最大跟踪误差 `0.019958 m`、最小净空 `0.241833 m`、最终误差/速度 `0.003702/0.004641`、饱和 `0`。预检失败仍为 setpoint `0`、RPM 消息 `404` 且最大命令 `0`、高度/水平位移 `0`。
 

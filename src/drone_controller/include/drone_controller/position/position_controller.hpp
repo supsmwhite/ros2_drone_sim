@@ -55,6 +55,8 @@ struct PositionControllerResult
   bool mixer_saturated{false};
   bool horizontal_integral_enabled{false};
   bool horizontal_integral_frozen{false};
+  bool horizontal_saturation_backcalc_active{false};
+  bool horizontal_integrator_unloading_active{false};
   bool horizontal_anti_windup_active{false};
 };
 
@@ -72,7 +74,6 @@ public:
 
   void reset_horizontal_integrator();
   const Eigen::Vector2d & horizontal_integral_acceleration_world() const;
-  bool back_calculate_horizontal_integrator_to_zero(double dt);
 
 private:
   HorizontalPositionController horizontal_controller_;

@@ -123,6 +123,10 @@ PositionControllerResult PositionController::compute(
   result.horizontal_saturated = horizontal_result.saturated;
   result.horizontal_integral_enabled = horizontal_result.integral_enabled;
   result.horizontal_integral_frozen = horizontal_result.integral_frozen;
+  result.horizontal_saturation_backcalc_active =
+    horizontal_result.saturation_backcalc_active;
+  result.horizontal_integrator_unloading_active =
+    horizontal_result.integrator_unloading_active;
   result.horizontal_anti_windup_active = horizontal_result.anti_windup_active;
   result.saturated = horizontal_result.saturated;
   if (!horizontal_result.valid) {
@@ -167,11 +171,6 @@ void PositionController::reset_horizontal_integrator()
 const Eigen::Vector2d & PositionController::horizontal_integral_acceleration_world() const
 {
   return horizontal_controller_.integral_acceleration_world();
-}
-
-bool PositionController::back_calculate_horizontal_integrator_to_zero(const double dt)
-{
-  return horizontal_controller_.back_calculate_integrator_to_zero(dt);
 }
 
 }  // namespace drone_controller

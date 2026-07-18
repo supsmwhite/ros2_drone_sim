@@ -46,6 +46,8 @@ HorizontalPositionController::HorizontalPositionController(
     parameters_.integral_acceleration_limit >= parameters_.max_horizontal_acceleration ||
     !std::isfinite(parameters_.anti_windup_gain) ||
     parameters_.anti_windup_gain < 0.0 ||
+    !std::isfinite(parameters_.integrator_unload_gain) ||
+    parameters_.integrator_unload_gain < 0.0 ||
     !std::isfinite(parameters_.integral_capture_radius) ||
     parameters_.integral_capture_radius <= 0.0 ||
     !std::isfinite(parameters_.max_tilt_angle) ||
@@ -204,18 +206,31 @@ HorizontalPositionControllerResult HorizontalPositionController::compute(
 
   const Eigen::Vector2d position_error =
     input.desired_position_world - input.current_position_world;
+  const bool integrator_unloading_active =
+    integrator_enabled && unwind_integrator_if_opposing_error(position_error, dt);
+
+  // Re-evaluate saturation after deterministic unloading because the integral
+  // contribution used by the provisional result may have changed.
+  if (integrator_unloading_active) {
+    provisional_input.desired_acceleration_world =
+      input.desired_acceleration_world + integral_acceleration_world_;
+    provisional = static_cast<const HorizontalPositionController &>(*this).compute(
+      provisional_input);
+    if (!provisional.valid) {
+      return provisional;
+    }
+  }
   const bool inside_capture_radius =
     position_error.norm() <= parameters_.integral_capture_radius;
   const bool integrate_position_error =
-    integrator_enabled && inside_capture_radius && !provisional.saturated;
+    integrator_enabled && !integrator_unloading_active &&
+    inside_capture_radius && !provisional.saturated;
   const Eigen::Vector2d saturation_residual =
     provisional.desired_acceleration_world - provisional.raw_acceleration_world;
   const bool saturation_anti_windup_active =
     integrator_enabled && provisional.saturated &&
     parameters_.anti_windup_gain > 0.0 &&
     saturation_residual.squaredNorm() > 0.0;
-  const bool anti_windup_active = saturation_anti_windup_active;
-
   Eigen::Vector2d candidate_integral = integral_acceleration_world_;
   if (integrator_enabled) {
     Eigen::Vector2d integral_derivative = Eigen::Vector2d::Zero();
@@ -250,7 +265,10 @@ HorizontalPositionControllerResult HorizontalPositionController::compute(
     result.integral_acceleration_world + result.feedforward_acceleration_world;
   result.integral_enabled = true;
   result.integral_frozen = !integrate_position_error;
-  result.anti_windup_active = anti_windup_active;
+  result.saturation_backcalc_active = saturation_anti_windup_active;
+  result.integrator_unloading_active = integrator_unloading_active;
+  result.anti_windup_active =
+    saturation_anti_windup_active || integrator_unloading_active;
   return result;
 }
 
@@ -264,14 +282,18 @@ const Eigen::Vector2d & HorizontalPositionController::integral_acceleration_worl
   return integral_acceleration_world_;
 }
 
-bool HorizontalPositionController::back_calculate_integrator_to_zero(const double dt)
+bool HorizontalPositionController::unwind_integrator_if_opposing_error(
+  const Eigen::Vector2d & position_error, const double dt)
 {
-  if (!parameters_.enable_integral || !std::isfinite(dt) || dt <= 0.0 ||
-    parameters_.anti_windup_gain <= 0.0 || integral_acceleration_world_.isZero())
+  if (!parameters_.enable_integral || !vector_is_finite(position_error) ||
+    !std::isfinite(dt) || dt <= 0.0 || parameters_.integrator_unload_gain <= 0.0 ||
+    integral_acceleration_world_.squaredNorm() <=
+    kMinimumVectorNorm * kMinimumVectorNorm ||
+    position_error.dot(integral_acceleration_world_) >= 0.0)
   {
     return false;
   }
-  const double scale = std::max(0.0, 1.0 - parameters_.anti_windup_gain * dt);
+  const double scale = std::max(0.0, 1.0 - parameters_.integrator_unload_gain * dt);
   integral_acceleration_world_ *= scale;
   return true;
 }

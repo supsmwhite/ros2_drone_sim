@@ -16,6 +16,7 @@ struct HorizontalPositionControllerParameters
   Eigen::Vector2d position_ki{Eigen::Vector2d::Zero()};
   double integral_acceleration_limit{0.35};
   double anti_windup_gain{1.0};
+  double integrator_unload_gain{2.0};
   double integral_capture_radius{0.5};
   double gravity{9.80665};
   double max_horizontal_acceleration{5.0};
@@ -47,6 +48,8 @@ struct HorizontalPositionControllerResult
   bool saturated{false};
   bool integral_enabled{false};
   bool integral_frozen{false};
+  bool saturation_backcalc_active{false};
+  bool integrator_unloading_active{false};
   bool anti_windup_active{false};
 };
 
@@ -70,7 +73,8 @@ public:
 
   void reset_integrator();
   const Eigen::Vector2d & integral_acceleration_world() const;
-  bool back_calculate_integrator_to_zero(double dt);
+  bool unwind_integrator_if_opposing_error(
+    const Eigen::Vector2d & position_error, double dt);
 
 private:
   HorizontalPositionControllerParameters parameters_;

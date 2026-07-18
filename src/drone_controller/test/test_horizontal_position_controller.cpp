@@ -340,6 +340,7 @@ drone_controller::HorizontalPositionControllerParameters integral_parameters()
   parameters.position_ki = Eigen::Vector2d(0.1, 0.1);
   parameters.integral_acceleration_limit = 0.35;
   parameters.anti_windup_gain = 1.0;
+  parameters.integrator_unload_gain = 2.0;
   parameters.integral_capture_radius = 0.5;
   parameters.max_horizontal_acceleration = 0.8;
   parameters.max_tilt_angle = 0.15;
@@ -406,11 +407,13 @@ TEST(HorizontalPositionControllerIntegral, BackCalculationActsDuringSaturation)
   const auto result = controller.compute(input, 0.1, true);
   ASSERT_TRUE(result.valid);
   EXPECT_TRUE(result.saturated);
+  EXPECT_TRUE(result.saturation_backcalc_active);
+  EXPECT_FALSE(result.integrator_unloading_active);
   EXPECT_TRUE(result.anti_windup_active);
   EXPECT_LT(controller.integral_acceleration_world().x(), 0.0);
 }
 
-TEST(HorizontalPositionControllerIntegral, ReversedErrorUnloadsStoredIntegral)
+TEST(HorizontalPositionControllerIntegral, OpposingErrorUnloadsStoredIntegral)
 {
   drone_controller::HorizontalPositionController controller(integral_parameters());
   drone_controller::HorizontalPositionControllerInput input;
@@ -420,10 +423,11 @@ TEST(HorizontalPositionControllerIntegral, ReversedErrorUnloadsStoredIntegral)
   }
   const double stored = controller.integral_acceleration_world().x();
   input.desired_position_world.x() = -0.4;
-  for (int index = 0; index < 50; ++index) {
-    controller.compute(input, 0.01, true);
-  }
-  EXPECT_LT(controller.integral_acceleration_world().x(), stored);
+  const auto result = controller.compute(input, 0.01, true);
+  EXPECT_TRUE(result.integrator_unloading_active);
+  EXPECT_TRUE(result.anti_windup_active);
+  EXPECT_GT(controller.integral_acceleration_world().x(), 0.0);
+  EXPECT_LT(controller.integral_acceleration_world().norm(), std::abs(stored));
 }
 
 TEST(HorizontalPositionControllerIntegral, RecoveringMotionAccumulatesSameSideBias)
@@ -437,16 +441,85 @@ TEST(HorizontalPositionControllerIntegral, RecoveringMotionAccumulatesSameSideBi
   EXPECT_LT(controller.integral_acceleration_world().x(), 0.0);
 }
 
-TEST(HorizontalPositionControllerIntegral, ExplicitBackCalculationUnloadsStoredIntegral)
+TEST(HorizontalPositionControllerIntegral, ExplicitOpposingErrorUnloadingPreservesDirection)
 {
   drone_controller::HorizontalPositionController controller(integral_parameters());
   drone_controller::HorizontalPositionControllerInput input;
-  input.desired_position_world.x() = -0.2;
+  input.desired_position_world = Eigen::Vector2d(-0.2, 0.1);
   controller.compute(input, 1.0, true);
-  const double stored = controller.integral_acceleration_world().x();
-  ASSERT_LT(stored, 0.0);
-  EXPECT_TRUE(controller.back_calculate_integrator_to_zero(0.1));
-  EXPECT_LT(std::abs(controller.integral_acceleration_world().x()), std::abs(stored));
+  const Eigen::Vector2d stored = controller.integral_acceleration_world();
+  ASSERT_GT(stored.norm(), 0.0);
+  EXPECT_TRUE(controller.unwind_integrator_if_opposing_error(-stored, 0.1));
+  const Eigen::Vector2d unloaded = controller.integral_acceleration_world();
+  EXPECT_LT(unloaded.norm(), stored.norm());
+  EXPECT_GT(unloaded.dot(stored), 0.0);
+  EXPECT_NEAR(unloaded.x() / unloaded.y(), stored.x() / stored.y(), kTolerance);
+}
+
+TEST(HorizontalPositionControllerIntegral, SameDirectionErrorDoesNotActivelyUnload)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  controller.compute(input, 0.5, true);
+  const double stored = controller.integral_acceleration_world().norm();
+  const auto result = controller.compute(input, 0.1, true);
+  EXPECT_FALSE(result.integrator_unloading_active);
+  EXPECT_GT(controller.integral_acceleration_world().norm(), stored);
+}
+
+TEST(HorizontalPositionControllerIntegral, ZeroErrorHoldsStoredIntegral)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  controller.compute(input, 0.5, true);
+  const Eigen::Vector2d stored = controller.integral_acceleration_world();
+  input.desired_position_world.setZero();
+  const auto result = controller.compute(input, 0.1, true);
+  EXPECT_FALSE(result.integrator_unloading_active);
+  EXPECT_TRUE(controller.integral_acceleration_world().isApprox(stored, kTolerance));
+}
+
+TEST(HorizontalPositionControllerIntegral, ZeroUnloadGainDisablesActiveUnloading)
+{
+  auto parameters = integral_parameters();
+  parameters.integrator_unload_gain = 0.0;
+  drone_controller::HorizontalPositionController controller(parameters);
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  controller.compute(input, 0.5, true);
+  const Eigen::Vector2d stored = controller.integral_acceleration_world();
+  input.desired_position_world.x() = -0.2;
+  EXPECT_FALSE(controller.unwind_integrator_if_opposing_error(
+    input.desired_position_world, 0.1));
+  EXPECT_TRUE(controller.integral_acceleration_world().isApprox(stored, kTolerance));
+}
+
+TEST(HorizontalPositionControllerIntegral, UnsaturatedOutputDoesNotActivateBackCalculation)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.1;
+  const auto result = controller.compute(input, 0.1, true);
+  ASSERT_TRUE(result.valid);
+  EXPECT_FALSE(result.saturated);
+  EXPECT_FALSE(result.saturation_backcalc_active);
+}
+
+TEST(HorizontalPositionControllerIntegral, InvalidExplicitUnloadDoesNotPolluteState)
+{
+  drone_controller::HorizontalPositionController controller(integral_parameters());
+  drone_controller::HorizontalPositionControllerInput input;
+  input.desired_position_world.x() = 0.2;
+  controller.compute(input, 0.5, true);
+  const Eigen::Vector2d stored = controller.integral_acceleration_world();
+  Eigen::Vector2d invalid_error(-1.0, std::numeric_limits<double>::quiet_NaN());
+  EXPECT_FALSE(controller.unwind_integrator_if_opposing_error(invalid_error, 0.1));
+  EXPECT_FALSE(controller.unwind_integrator_if_opposing_error(-stored, 0.0));
+  EXPECT_FALSE(controller.unwind_integrator_if_opposing_error(
+    -stored, std::numeric_limits<double>::infinity()));
+  EXPECT_TRUE(controller.integral_acceleration_world().isApprox(stored, kTolerance));
 }
 
 TEST(HorizontalPositionControllerIntegral, ResetClearsState)

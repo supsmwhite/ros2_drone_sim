@@ -23,4 +23,7 @@ bool mixer_saturated
 bool horizontal_integral_enabled
 bool horizontal_integral_frozen
 bool horizontal_integral_reset
+# Deprecated aggregate kept for compatibility. It is the OR of the next two fields.
 bool horizontal_anti_windup_active
+bool horizontal_saturation_backcalc_active
+bool horizontal_integrator_unloading_active

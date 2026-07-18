@@ -1,0 +1,37 @@
+{
+  "scenario": "short",
+  "force_n": 0.3,
+  "parameters": {
+    "enabled": true,
+    "ki": 0.15,
+    "kaw": 2.0,
+    "limit_m_s2": 0.35,
+    "capture_radius_m": 0.5,
+    "reset_distance_m": 1.0
+  },
+  "dynamics_mass_kg": 1.0,
+  "maximum_horizontal_offset_m": 0.3335185925978668,
+  "recovery_time_s": 5.5002009620002354,
+  "reverse_overshoot_m": 0.0,
+  "final_position_error_m": 0.0025740213252925578,
+  "final_horizontal_error_m": 0.0025740213252759105,
+  "final_speed_m_s": 0.0032943318693125197,
+  "final_altitude_m": 1.500000009257481,
+  "last_3s_average_error_m": 0.009909449266532536,
+  "last_3s_maximum_error_m": 0.021527762669953068,
+  "last_3s_average_speed_m_s": 0.00633856757990119,
+  "last_3s_average_integral_x_m_s2": -0.0008306035674534133,
+  "peak_integral_acceleration_m_s2": 0.03628601012734878,
+  "maximum_tilt_rad": 0.03566326843893888,
+  "maximum_rpm": 10867.462712356191,
+  "saturation_counts": {
+    "horizontal": 0,
+    "altitude": 0,
+    "attitude": 0,
+    "mixer": 0
+  },
+  "anti_windup_samples": 1600,
+  "integral_reset_samples": 0,
+  "sample_count": 2602,
+  "error": null
+}

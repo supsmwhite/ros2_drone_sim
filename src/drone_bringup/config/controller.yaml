@@ -15,6 +15,16 @@ position_controller_node:
     horizontal_position_kp_y: 0.4
     horizontal_velocity_kd_x: 1.2
     horizontal_velocity_kd_y: 1.2
+    enable_horizontal_integral: true
+    horizontal_position_ki_x: 0.15
+    horizontal_position_ki_y: 0.15
+    horizontal_integral_acceleration_limit: 0.35
+    horizontal_anti_windup_gain: 2.0
+    horizontal_integral_capture_radius: 0.50
+    horizontal_integral_reset_distance: 1.0
+    horizontal_disturbance_change_threshold: 0.15
+    horizontal_disturbance_detection_error_floor: 0.005
+    horizontal_integrator_unloading_duration: 8.0
     max_horizontal_acceleration: 0.8
     max_tilt_angle: 0.15
 

@@ -98,7 +98,7 @@ ros2 launch drone_bringup basic_sim.launch.py
 终端 2：
 
 ```bash
-source /home/peter/ros2_drone_sim/install/setup.bash
+source ~/ros2_drone_sim/install/setup.bash
 
 ros2 topic pub --once /drone/goal geometry_msgs/msg/PoseStamped \
   "{header: {frame_id: map}, pose: {position: {x: 2.0, y: 1.0, z: 1.5}, orientation: {w: 1.0}}}"
@@ -188,7 +188,7 @@ ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=persistent_
 
 当前基线的三次独立 `0.30 N × 10 s` 撤力重复实验：恢复时间 `4.600580–4.601050 s`，反向超调 `0.107763–0.107767 m`；三次均无控制器饱和。
 
-本轮最终全量回归：`288 tests, 0 errors, 0 failures, 0 skipped`。
+提交候选版本已在 `9289cdb2adf2d260c2cb41cd8e7cdf66d0114120` 上完成最终回归：构建 6 个 package 成功，`288 tests, 0 errors, 0 failures, 0 skipped`；真实环境、时间和统计见 `results/submission_validation.json`。这里的开发阶段实验数据不会因提交收尾而重写来源 SHA，也不表示全部长时间实验已在提交候选上重新执行。核心演示的人工视觉验收由用户在提交收尾前完成。
 
 正式数据见：
 
@@ -204,7 +204,7 @@ ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=persistent_
 ### A. 编译与环境
 
 ```bash
-cd /home/peter/ros2_drone_sim
+cd ~/ros2_drone_sim
 source /opt/ros/humble/setup.bash
 colcon build --symlink-install
 source install/setup.bash
@@ -317,3 +317,16 @@ ros2 param get /quadrotor_dynamics_node enable_external_wrench
 3. 整理整体报告和答辩材料。
 
 可选扩展：只有出现明确物理需求时再评估垂向持续扰动与高度积分；其后可研究动态障碍和在线重规划、更完整的时空风场、传感器噪声与状态估计。这些不是当前里程碑缺陷或默认必做项。
+
+## References and acknowledgments
+
+任务指定参考项目：
+
+- [pengyu_sim](https://gitee.com/potato77/pengyu_sim)
+- [MARSIM](https://github.com/hku-mars/MARSIM)
+
+这些项目仅用于理解无人机仿真、动力学、控制和系统组织思路。本仓库不是二者的代码移植版本，也未复制或改编其源代码、模型、地图、配置、图片或其他资源；ROS2 包结构、节点、算法、配置、测试和文档均在本项目中独立完成。
+
+## License
+
+本项目采用 Apache License 2.0，完整条款见根目录 `LICENSE`。

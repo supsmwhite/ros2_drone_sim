@@ -5,7 +5,7 @@
   <version>0.1.0</version>
   <description>Quadrotor controller algorithm and ROS2 node skeleton.</description>
   <maintainer email="18850252651@163.com">Peter</maintainer>
-  <license>TODO</license>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

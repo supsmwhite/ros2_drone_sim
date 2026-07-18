@@ -45,6 +45,7 @@ struct HoverControllerInput
 struct HoverControllerResult
 {
   std::array<double, 4> motor_rpm{};             // 最终交给 /drone/motor_rpm_cmd 的四电机目标转速。
+  std::array<double, 4> unclipped_motor_rpm{};   // Mixer 裁剪前诊断值，不发送给动力学。
   double collective_thrust{0.0};                 // AltitudeController 的输出，供调试观察。
   Eigen::Vector3d torque_body{Eigen::Vector3d::Zero()}; // AttitudeController 的输出，供调试观察。
   bool valid{true};        // 三个子控制器中任一个 invalid，则整体为 false，此时 motor_rpm 全零。

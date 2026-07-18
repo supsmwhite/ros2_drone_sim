@@ -9,6 +9,7 @@
 #include <Eigen/Geometry>
 
 #include "drone_controller/position/position_controller.hpp"
+#include "drone_msgs/msg/controller_diagnostics.hpp"
 #include "drone_msgs/msg/motor_rpm.hpp"
 #include "drone_msgs/msg/trajectory_setpoint.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -68,6 +69,8 @@ public:
       });
     motor_rpm_publisher_ =
       create_publisher<drone_msgs::msg::MotorRPM>("/drone/motor_rpm_cmd", 10);
+    diagnostics_publisher_ = create_publisher<drone_msgs::msg::ControllerDiagnostics>(
+      "/drone/controller/diagnostics", 10);
 
     // 根据 control_frequency 创建定时器，每个周期调用一次 control_step()，
     // 这是整个控制环的驱动源（默认 100 Hz，与动力学 200 Hz 独立）。
@@ -309,18 +312,41 @@ private:
     message.m3_rear_right_ccw_rpm = result.motor_rpm[2];
     message.m4_front_right_cw_rpm = result.motor_rpm[3];
     motor_rpm_publisher_->publish(message);
+    drone_msgs::msg::ControllerDiagnostics diagnostics;
+    diagnostics.horizontal_acceleration_x = result.desired_horizontal_acceleration_world.x();
+    diagnostics.horizontal_acceleration_y = result.desired_horizontal_acceleration_world.y();
+    diagnostics.collective_thrust = result.collective_thrust;
+    diagnostics.roll_torque = result.torque_body.x();
+    diagnostics.pitch_torque = result.torque_body.y();
+    diagnostics.yaw_torque = result.torque_body.z();
+    diagnostics.unclipped_motor_rpm = result.unclipped_motor_rpm;
+    diagnostics.motor_rpm = result.motor_rpm;
+    diagnostics.horizontal_saturated = result.horizontal_saturated;
+    diagnostics.altitude_saturated = result.altitude_saturated;
+    diagnostics.attitude_saturated = result.attitude_saturated;
+    diagnostics.mixer_saturated = result.mixer_saturated;
+    diagnostics_publisher_->publish(diagnostics);
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 1000,
       "position target=[%.3f, %.3f, %.3f] current=[%.3f, %.3f, %.3f] "
       "world_v=[%.3f, %.3f, %.3f] a_xy=[%.3f, %.3f] thrust=%.3f "
-      "rpm=[%.1f, %.1f, %.1f, %.1f] saturated=%s",
+      "torque=[%.4f, %.4f, %.4f] rpm_pre=[%.1f, %.1f, %.1f, %.1f] "
+      "rpm=[%.1f, %.1f, %.1f, %.1f] saturation=[horizontal:%s altitude:%s "
+      "attitude:%s mixer:%s] saturated=%s",
       input.desired_position_world.x(), input.desired_position_world.y(),
       input.desired_position_world.z(), input.current_position_world.x(),
       input.current_position_world.y(), input.current_position_world.z(),
       input.current_velocity_world.x(), input.current_velocity_world.y(),
       input.current_velocity_world.z(), result.desired_horizontal_acceleration_world.x(),
       result.desired_horizontal_acceleration_world.y(), result.collective_thrust,
+      result.torque_body.x(), result.torque_body.y(), result.torque_body.z(),
+      result.unclipped_motor_rpm[0], result.unclipped_motor_rpm[1],
+      result.unclipped_motor_rpm[2], result.unclipped_motor_rpm[3],
       result.motor_rpm[0], result.motor_rpm[1], result.motor_rpm[2], result.motor_rpm[3],
+      result.horizontal_saturated ? "true" : "false",
+      result.altitude_saturated ? "true" : "false",
+      result.attitude_saturated ? "true" : "false",
+      result.mixer_saturated ? "true" : "false",
       result.saturated ? "true" : "false");
   }
 
@@ -339,6 +365,7 @@ private:
     trajectory_setpoint_subscription_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_subscription_;
   rclcpp::Publisher<drone_msgs::msg::MotorRPM>::SharedPtr motor_rpm_publisher_;
+  rclcpp::Publisher<drone_msgs::msg::ControllerDiagnostics>::SharedPtr diagnostics_publisher_;
   rclcpp::TimerBase::SharedPtr control_timer_;
 };
 

@@ -35,6 +35,7 @@ struct PositionControllerInput
 struct PositionControllerResult
 {
   std::array<double, 4> motor_rpm{};
+  std::array<double, 4> unclipped_motor_rpm{};
   Eigen::Vector2d desired_horizontal_acceleration_world{Eigen::Vector2d::Zero()};
   double desired_roll{0.0};
   double desired_pitch{0.0};

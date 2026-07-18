@@ -1,0 +1,21 @@
+{
+  "kind": "diagonal_step",
+  "completed": true,
+  "rise_time_s": 6.0848553069954505,
+  "overshoot_m": 0.0,
+  "settling_time_s": 12.085164506002911,
+  "maximum_horizontal_offset_m": 2.222466287262173,
+  "final_error_m": 0.013601690255319624,
+  "final_speed_m_s": 0.005373641811615462,
+  "maximum_tilt_rad": 0.11816147106168608,
+  "maximum_rpm": 12580.866907322268,
+  "maximum_horizontal_acceleration_request_m_s2": 0.894427190999916,
+  "saturation_counts": {
+    "horizontal": 0,
+    "altitude": 0,
+    "attitude": 0,
+    "mixer": 0
+  },
+  "diagnostic_samples": 1409,
+  "state_samples": 2817
+}

@@ -1,0 +1,21 @@
+{
+  "kind": "disturbance_0p8",
+  "completed": true,
+  "rise_time_s": 2.309925795001618,
+  "overshoot_m": null,
+  "settling_time_s": 14.410384066002734,
+  "maximum_horizontal_offset_m": 2.091292211903826,
+  "final_error_m": 0.007923417882925821,
+  "final_speed_m_s": 0.005443358185172246,
+  "maximum_tilt_rad": 0.042170499278712414,
+  "maximum_rpm": 10910.227344688557,
+  "maximum_horizontal_acceleration_request_m_s2": 0.4,
+  "saturation_counts": {
+    "horizontal": 465,
+    "altitude": 0,
+    "attitude": 0,
+    "mixer": 0
+  },
+  "diagnostic_samples": 1641,
+  "state_samples": 3282
+}

@@ -11,12 +11,14 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     bringup = get_package_share_directory('drone_bringup')
-    dynamics = os.path.join(bringup, 'config', 'dynamics.yaml')
-    controller = os.path.join(bringup, 'config', 'controller.yaml')
+    default_dynamics = os.path.join(bringup, 'config', 'dynamics.yaml')
+    default_controller = os.path.join(bringup, 'config', 'controller.yaml')
     xacro_file = os.path.join(bringup, 'urdf', 'drone.urdf.xacro')
     rviz_config = os.path.join(bringup, 'rviz', 'drone_sim.rviz')
     robot_description = ParameterValue(Command(['xacro ', xacro_file]), value_type=str)
     use_rviz = LaunchConfiguration('use_rviz')
+    dynamics = LaunchConfiguration('dynamics_config')
+    controller = LaunchConfiguration('controller_config')
     hover_goal = (
         "{header: {frame_id: map}, pose: {position: {x: 0.0, y: 0.0, z: 1.5}, "
         "orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}")
@@ -25,6 +27,8 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'use_rviz', default_value='true',
             description='Start RViz2 for the hover disturbance experiment.'),
+        DeclareLaunchArgument('dynamics_config', default_value=default_dynamics),
+        DeclareLaunchArgument('controller_config', default_value=default_controller),
         Node(
             package='drone_dynamics', executable='quadrotor_dynamics_node',
             name='quadrotor_dynamics_node', output='screen',

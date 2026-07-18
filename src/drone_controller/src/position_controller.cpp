@@ -76,6 +76,7 @@ PositionControllerResult PositionController::compute(const PositionControllerInp
   }
 
   result.motor_rpm = hover_result.motor_rpm;
+  result.unclipped_motor_rpm = hover_result.unclipped_motor_rpm;
   for (const double rpm : result.motor_rpm) {
     if (!std::isfinite(rpm)) {
       return invalid_result(result);

@@ -1,0 +1,12 @@
+float64 horizontal_acceleration_x
+float64 horizontal_acceleration_y
+float64 collective_thrust
+float64 roll_torque
+float64 pitch_torque
+float64 yaw_torque
+float64[4] unclipped_motor_rpm
+float64[4] motor_rpm
+bool horizontal_saturated
+bool altitude_saturated
+bool attitude_saturated
+bool mixer_saturated

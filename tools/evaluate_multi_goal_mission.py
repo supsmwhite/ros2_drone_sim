@@ -209,6 +209,7 @@ class EvaluationCollector(Node):
         self.segment_collision_observed = False
         self.nonfinite_observed = False
         self.maximum_actual_speed = 0.0
+        self.maximum_tilt = 0.0
         self.maximum_reference_speed = 0.0
         self.maximum_reference_acceleration = 0.0
         self.maximum_tracking_error = 0.0
@@ -459,6 +460,14 @@ class EvaluationCollector(Node):
             return
         now = time.monotonic()
         position = values[:3]
+        quaternion_norm = math.sqrt(sum(value * value for value in values[3:7]))
+        if quaternion_norm < 1.0e-12:
+            self.nonfinite_observed = True
+            self._record_error('invalid zero-norm odometry quaternion')
+            return
+        qx, qy = values[3] / quaternion_norm, values[4] / quaternion_norm
+        tilt = math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * (qx * qx + qy * qy))))
+        self.maximum_tilt = max(self.maximum_tilt, tilt)
         speed = norm3(values[7:10])
         clearance = min(
             distance_to_box(position, lower, upper)
@@ -944,6 +953,7 @@ def build_metrics(collector, configuration, log_text, runtime_error, repo_root):
         'maximum_tracking_error_m': collector.maximum_tracking_error,
         'minimum_clearance_m': collector.minimum_clearance,
         'maximum_actual_speed_m_s': collector.maximum_actual_speed,
+        'maximum_tilt_rad': collector.maximum_tilt,
         'maximum_reference_speed_m_s': collector.maximum_reference_speed,
         'maximum_reference_acceleration_m_s2':
             collector.maximum_reference_acceleration,
@@ -993,7 +1003,7 @@ def write_metrics(output_directory, metrics):
         metrics_file.write('\n')
 
 
-def run_evaluation(repo_root, output_directory, timeout):
+def run_evaluation(repo_root, output_directory, timeout, dynamics_config=None, controller_config=None):
     configuration = load_configuration(repo_root)
     output_directory.mkdir(parents=True, exist_ok=True)
     environment = os.environ.copy()
@@ -1003,6 +1013,10 @@ def run_evaluation(repo_root, output_directory, timeout):
         'multi_goal_static_avoidance_sim.launch.py', 'use_rviz:=false',
         f'mission_config:={configuration["mission_path"]}',
     ]
+    if dynamics_config is not None:
+        command.append(f'dynamics_config:={dynamics_config}')
+    if controller_config is not None:
+        command.append(f'controller_config:={controller_config}')
     print(
         f'=== default multi-goal mission: domain={DOMAIN_ID} '
         f'goals={len(configuration["goals"])} ===')
@@ -1082,6 +1096,8 @@ def parse_arguments():
     parser.add_argument(
         '--output-directory', type=Path,
         help='Defaults to results/multi_goal_evaluation/default_mission.')
+    parser.add_argument('--dynamics-config', type=Path)
+    parser.add_argument('--controller-config', type=Path)
     return parser.parse_args()
 
 
@@ -1093,7 +1109,9 @@ def main():
     output_directory = arguments.output_directory or (
         repo_root / 'results' / 'multi_goal_evaluation' / 'default_mission')
     metrics = run_evaluation(
-        repo_root, output_directory.resolve(), arguments.timeout)
+        repo_root, output_directory.resolve(), arguments.timeout,
+        arguments.dynamics_config.resolve() if arguments.dynamics_config else None,
+        arguments.controller_config.resolve() if arguments.controller_config else None)
     if not metrics['passed']:
         raise SystemExit('multi-goal mission evaluation failed')
     print('\nDefault multi-goal mission evaluation passed.')

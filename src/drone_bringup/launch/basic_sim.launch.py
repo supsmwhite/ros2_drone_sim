@@ -11,12 +11,12 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     bringup_share = get_package_share_directory('drone_bringup')
-    dynamics_parameters = os.path.join(
+    default_dynamics_parameters = os.path.join(
         bringup_share,
         'config',
         'dynamics.yaml',
     )
-    controller_parameters = os.path.join(
+    default_controller_parameters = os.path.join(
         bringup_share,
         'config',
         'controller.yaml',
@@ -29,6 +29,8 @@ def generate_launch_description():
     )
     use_rviz = LaunchConfiguration('use_rviz')
     setpoint_source = LaunchConfiguration('setpoint_source')
+    dynamics_parameters = LaunchConfiguration('dynamics_config')
+    controller_parameters = LaunchConfiguration('controller_config')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -41,6 +43,8 @@ def generate_launch_description():
             default_value='pose_goal',
             description='Controller input source: pose_goal or trajectory.',
         ),
+        DeclareLaunchArgument('dynamics_config', default_value=default_dynamics_parameters),
+        DeclareLaunchArgument('controller_config', default_value=default_controller_parameters),
         Node(
             package='drone_dynamics',
             executable='quadrotor_dynamics_node',

@@ -5,7 +5,7 @@
   <version>0.1.0</version>
   <description>Static collision geometry and deterministic 3D A* planning for the drone simulation.</description>
   <maintainer email="18850252651@163.com">Peter</maintainer>
-  <license>TODO</license>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

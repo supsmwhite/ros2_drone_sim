@@ -11,7 +11,7 @@
 ## 环境与包
 
 - 目标环境：Ubuntu 22.04、ROS2 Humble、C++17。
-- 工作区：`/home/peter/ros2_drone_sim`。
+- 本机默认工作区：`/home/peter/ros2_drone_sim`；公开命令不得依赖该绝对路径。
 - `drone_msgs`：`MotorRPM`、`TrajectorySetpoint`、`ControllerDiagnostics`、`ExecuteGoalSequence`。
 - `drone_dynamics`：四旋翼刚体、电机响应、地面约束、集中外力输入、Odom/IMU/TF。
 - `drone_controller`：位置、高度、姿态控制和 X 构型 Mixer。
@@ -172,7 +172,15 @@ StaticEnvironment
 
 ### 自动测试
 
-本轮最终全量回归：构建 6 个 package 成功；`288 tests, 0 errors, 0 failures, 0 skipped`。
+上一里程碑全量回归：构建 6 个 package 成功；`288 tests, 0 errors, 0 failures, 0 skipped`。提交候选版本的实际构建与全量测试单独记录在 `results/submission_validation.json`；在最终回归完成前状态必须保持 `not_run`，通过后其中 `tested_commit` 必须指向测试前的元数据提交，而不是后续验证记录提交。
+
+`results/` 中既有量化指标属于开发阶段实验数据，必须保留其原始 `git_commit` 等来源字段；提交收尾不得手工改写旧 SHA，也不得声称所有长时间实验已在提交候选上重跑。核心演示的人工视觉验收由用户在提交收尾前完成，与自动回归分开记录。
+
+## 许可证与参考项目
+
+- 本项目所有者确认当前仓库为独立实现，并选择 `Apache-2.0`；根目录 `LICENSE` 和六个 `package.xml` 是许可证权威入口。
+- 任务指定参考项目为 `https://gitee.com/potato77/pengyu_sim` 和 `https://github.com/hku-mars/MARSIM`。
+- 两个参考项目只用于理解仿真、动力学、控制和系统组织思路；本仓库没有复制或改编其代码、模型、地图、配置、图片或其他资源，不是二者的移植版本。
 
 ## 当前限制
 
@@ -212,3 +220,5 @@ colcon test --packages-select drone_bringup \
 ```
 
 失败日志通常位于 `build/<package>/Testing/Temporary/LastTest.log` 和 `build/<package>/test_results/`。不同真实 Launch/E2E 不要并行复用同一 ROS Domain。
+
+上面的绝对路径只描述本机默认工作区；README 和其他公开使用命令应使用 `~/ros2_drone_sim` 或当前工作目录。

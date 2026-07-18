@@ -1,0 +1,30 @@
+{
+  "validation_type": "submission_candidate",
+  "tested_commit": "",
+  "tested_branch": "chore/submission-finalization",
+  "tested_at": "",
+  "environment": {
+    "os": "Ubuntu 22.04.5 LTS",
+    "ros_distribution": "Humble"
+  },
+  "build": {
+    "status": "not_run",
+    "packages_expected": 6,
+    "packages_completed": null
+  },
+  "tests": {
+    "status": "not_run",
+    "tests": null,
+    "failures": null,
+    "errors": null,
+    "skipped": null
+  },
+  "manual_acceptance": {
+    "status": "completed_by_user",
+    "notes": "Core milestone demonstrations were manually reviewed before submission finalization."
+  },
+  "referenced_experiment_results": [
+    "results/horizontal_integral_upgrade/selected/",
+    "results/horizontal_integral_upgrade/repeat_results.json"
+  ]
+}

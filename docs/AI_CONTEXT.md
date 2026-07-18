@@ -24,12 +24,13 @@
 - `interactive_goal_editor_sim.launch.py`：RViz 三维有序目标编辑和完整轨迹预览；不启动飞控或动力学
 - `interactive_goal_navigation_sim.launch.py`：RViz 编辑、实际 Odom 全序列预检和交互式顺序飞行
 - `disturbance_hover_sim.launch.py`：启用可选外力输入、自动起飞至 `(0,0,1.5)` 并悬停
+- `disturbance_visual_demo.launch.py`：正式动力学/位置控制器、模型、专用 RViz 和参数化扰动演示节点
 
 所有规划/避障 Launch 均从 `src/drone_bringup/config/environment.yaml` 读取同一地图，没有复制运行时障碍物配置。
 
 ## 外部力扰动与悬停抗扰
 
-`QuadrotorModel::set_external_wrench()` 保持纯模型接口：force 在 map/world 中表达并加入世界系平动力，torque 在 body 中表达。ROS 第一版只允许 `frame_id=map`、有限且模长不超过 `2.0 N` 的 force，并要求 torque 全零；非法 frame、NaN/Inf、超限 force 和非零 torque 会拒绝整条消息。`enable_external_wrench` 默认 `false`，现有 Launch 不创建订阅且旧动力学数值不变；`disturbance_hover_sim.launch.py` 单独覆盖为 true。合法非零输入超过 `external_wrench_timeout=0.20 s` 后模型和状态 Topic 自动归零。
+`QuadrotorModel::set_external_wrench()` 保持纯模型接口：force 在 map/world 中表达并加入世界系平动力，torque 在 body 中表达。ROS 第一版只允许 `frame_id=map`、有限且模长不超过 `2.0 N` 的 force，并要求 torque 全零；非法 frame、NaN/Inf、超限 force 和非零 torque 会拒绝整条消息。`enable_external_wrench` 默认 `false`，正常 Launch 不创建订阅且旧动力学数值不变；`disturbance_hover_sim.launch.py` 和 `disturbance_visual_demo.launch.py` 两个专用扰动入口显式覆盖为 true。合法非零输入超过 `external_wrench_timeout=0.20 s` 后模型和状态 Topic 自动归零。
 
 输入 Topic 为 `/drone/external_wrench`（`geometry_msgs/msg/WrenchStamped`）。状态 `/drone/external_wrench/active` 与 `/drone/external_wrench/applied` 使用 Reliable、Transient Local、Depth 1。周期人工工具：
 
@@ -46,6 +47,14 @@ python3 tools/evaluate_hover_disturbance.py --timeout 45
 Domain 119 最终实验使用 `+x 0.30 N × 2.0 s`，基线误差 `0.001424 m`，最大位置误差和水平偏移 `0.350191 m`，最大竖直误差 `0.000291 m`，最大速度 `0.188198 m/s`，最大 roll/pitch `0/0.033841 rad`，RPM 命令范围 `10784.1–10856.7`，饱和日志 `0`，恢复时间 `5.699643 s`，最终误差 `0.008458 m`、最终速度 `0.005322 m/s`，无 NaN/Inf 或姿态发散，验收通过。失败候选 `0.80 N × 2.0 s` 的最大水平偏移 `2.087771 m`、恢复时间 `10.679879 s`、饱和日志 `5`；候选结果被保留，控制器参数未修改。
 
 最终文件位于 `results/hover_disturbance/default/`：`launch.log`、`metrics.json`、`trajectory.csv` 和七张要求图像；失败候选位于 `results/hover_disturbance/candidates/force_0p8_duration_2p0/`。该功能是集中外力注入，不是完整空气动力学；未实现空间变化风场、随机阵风和非零 torque。集总平动空气阻力与角阻尼由独立动力学模型提供。
+
+`drone_bringup/disturbance_demo_node` 是与动力学和控制器解耦的轻量演示编排节点。它持续发布 `/drone/goal`，订阅 `/drone/odom` 与 `/drone/controller/diagnostics`，以默认 `25 Hz` 发布 `/drone/external_wrench`，并向 Reliable/Transient Local `/drone/disturbance/markers` 发布 MarkerArray。阶段固定为 `WAIT_FOR_ODOM`、`TAKEOFF_AND_SETTLE`、`COUNTDOWN`、`DISTURBANCE_ACTIVE`、`RECOVERY`、`COMPLETE`；无有效 Odom 不计时，位置三维误差和速度均连续达标 `1 s` 后才倒计时，COMPLETE 后持续零力。所有数值参数检查有限性、时间/频率/尺度/力模长范围；默认 `force_z=0`。`short_gust` 默认 `0.30 N × 2 s`，`persistent_release` 默认 `0.30 N × 10 s`，均撤力观察 `10 s`，Launch 参数可覆盖。
+
+专用 `disturbance_demo.rviz` 固定 frame 为 `map`，预置 RobotModel、TF、Odom、实际 Path、目标 Pose 和扰动 MarkerArray。稳定 namespace/ID 的红色箭头表示 **Equivalent External Force**（集中等效外力，不是真实风速或完整风场）；蓝色箭头表示水平位置积分产生的世界系加速度补偿（不是实际作用力）；细线连接实际位置与悬停目标；TEXT_VIEW_FACING 显示阶段、等效力、剩余时间、水平误差、水平 I 加速度及四级饱和。零力或近零积分使用 DELETE，不对零向量归一化。专用 Launch 复用正式 `dynamics.yaml`/`controller.yaml`，只对动力学覆盖 `enable_external_wrench=true`；旧 `disturbance_hover_sim` 同样是专用扰动实验入口，`basic_sim`、多目标和交互导航等正常 Launch 继续使用默认 false，障碍地图中没有施加扰动。
+
+本阶段冻结现有水平积分算法、卸载逻辑和全部正式控制参数；高度环与姿态环继续为 PD，没有高度积分或姿态积分，也没有重新进行参数扫描。外力仍只是质心处集中等效力，不能描述为风场。
+
+本阶段相关回归执行 `colcon test --packages-select drone_bringup drone_controller`：controller 6/6、bringup 16/16 测试入口通过，随后 `colcon test-result --verbose` 汇总为 `288 tests, 0 errors, 0 failures, 0 skipped`。另执行一次缩短时序的专用 RViz 烟雾演示，RViz/OpenGL 正常启动，阶段走完 ACTIVE、RECOVERY、COMPLETE，无控制饱和；该烟雾演示不替代 README A～I 的用户人工验收。
 
 ## RViz 三维目标编辑器
 

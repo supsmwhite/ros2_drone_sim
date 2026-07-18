@@ -2,6 +2,21 @@ cmake_minimum_required(VERSION 3.8)
 project(drone_bringup)
 
 find_package(ament_cmake REQUIRED)
+find_package(drone_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(visualization_msgs REQUIRED)
+
+add_executable(disturbance_demo_node src/disturbance_demo_node.cpp)
+ament_target_dependencies(
+  disturbance_demo_node
+  drone_msgs
+  geometry_msgs
+  nav_msgs
+  rclcpp
+  visualization_msgs
+)
 
 if(BUILD_TESTING)
   find_package(launch_testing_ament_cmake REQUIRED)
@@ -75,7 +90,22 @@ if(BUILD_TESTING)
     test/test_horizontal_integral_node.py
     TIMEOUT 40
   )
+
+  add_launch_test(
+    test/test_disturbance_demo_node.py
+    TIMEOUT 30
+  )
+
+  add_launch_test(
+    test/test_disturbance_visual_launch.py
+    TIMEOUT 30
+  )
 endif()
+
+install(
+  TARGETS disturbance_demo_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 install(
   DIRECTORY launch config rviz urdf

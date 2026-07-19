@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "interactive_markers/tools.hpp"
 #include "visualization_msgs/msg/interactive_marker_control.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 
@@ -85,25 +86,30 @@ visualization_msgs::msg::InteractiveMarkerControl world_z_control(
   return control;
 }
 
-visualization_msgs::msg::InteractiveMarkerControl world_x_move_control()
+visualization_msgs::msg::InteractiveMarkerControl horizontal_ring_control(
+  const visualization_msgs::msg::InteractiveMarker & marker)
 {
-  visualization_msgs::msg::InteractiveMarkerControl control;
-  control.name = "move_x";
-  control.interaction_mode = visualization_msgs::msg::InteractiveMarkerControl::MOVE_AXIS;
-  control.orientation_mode = visualization_msgs::msg::InteractiveMarkerControl::FIXED;
-  control.orientation.w = 1.0;
+  auto control = world_z_control(
+    "move_xy", visualization_msgs::msg::InteractiveMarkerControl::MOVE_PLANE);
+  auto ring_geometry = marker;
+  ring_geometry.scale = 1.35;
+  interactive_markers::makeDisc(ring_geometry, control, 0.22);
+  auto & ring = control.markers.back();
+  ring.color.r = 0.10F;
+  ring.color.g = 0.85F;
+  ring.color.b = 0.95F;
+  ring.color.a = 0.65F;
   return control;
 }
 
-visualization_msgs::msg::InteractiveMarkerControl world_y_move_control()
+visualization_msgs::msg::InteractiveMarkerControl yaw_ring_control(
+  const visualization_msgs::msg::InteractiveMarker & marker)
 {
-  visualization_msgs::msg::InteractiveMarkerControl control;
-  control.name = "move_y";
-  control.interaction_mode = visualization_msgs::msg::InteractiveMarkerControl::MOVE_AXIS;
-  control.orientation_mode = visualization_msgs::msg::InteractiveMarkerControl::FIXED;
-  const double half_sqrt = std::sqrt(0.5);
-  control.orientation.w = half_sqrt;
-  control.orientation.z = half_sqrt;
+  auto control = world_z_control(
+    "rotate_z", visualization_msgs::msg::InteractiveMarkerControl::ROTATE_AXIS);
+  auto ring_geometry = marker;
+  ring_geometry.scale = 0.65;
+  interactive_markers::makeDisc(ring_geometry, control, 0.26);
   return control;
 }
 
@@ -242,14 +248,11 @@ visualization_msgs::msg::InteractiveMarker make_goal_candidate_marker(
   body.markers.push_back(label);
   marker.controls.push_back(body);
 
-  marker.controls.push_back(world_x_move_control());
-  marker.controls.push_back(world_y_move_control());
+  marker.controls.push_back(horizontal_ring_control(marker));
   marker.controls.push_back(
     world_z_control(
       "move_z", visualization_msgs::msg::InteractiveMarkerControl::MOVE_AXIS));
-  marker.controls.push_back(
-    world_z_control(
-      "rotate_z", visualization_msgs::msg::InteractiveMarkerControl::ROTATE_AXIS));
+  marker.controls.push_back(yaw_ring_control(marker));
 
   return marker;
 }

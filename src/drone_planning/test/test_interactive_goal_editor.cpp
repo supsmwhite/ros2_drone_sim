@@ -127,12 +127,15 @@ TEST(InteractiveGoalEditorGeometryTest, SnapsOnlyToRequestedResolutionAndCanReva
   EXPECT_THROW(snap_goal_candidate({0.0, 0.0, 1.5}, 0.0), std::invalid_argument);
 }
 
-TEST(InteractiveGoalEditorMarkerTest, SeparatesWorldTranslationAxesFromYawRing)
+TEST(InteractiveGoalEditorMarkerTest, SeparatesOuterTranslationRingFromInnerYawRing)
 {
   const auto marker = make_goal_candidate_marker(
     {{0.0, 0.0, 1.5}, M_PI / 2.0}, 4U, GoalDraftState::Editing, "EDITING");
   std::size_t axes = 0U;
+  std::size_t planes = 0U;
   std::size_t menus = 0U;
+  double translation_ring_scale = 0.0;
+  double yaw_ring_scale = 0.0;
   for (const auto & control : marker.controls) {
     EXPECT_NE(
       control.interaction_mode,
@@ -140,9 +143,6 @@ TEST(InteractiveGoalEditorMarkerTest, SeparatesWorldTranslationAxesFromYawRing)
     EXPECT_NE(
       control.interaction_mode,
       visualization_msgs::msg::InteractiveMarkerControl::MOVE_ROTATE);
-    EXPECT_NE(
-      control.interaction_mode,
-      visualization_msgs::msg::InteractiveMarkerControl::MOVE_PLANE);
     if (control.interaction_mode ==
       visualization_msgs::msg::InteractiveMarkerControl::MOVE_AXIS)
     {
@@ -150,25 +150,38 @@ TEST(InteractiveGoalEditorMarkerTest, SeparatesWorldTranslationAxesFromYawRing)
       EXPECT_EQ(
         control.orientation_mode,
         visualization_msgs::msg::InteractiveMarkerControl::FIXED);
-      if (control.name == "move_x") {
-        EXPECT_DOUBLE_EQ(control.orientation.w, 1.0);
-      } else if (control.name == "move_y") {
-        EXPECT_NEAR(control.orientation.w, std::sqrt(0.5), 1.0e-12);
-        EXPECT_NEAR(control.orientation.z, std::sqrt(0.5), 1.0e-12);
-      } else if (control.name == "move_z") {
+      if (control.name == "move_z") {
         EXPECT_NEAR(control.orientation.w, std::sqrt(0.5), 1.0e-12);
         EXPECT_NEAR(control.orientation.y, std::sqrt(0.5), 1.0e-12);
       } else {
         ADD_FAILURE() << "unexpected translation control: " << control.name;
       }
     } else if (control.interaction_mode ==
+      visualization_msgs::msg::InteractiveMarkerControl::MOVE_PLANE)
+    {
+      ++planes;
+      EXPECT_EQ(control.name, "move_xy");
+      ASSERT_EQ(control.markers.size(), 1U);
+      EXPECT_EQ(control.markers.front().type, visualization_msgs::msg::Marker::TRIANGLE_LIST);
+      translation_ring_scale = control.markers.front().scale.x;
+    } else if (control.interaction_mode ==
       visualization_msgs::msg::InteractiveMarkerControl::MENU)
     {
       ++menus;
     }
+    if (control.interaction_mode ==
+      visualization_msgs::msg::InteractiveMarkerControl::ROTATE_AXIS)
+    {
+      EXPECT_EQ(control.name, "rotate_z");
+      ASSERT_EQ(control.markers.size(), 1U);
+      EXPECT_EQ(control.markers.front().type, visualization_msgs::msg::Marker::TRIANGLE_LIST);
+      yaw_ring_scale = control.markers.front().scale.x;
+    }
   }
-  EXPECT_EQ(axes, 3U);
+  EXPECT_EQ(axes, 1U);
+  EXPECT_EQ(planes, 1U);
   EXPECT_EQ(menus, 1U);
+  EXPECT_GT(translation_ring_scale, yaw_ring_scale * 2.0);
   EXPECT_EQ(
     std::count_if(
       marker.controls.begin(), marker.controls.end(), [](const auto & control) {

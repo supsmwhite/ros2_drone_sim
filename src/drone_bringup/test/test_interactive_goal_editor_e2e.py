@@ -116,7 +116,7 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
             message.client_id = 'launch_test'
             message.marker_name = 'goal_candidate'
             message.control_name = control_name or (
-                'menu' if menu_entry else 'move_x')
+                'menu' if menu_entry else 'move_xy')
             message.event_type = event_type
             message.menu_entry_id = menu_entry
             message.pose.position.x = x
@@ -183,9 +183,23 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
                 for marker in latest['marker_update'].markers
                 for control in marker.controls
             }
-            self.assertTrue({'move_x', 'move_y', 'move_z', 'rotate_z'} <=
+            self.assertTrue({'move_xy', 'move_z', 'rotate_z'} <=
                             control_names)
-            self.assertNotIn('move_xy', control_names)
+            self.assertNotIn('move_x', control_names)
+            self.assertNotIn('move_y', control_names)
+            controls = {
+                control.name: control
+                for marker in latest['marker_update'].markers
+                for control in marker.controls
+            }
+            self.assertEqual(
+                controls['move_xy'].interaction_mode,
+                InteractiveMarkerControl.MOVE_PLANE)
+            self.assertEqual(len(controls['move_xy'].markers), 1)
+            self.assertEqual(len(controls['rotate_z'].markers), 1)
+            self.assertGreater(
+                controls['move_xy'].markers[0].scale.x,
+                controls['rotate_z'].markers[0].scale.x * 2.0)
 
             topic_names = dict(node.get_topic_names_and_types())
             self.assertIn(
@@ -269,6 +283,9 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
             ]
             for index, point in enumerate(legal_five, start=1):
                 add_goal(index, point)
+            spin_until(
+                lambda: len(latest['goals'].poses) == 5,
+                3.0, 'five-goal pose array')
             self.assertEqual(len(latest['goals'].poses), 5)
             self.assertEqual(latest['count'].data, 5)
             select_menu(8)

@@ -1,10 +1,20 @@
 {
-  "tested_commit": null,
+  "tested_commit": "06013d454a1287427b61ce9c52374ff1a03fc3fe",
   "base_commit": "0a65a0abd035d256829ece380db8ae0ebdb26434",
   "branch": "feat/interactive-goal-yaw",
-  "tested_at": "2026-07-19T22:28:15+08:00",
-  "working_tree_state": "dirty: uncommitted yaw completion acceptance patch",
+  "tested_at": "2026-07-19T23:32:12+08:00",
+  "working_tree_state": "clean",
   "command": "source /opt/ros/humble/setup.bash && source install/setup.bash && colcon test --event-handlers console_direct+",
+  "build": {
+    "packages": 6,
+    "success": true
+  },
+  "tests": {
+    "count": 342,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  },
   "parameters": {
     "yaw_mode": "path_tangent",
     "tangent_speed_threshold_m_per_s": 0.1,
@@ -25,45 +35,45 @@
   ],
   "visit_order_zero_based": [0, 1, 2],
   "mission_success": true,
-  "task_time_s": 54.705,
+  "task_time_s": 54.646,
   "actual_yaw_at_goal_acceptance_rad": [
-    1.5757332621927365,
-    -3.1368121876845,
-    -1.5658494878223683
+    1.5759882517318058,
+    -3.1368471441530303,
+    -1.5658229810620725
   ],
   "actual_yaw_error_at_goal_acceptance_rad": [
-    0.004936935397839903,
-    0.004780465905293486,
-    0.004946838972528234
+    0.005191924936909231,
+    0.004745509436763019,
+    0.004973345732824042
   ],
   "actual_angular_speed_at_goal_acceptance_rad_per_s": [
-    0.01420073680947058,
-    0.01375986892922946,
-    0.014233028786704365
+    0.014871281382341608,
+    0.013618104371757731,
+    0.014274935814949433
   ],
   "position_error_at_goal_acceptance_m": [
-    0.006909929239315927,
-    0.0039360778713339335,
-    0.009487141831719583
+    0.0069322814142115646,
+    0.003923550943466769,
+    0.009493623290885303
   ],
   "speed_at_goal_acceptance_m_per_s": [
-    0.001957476564869946,
-    0.001932608621163407,
-    0.0031140778792597976
+    0.001944801890416964,
+    0.0019427770307511919,
+    0.0031383833408646735
   ],
   "minimum_reference_yaw_error_before_goal_switch_rad": [
-    0.00036406221974896253,
-    0.00035057530717401837,
-    0.00000047218536685236843
+    0.0003882405604944912,
+    0.00034964964928057147,
+    0.0000004699327953896776
   ],
-  "maximum_adjacent_yaw_reference_jump_rad": 0.016197,
-  "maximum_yaw_reference_rate_rad_per_s": 0.801009,
-  "maximum_position_tracking_error_m": 0.016303,
-  "final_position_error_m": 0.000904,
-  "final_speed_m_per_s": 0.004396,
-  "minimum_inflated_obstacle_clearance_m": 0.239990,
+  "maximum_adjacent_yaw_reference_jump_rad": 0.016211,
+  "maximum_yaw_reference_rate_rad_per_s": 0.800598,
+  "maximum_position_tracking_error_m": 0.018279,
+  "final_position_error_m": 0.000892,
+  "final_speed_m_per_s": 0.004401,
+  "minimum_inflated_obstacle_clearance_m": 0.240006,
   "collision_count": 0,
   "controller_saturation_count": 0,
   "non_finite_value_count": 0,
-  "note": "Each visited-goal transition now requires position, linear speed, shortest-angle yaw error, and angular-speed norm to remain below their tolerances for the full hold duration. Metrics come from the successful full regression run on the explicitly dirty worktree described above."
+  "note": "Each visited-goal transition requires position, linear speed, shortest-angle yaw error, and angular-speed norm to remain below their tolerances for the full hold duration. Metrics come from the successful full regression run on the recorded clean feature commit; the later documentation-only validation commit is not claimed as tested."
 }

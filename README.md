@@ -8,6 +8,8 @@
 
 ## 当前里程碑
 
+当前版本已冻结为功能完整基线。本轮之后不再继续扩展新功能；面向考核的入口收束和结构优化将在后续独立分支中进行，现有历史入口、节点、Launch 和测试继续保留。
+
 当前阶段已完成：
 
 - 基础悬停与单目标三维位置控制；
@@ -31,7 +33,14 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-常用一键入口：
+当前推荐主展示入口：
+
+```bash
+ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py \
+  yaw_mode:=path_tangent
+```
+
+基础控制、无障碍任务、静态避障和扰动入口仍保留：
 
 ```bash
 ros2 launch drone_bringup basic_sim.launch.py
@@ -381,17 +390,12 @@ ros2 param get /quadrotor_dynamics_node enable_external_wrench
 - 外力是作用于质心的集中等效力，不是空间变化的完整风场。
 - 静态环境提供碰撞检查和状态监测，不模拟物理碰撞反作用。
 - 尚无动态障碍、局部规划和在线重规划。
-- 静态避障任务当前 yaw 为零或未结合路径方向规划。
+- 静态避障默认保留固定 yaw 兼容模式，并可显式选择路径切线 yaw。
 - 无障碍命令行任务不支持抢占；执行中提交的新任务会被明确拒绝。
 
-## 后续优化
+## 后续工作
 
-近期展示与交互优化：
-
-1. 静态避障根据路径切线或目标要求设置 yaw；
-2. 整理整体报告和答辩材料。
-
-可选扩展：只有出现明确物理需求时再评估垂向持续扰动与高度积分；其后可研究动态障碍和在线重规划、更完整的时空风场、传感器噪声与状态估计。这些不是当前里程碑缺陷或默认必做项。
+下一阶段为 `assessment scope consolidation`：从功能完整基线新建独立分支，进行面向考核的入口收束、结构优化以及报告和答辩材料整理。当前阶段停止新增功能，不删除现有节点、Launch、历史入口或测试。
 
 ## References and acknowledgments
 

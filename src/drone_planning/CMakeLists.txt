@@ -102,7 +102,7 @@ target_include_directories(interactive_goal_editor
     $<INSTALL_INTERFACE:include>
 )
 target_compile_options(interactive_goal_editor PRIVATE -Wall -Wextra -Wpedantic)
-ament_target_dependencies(interactive_goal_editor std_msgs visualization_msgs)
+ament_target_dependencies(interactive_goal_editor geometry_msgs std_msgs visualization_msgs)
 target_link_libraries(interactive_goal_editor collision_checker Eigen3::Eigen)
 
 add_executable(static_environment_node src/static_environment_node.cpp)

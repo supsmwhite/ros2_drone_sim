@@ -1,0 +1,44 @@
+{
+  "tested_commit": null,
+  "base_commit": "b29c477f2e2b23b0416cf58b244842ae37f62b7e",
+  "branch": "feat/interactive-goal-yaw",
+  "tested_at": "2026-07-19T20:28:24+08:00",
+  "working_tree_state": "dirty: uncommitted interactive terminal yaw implementation",
+  "command": "source /opt/ros/humble/setup.bash && source install/setup.bash && colcon test --packages-select drone_bringup --ctest-args -R test_interactive_goal_navigation_e2e --output-on-failure --event-handlers console_direct+",
+  "parameters": {
+    "yaw_mode": "path_tangent",
+    "tangent_speed_threshold_m_per_s": 0.1,
+    "terminal_blend_distance_m": 0.8,
+    "yaw_filter_time_constant_s": 0.3,
+    "max_yaw_rate_rad_per_s": 0.8
+  },
+  "goal_count": 3,
+  "goals": [
+    {"position_m": [3.5, 1.0, 2.5], "yaw_rad": 1.5707963267948966},
+    {"position_m": [5.5, 1.0, 4.0], "yaw_rad": 3.141592653589793},
+    {"position_m": [7.0, 5.0, 4.0], "yaw_rad": -1.5707963267948966}
+  ],
+  "visit_order_zero_based": [0, 1, 2],
+  "mission_success": true,
+  "task_time_s": 49.936,
+  "actual_yaw_error_at_goal_acceptance_rad": [
+    0.7359278281362185,
+    0.5312191608881938,
+    0.035898076622778545
+  ],
+  "minimum_reference_yaw_error_before_goal_switch_rad": [
+    0.3982972281780664,
+    0.197720608673214,
+    0.000005126935770639857
+  ],
+  "maximum_adjacent_yaw_reference_jump_rad": 0.016216,
+  "maximum_yaw_reference_rate_rad_per_s": 0.800737,
+  "maximum_position_tracking_error_m": 0.020015,
+  "final_position_error_m": 0.003632,
+  "final_speed_m_per_s": 0.004595,
+  "minimum_inflated_obstacle_clearance_m": 0.240015,
+  "collision_count": 0,
+  "controller_saturation_count": 0,
+  "non_finite_value_count": 0,
+  "note": "The existing position/speed goal-acceptance gate can switch intermediate goals before the rate-limited and filtered yaw reference, and therefore the vehicle yaw, fully settles to terminal yaw. This run records that existing behavior without changing the prohibited yaw algorithm, controller, or hold parameters."
+}

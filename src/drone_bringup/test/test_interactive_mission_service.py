@@ -116,6 +116,10 @@ class TestInteractiveMissionService(unittest.TestCase):
                 ([pose(2.6, -0.5, 1.5)], 'map', 'inflated obstacle'),
                 ([pose(0.8, 0.7, 2.0)] * 9, 'map', 'max_goals'),
             ]
+            invalid_orientation = pose(0.8, 0.7, 2.0)
+            invalid_orientation.orientation.w = 0.0
+            invalid_requests.append(
+                ([invalid_orientation], 'map', 'invalid orientation'))
             for poses, frame, reason in invalid_requests:
                 response = call(poses, frame)
                 self.assertFalse(response.accepted)

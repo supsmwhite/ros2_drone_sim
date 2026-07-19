@@ -235,7 +235,7 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
 
         def on_goal_markers(message):
             nonlocal latest_status_text
-            if len(message.markers) != 2 * len(TARGETS) + 1:
+            if len(message.markers) != 3 * len(TARGETS) + 1:
                 health_errors.append(
                     f'unexpected goal marker count: {len(message.markers)}')
                 return
@@ -246,6 +246,13 @@ class TestMultiGoalStaticAvoidanceEndToEnd(unittest.TestCase):
                 (marker for marker in message.markers
                  if marker.ns == 'multi_goal_labels'),
                 key=lambda marker: marker.id)
+            directions = [
+                marker for marker in message.markers
+                if marker.ns == 'multi_goal_directions']
+            if len(directions) != len(TARGETS):
+                health_errors.append(
+                    f'invalid goal direction marker count: {len(directions)}')
+                return
             statuses = [
                 status for label in labels
                 for status in ('DONE', 'CURRENT', 'WAITING')

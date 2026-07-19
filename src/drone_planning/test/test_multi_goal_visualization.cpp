@@ -49,15 +49,16 @@ TEST(MultiGoalVisualizationTest, MarksCurrentCompletedAndWaitingGoals)
   const builtin_interfaces::msg::Time stamp;
   const auto markers = make_goal_markers(
     goals, 1U, 1U, MissionVisualizationState::Running, "map", stamp, 0.42, 0.45, 0.35);
-  ASSERT_EQ(markers.markers.size(), 11U);
+  ASSERT_EQ(markers.markers.size(), 16U);
   EXPECT_EQ(markers.markers[0].ns, "multi_goal_points");
   EXPECT_FLOAT_EQ(markers.markers[0].color.g, 0.85F);
-  EXPECT_NE(markers.markers[1].text.find("DONE"), std::string::npos);
-  EXPECT_FLOAT_EQ(markers.markers[2].scale.x, 0.40);
-  EXPECT_FLOAT_EQ(markers.markers[2].color.r, 1.00F);
-  EXPECT_NE(markers.markers[3].text.find("CURRENT"), std::string::npos);
-  EXPECT_FLOAT_EQ(markers.markers[4].color.r, 0.95F);
-  EXPECT_NE(markers.markers[5].text.find("WAITING"), std::string::npos);
+  EXPECT_EQ(markers.markers[1].type, visualization_msgs::msg::Marker::ARROW);
+  EXPECT_NE(markers.markers[2].text.find("DONE"), std::string::npos);
+  EXPECT_FLOAT_EQ(markers.markers[3].scale.x, 0.40);
+  EXPECT_FLOAT_EQ(markers.markers[3].color.r, 1.00F);
+  EXPECT_NE(markers.markers[5].text.find("CURRENT"), std::string::npos);
+  EXPECT_FLOAT_EQ(markers.markers[6].color.r, 0.95F);
+  EXPECT_NE(markers.markers[8].text.find("WAITING"), std::string::npos);
   EXPECT_NE(markers.markers.back().text.find("Goal: P2 / 5"), std::string::npos);
   EXPECT_NE(markers.markers.back().text.find("Actual: 0.42 m/s"), std::string::npos);
   EXPECT_NE(markers.markers.back().text.find("Reference: 0.45 m/s"), std::string::npos);
@@ -83,10 +84,10 @@ TEST(MultiGoalVisualizationTest, MarksEveryGoalComplete)
   const builtin_interfaces::msg::Time stamp;
   const auto markers = make_goal_markers(
     goals, 2U, 3U, MissionVisualizationState::Complete, "map", stamp, 0.0, 0.0, 0.35);
-  ASSERT_EQ(markers.markers.size(), 7U);
+  ASSERT_EQ(markers.markers.size(), 10U);
   for (std::size_t index = 0U; index < goals.size(); ++index) {
-    EXPECT_FLOAT_EQ(markers.markers[2U * index].color.g, 0.85F);
-    EXPECT_NE(markers.markers[2U * index + 1U].text.find("DONE"), std::string::npos);
+    EXPECT_FLOAT_EQ(markers.markers[3U * index].color.g, 0.85F);
+    EXPECT_NE(markers.markers[3U * index + 2U].text.find("DONE"), std::string::npos);
   }
   EXPECT_NE(markers.markers.back().text.find("MISSION COMPLETE"), std::string::npos);
   EXPECT_NE(markers.markers.back().text.find("Reference: 0.00 m/s"), std::string::npos);

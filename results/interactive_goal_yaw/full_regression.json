@@ -1,0 +1,23 @@
+{
+  "tested_commit": null,
+  "base_commit": "b29c477f2e2b23b0416cf58b244842ae37f62b7e",
+  "branch": "feat/interactive-goal-yaw",
+  "tested_at": "2026-07-19T20:43:50+08:00",
+  "working_tree_state": "dirty: uncommitted interactive terminal yaw implementation",
+  "commands": [
+    "source /opt/ros/humble/setup.bash && colcon build --symlink-install",
+    "source install/setup.bash && colcon test --event-handlers console_direct+",
+    "colcon test-result --verbose"
+  ],
+  "build": {
+    "packages": 6,
+    "success": true
+  },
+  "tests": {
+    "count": 334,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  },
+  "note": "The first full run exposed one stale goal-marker-count assertion after adding direction arrows. The affected fixed-yaw multi-goal Launch test passed after its contract was updated, and this record describes the subsequent complete regression."
+}

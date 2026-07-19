@@ -50,6 +50,26 @@ std_msgs::msg::ColorRGBA candidate_color(GoalDraftState state)
   return color;
 }
 
+std_msgs::msg::ColorRGBA goal_color(
+  GoalDraftState state, std::size_t index, std::optional<std::size_t> failed_index)
+{
+  if (failed_index && index == *failed_index) {
+    return candidate_color(GoalDraftState::Rejected);
+  }
+  if (state == GoalDraftState::Ready) {
+    return candidate_color(GoalDraftState::CandidateValid);
+  }
+  if (state == GoalDraftState::Validating) {
+    return candidate_color(GoalDraftState::Validating);
+  }
+  return candidate_color(GoalDraftState::Editing);
+}
+
+double degrees(double yaw)
+{
+  return yaw * 180.0 / M_PI;
+}
+
 visualization_msgs::msg::InteractiveMarkerControl world_z_control(
   const std::string & name, std::uint8_t mode)
 {
@@ -67,6 +87,51 @@ visualization_msgs::msg::InteractiveMarkerControl world_z_control(
 }
 
 }  // namespace
+
+double normalize_angle(double yaw)
+{
+  if (!std::isfinite(yaw)) {
+    return yaw;
+  }
+  double result = std::remainder(yaw, 2.0 * M_PI);
+  if (result <= -M_PI) {
+    result += 2.0 * M_PI;
+  }
+  return result;
+}
+
+geometry_msgs::msg::Quaternion quaternion_from_yaw(double yaw)
+{
+  if (!std::isfinite(yaw)) {
+    throw std::invalid_argument("yaw must be finite");
+  }
+  geometry_msgs::msg::Quaternion orientation;
+  const double normalized = normalize_angle(yaw);
+  orientation.z = std::sin(0.5 * normalized);
+  orientation.w = std::cos(0.5 * normalized);
+  return orientation;
+}
+
+std::optional<double> yaw_from_quaternion(
+  const geometry_msgs::msg::Quaternion & orientation)
+{
+  if (!std::isfinite(orientation.x) || !std::isfinite(orientation.y) ||
+    !std::isfinite(orientation.z) || !std::isfinite(orientation.w))
+  {
+    return std::nullopt;
+  }
+  const double norm = std::sqrt(
+    orientation.x * orientation.x + orientation.y * orientation.y +
+    orientation.z * orientation.z + orientation.w * orientation.w);
+  if (!std::isfinite(norm) || norm <= 1.0e-12) {
+    return std::nullopt;
+  }
+  const double x = orientation.x / norm;
+  const double y = orientation.y / norm;
+  const double z = orientation.z / norm;
+  const double w = orientation.w / norm;
+  return normalize_angle(std::atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z)));
+}
 
 CandidateValidation validate_goal_candidate(
   const Eigen::Vector3d & candidate, const CollisionChecker & checker,
@@ -105,7 +170,7 @@ Eigen::Vector3d snap_goal_candidate(
 }
 
 visualization_msgs::msg::InteractiveMarker make_goal_candidate_marker(
-  const Eigen::Vector3d & candidate, std::size_t next_goal_number,
+  const InteractiveGoal & candidate, std::size_t next_goal_number,
   GoalDraftState state, const std::string & status, const std::string & frame_id)
 {
   visualization_msgs::msg::InteractiveMarker marker;
@@ -113,10 +178,10 @@ visualization_msgs::msg::InteractiveMarker make_goal_candidate_marker(
   marker.name = "goal_candidate";
   marker.description = "3D goal candidate";
   marker.scale = 0.75;
-  marker.pose.position.x = candidate.x();
-  marker.pose.position.y = candidate.y();
-  marker.pose.position.z = candidate.z();
-  marker.pose.orientation.w = 1.0;
+  marker.pose.position.x = candidate.position.x();
+  marker.pose.position.y = candidate.position.y();
+  marker.pose.position.z = candidate.position.z();
+  marker.pose.orientation = quaternion_from_yaw(candidate.yaw);
 
   visualization_msgs::msg::InteractiveMarkerControl body;
   body.name = "menu";
@@ -130,6 +195,15 @@ visualization_msgs::msg::InteractiveMarker make_goal_candidate_marker(
   sphere.color = candidate_color(state);
   body.markers.push_back(sphere);
 
+  visualization_msgs::msg::Marker arrow;
+  arrow.type = visualization_msgs::msg::Marker::ARROW;
+  arrow.pose.position.x = 0.12;
+  arrow.scale.x = 0.58;
+  arrow.scale.y = 0.10;
+  arrow.scale.z = 0.10;
+  arrow.color = candidate_color(state);
+  body.markers.push_back(arrow);
+
   visualization_msgs::msg::Marker label;
   label.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
   label.pose.position.z = 0.46;
@@ -140,8 +214,9 @@ visualization_msgs::msg::InteractiveMarker make_goal_candidate_marker(
   label.color.a = 1.0F;
   std::ostringstream text;
   text << "Candidate P" << next_goal_number << "\nx=" << std::fixed << std::setprecision(2)
-       << candidate.x() << " y=" << candidate.y() << " z=" << candidate.z()
-       << "\n" << status;
+       << candidate.position.x() << " y=" << candidate.position.y() << " z=" <<
+    candidate.position.z() << " yaw=" << std::setprecision(0) << degrees(candidate.yaw) <<
+    " deg\n" << status;
   label.text = text.str();
   body.markers.push_back(label);
   marker.controls.push_back(body);
@@ -152,8 +227,90 @@ visualization_msgs::msg::InteractiveMarker make_goal_candidate_marker(
   marker.controls.push_back(
     world_z_control(
       "move_z", visualization_msgs::msg::InteractiveMarkerControl::MOVE_AXIS));
+  marker.controls.push_back(
+    world_z_control(
+      "rotate_z", visualization_msgs::msg::InteractiveMarkerControl::ROTATE_AXIS));
 
   return marker;
+}
+
+geometry_msgs::msg::PoseArray make_selected_goals(
+  const std::vector<InteractiveGoal> & goals, const std::string & frame_id)
+{
+  geometry_msgs::msg::PoseArray result;
+  result.header.frame_id = frame_id;
+  result.poses.reserve(goals.size());
+  for (const auto & goal : goals) {
+    geometry_msgs::msg::Pose pose;
+    pose.position.x = goal.position.x();
+    pose.position.y = goal.position.y();
+    pose.position.z = goal.position.z();
+    pose.orientation = quaternion_from_yaw(goal.yaw);
+    result.poses.push_back(pose);
+  }
+  return result;
+}
+
+visualization_msgs::msg::MarkerArray make_interactive_goal_markers(
+  const std::vector<InteractiveGoal> & goals, GoalDraftState state,
+  std::optional<std::size_t> failed_goal_index, const std::string & frame_id)
+{
+  visualization_msgs::msg::MarkerArray result;
+  visualization_msgs::msg::Marker clear;
+  clear.action = visualization_msgs::msg::Marker::DELETEALL;
+  result.markers.push_back(clear);
+  for (std::size_t index = 0U; index < goals.size(); ++index) {
+    visualization_msgs::msg::Marker sphere;
+    sphere.header.frame_id = frame_id;
+    sphere.ns = "interactive_goals";
+    sphere.id = static_cast<int>(3U * index);
+    sphere.type = visualization_msgs::msg::Marker::SPHERE;
+    sphere.action = visualization_msgs::msg::Marker::ADD;
+    sphere.pose.position.x = goals[index].position.x();
+    sphere.pose.position.y = goals[index].position.y();
+    sphere.pose.position.z = goals[index].position.z();
+    sphere.pose.orientation.w = 1.0;
+    sphere.scale.x = sphere.scale.y = sphere.scale.z = 0.30;
+    sphere.color = goal_color(state, index, failed_goal_index);
+    result.markers.push_back(sphere);
+
+    auto arrow = sphere;
+    arrow.id = static_cast<int>(3U * index + 1U);
+    arrow.type = visualization_msgs::msg::Marker::ARROW;
+    arrow.pose.orientation = quaternion_from_yaw(goals[index].yaw);
+    arrow.scale.x = 0.58;
+    arrow.scale.y = 0.10;
+    arrow.scale.z = 0.10;
+    result.markers.push_back(arrow);
+
+    auto label = sphere;
+    label.id = static_cast<int>(3U * index + 2U);
+    label.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+    label.pose.position.z += 0.35;
+    label.scale.x = label.scale.y = 0.0;
+    label.scale.z = 0.22;
+    label.color.r = label.color.g = label.color.b = label.color.a = 1.0F;
+    std::ostringstream text;
+    text << "P" << index + 1U << " yaw=" << std::fixed << std::setprecision(0) <<
+      degrees(goals[index].yaw) << " deg";
+    label.text = text.str();
+    result.markers.push_back(label);
+  }
+  return result;
+}
+
+std::string format_mission_yaml(const std::vector<InteractiveGoal> & goals)
+{
+  std::ostringstream yaml;
+  yaml << "goals:\n  [\n" << std::fixed << std::setprecision(6);
+  for (std::size_t index = 0U; index < goals.size(); ++index) {
+    const auto & goal = goals[index];
+    yaml << "    " << goal.position.x() << ", " << goal.position.y() << ", " <<
+      goal.position.z() << ", " << normalize_angle(goal.yaw) <<
+      (index + 1U == goals.size() ? "\n" : ",\n");
+  }
+  yaml << "  ]";
+  return yaml.str();
 }
 
 InteractiveGoalEditor::InteractiveGoalEditor(std::size_t max_goals)
@@ -164,8 +321,8 @@ InteractiveGoalEditor::InteractiveGoalEditor(std::size_t max_goals)
   }
 }
 
-const Eigen::Vector3d & InteractiveGoalEditor::candidate() const {return candidate_;}
-const std::vector<Eigen::Vector3d> & InteractiveGoalEditor::goals() const {return goals_;}
+const InteractiveGoal & InteractiveGoalEditor::candidate() const {return candidate_;}
+const std::vector<InteractiveGoal> & InteractiveGoalEditor::goals() const {return goals_;}
 std::size_t InteractiveGoalEditor::max_goals() const {return max_goals_;}
 std::uint64_t InteractiveGoalEditor::draft_revision() const {return draft_revision_;}
 GoalDraftState InteractiveGoalEditor::state() const {return state_;}
@@ -183,12 +340,32 @@ void InteractiveGoalEditor::invalidate_preview()
   failed_goal_index_.reset();
 }
 
-void InteractiveGoalEditor::set_candidate(const Eigen::Vector3d & candidate)
+bool InteractiveGoalEditor::set_candidate(const InteractiveGoal & candidate)
 {
-  candidate_ = candidate;
+  if (!candidate.position.allFinite() || !std::isfinite(candidate.yaw)) {
+    return false;
+  }
+  InteractiveGoal normalized{candidate.position, normalize_angle(candidate.yaw)};
+  if (candidate_.position.isApprox(normalized.position, 1.0e-12) &&
+    std::abs(normalize_angle(candidate_.yaw - normalized.yaw)) <= 1.0e-12)
+  {
+    return true;
+  }
+  candidate_ = normalized;
   invalidate_preview();
   state_ = GoalDraftState::Editing;
   status_message_ = "EDITING";
+  return true;
+}
+
+bool InteractiveGoalEditor::set_candidate_position(const Eigen::Vector3d & position)
+{
+  return set_candidate({position, candidate_.yaw});
+}
+
+bool InteractiveGoalEditor::set_candidate_yaw(double yaw)
+{
+  return set_candidate({candidate_.position, yaw});
 }
 
 void InteractiveGoalEditor::set_candidate_validation(const CandidateValidation & validation)
@@ -226,6 +403,7 @@ bool InteractiveGoalEditor::undo_last_goal()
     status_message_ = "NO GOAL TO UNDO";
     return false;
   }
+  candidate_ = goals_.back();
   goals_.pop_back();
   invalidate_preview();
   state_ = GoalDraftState::Editing;
@@ -242,7 +420,7 @@ void InteractiveGoalEditor::clear_goals()
 }
 
 bool InteractiveGoalEditor::begin_validation(
-  std::uint64_t & revision, std::vector<Eigen::Vector3d> & goals)
+  std::uint64_t & revision, std::vector<InteractiveGoal> & goals)
 {
   if (goals_.empty()) {
     state_ = GoalDraftState::Rejected;

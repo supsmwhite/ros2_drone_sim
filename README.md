@@ -167,7 +167,20 @@ ros2 run drone_mission goal_cli multi \
 ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py
 ```
 
-在 RViz 工具栏选择 `Interact`，拖动 `goal_candidate` 的水平控制面和竖直箭头。右键依次使用 `Add Goal` 添加多个目标，选择 `Validate & Preview`；状态为 READY 且蓝色预览完整后，选择 `Execute Validated Mission`。执行前会从实际 Odom 再次预检完整序列，任一段无安全路径时均不起飞。
+在 RViz 工具栏选择 `Interact`，拖动 `goal_candidate` 的水平控制面设置 x/y、竖直箭头设置高度，并用水平旋转环自由设置世界 Z 轴 yaw。右键 `Set Yaw` 可精确选择 `0°、±45°、±90°、±135°、180°`。右键依次使用 `Add Goal` 添加多个目标，选择 `Validate & Preview`；状态为 READY 且蓝色预览完整后，选择 `Execute Validated Mission`。执行前会从实际 Odom 再次预检完整序列，任一段无安全路径时均不起飞。
+
+候选与每个已添加目标都独立保存位置和终端 yaw，方向箭头及 `P<n> yaw=<角度>` 标签显示保存结果。改变位置、高度或 yaw 都会使旧预览失效，需重新验证。当前不支持直接编辑任意历史目标；请用 `Undo Last Goal` 恢复最后一个目标为候选，修改后重新添加。`Print Mission YAML` 输出可复制的 `[x,y,z,yaw]` 弧度格式，并保留 6 位小数。
+
+默认 `yaw_mode:=fixed` 仍让整段任务使用全局 `fixed_yaw`；目标 yaw 会被保存和传递，但不改变兼容行为。`yaw_mode:=path_tangent` 飞行时跟随路径切线，并在每个终点平滑过渡到该交互目标的 yaw。这项能力准确称为“交互式多目标终端 yaw 编辑与路径切线 yaw 执行”，不是完整姿态规划。
+
+三目标终端 yaw 演示：
+
+```bash
+ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py \
+  yaw_mode:=path_tangent
+```
+
+依次设置 `P1=90°、P2=180°、P3=-90°`，再执行 `Validate & Preview` 和 `Execute Validated Mission`。默认 fixed 对照仍使用不带参数的同一 Launch 命令。
 
 ### 扰动实验
 
@@ -231,6 +244,15 @@ ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=persistent_
 参考变化率 `0.800119 rad/s`、最终 yaw 误差 `0 rad`；三目标任务对应为
 `0.016328 rad`、`0.800272 rad/s`、`0 rad`，目标顺序、轨迹安全和完成状态保持正常。
 完整 fixed 对照与 path-tangent 指标见 `results/static_avoidance_yaw/`。
+
+交互终端 yaw 自动闭环场景使用 `90°、180°、-90°`，三目标依序完成；最大相邻
+yaw 参考跳变 `0.016216 rad`、最大参考变化率 `0.800737 rad/s`、最大位置跟踪误差
+`0.020015 m`、最小膨胀障碍净空 `0.240015 m`，无碰撞、饱和或非有限值。既有
+位置/速度到点门控会在中间目标 yaw 完全稳定前切换下一段，目标接受瞬间的机体 yaw
+误差为 `0.735928/0.531219/0.035898 rad`；本轮按边界只记录该现象，未修改 yaw
+算法、控制器或保持参数。工作树来源和完整指标见 `results/interactive_goal_yaw/`。
+同一提交候选工作树的最终完整回归构建 6 个 package，`334 tests, 0 errors,
+0 failures, 0 skipped`；来源命令和工作树状态见该目录的 `full_regression.json`。
 
 持续 `0.30 N` 外力下，以末 3 秒平均误差作为稳态指标：
 

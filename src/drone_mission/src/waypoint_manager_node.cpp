@@ -26,7 +26,10 @@ namespace
 
 constexpr double kQuaternionNormMinimum = 1.0e-12;
 
-bool finite_positive(double value) {return std::isfinite(value) && value > 0.0;}
+bool finite_positive(double value)
+{
+  return std::isfinite(value) && value > 0.0;
+}
 
 std::vector<Waypoint> parse_waypoints(const std::vector<double> & values)
 {
@@ -51,9 +54,14 @@ std::optional<double> yaw_from_pose(const geometry_msgs::msg::Pose & pose)
 {
   const auto & q = pose.orientation;
   const double norm = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
-  if (!std::isfinite(norm) || norm <= kQuaternionNormMinimum) {return std::nullopt;}
+  if (!std::isfinite(norm) || norm <= kQuaternionNormMinimum) {
+    return std::nullopt;
+  }
   const double scale = 1.0 / std::sqrt(norm);
-  const double x = q.x * scale, y = q.y * scale, z = q.z * scale, w = q.w * scale;
+  const double x = q.x * scale;
+  const double y = q.y * scale;
+  const double z = q.z * scale;
+  const double w = q.w * scale;
   const double yaw = std::atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
   return std::isfinite(yaw) ? std::optional<double>(yaw) : std::nullopt;
 }
@@ -132,16 +140,18 @@ private:
         std::move(waypoints), position_tolerance_, linear_speed_tolerance_, yaw_tolerance_,
         angular_speed_tolerance_, hold_duration_);
     }
-    odometry_stale_ = false;
-    invalid_odometry_logged_ = false;
   }
 
   std::optional<std::string> validate_request(
     const drone_msgs::srv::ExecuteGoalSequence::Request & request,
     std::vector<Waypoint> & result) const
   {
-    if (request.goals.header.frame_id != frame_id_) {return "goals frame_id must be map";}
-    if (request.goals.poses.empty()) {return "goal list is empty";}
+    if (request.goals.header.frame_id != frame_id_) {
+      return "goals frame_id must be map";
+    }
+    if (request.goals.poses.empty()) {
+      return "goal list is empty";
+    }
     result.clear();
     result.reserve(request.goals.poses.size());
     for (std::size_t index = 0U; index < request.goals.poses.size(); ++index) {
@@ -149,7 +159,10 @@ private:
       const auto yaw = yaw_from_pose(pose);
       const bool finite_position = std::isfinite(pose.position.x) &&
         std::isfinite(pose.position.y) && std::isfinite(pose.position.z);
-      if (!finite_position || !yaw) {return "P" + std::to_string(index + 1U) + " is non-finite or has an invalid quaternion";}
+      if (!finite_position || !yaw) {
+        return "P" + std::to_string(index + 1U) +
+               " is non-finite or has an invalid quaternion";
+      }
       if (pose.position.x < workspace_[0] || pose.position.x > workspace_[1] ||
         pose.position.y < workspace_[2] || pose.position.y > workspace_[3] ||
         pose.position.z < std::max(workspace_[4], minimum_altitude_) ||
@@ -157,7 +170,8 @@ private:
       {
         return "P" + std::to_string(index + 1U) + " is outside workspace/height bounds";
       }
-      result.push_back({Eigen::Vector3d(pose.position.x, pose.position.y, pose.position.z), *yaw});
+      result.push_back(
+        {Eigen::Vector3d(pose.position.x, pose.position.y, pose.position.z), *yaw});
     }
     return std::nullopt;
   }
@@ -179,14 +193,18 @@ private:
     response.accepted = true;
     response.message = "mission accepted and state reset to P1";
     publish_status();
-    RCLCPP_INFO(get_logger(), "accepted runtime mission with %zu waypoints", manager_->waypoints().size());
+    RCLCPP_INFO(
+      get_logger(), "accepted runtime mission with %zu waypoints",
+      manager_->waypoints().size());
   }
 
   bool vehicle_state_from_odometry(const nav_msgs::msg::Odometry & message, VehicleState & state)
   {
     const auto & pose = message.pose.pose;
     const auto yaw = yaw_from_pose(pose);
-    if (!yaw) {return false;}
+    if (!yaw) {
+      return false;
+    }
     state.position_world = Eigen::Vector3d(pose.position.x, pose.position.y, pose.position.z);
     state.linear_velocity = Eigen::Vector3d(
       message.twist.twist.linear.x, message.twist.twist.linear.y, message.twist.twist.linear.z);
@@ -226,10 +244,13 @@ private:
 
   void publish_goal()
   {
-    if (!manager_) {return;}
+    if (!manager_) {
+      return;
+    }
     const auto & waypoint = manager_->current_waypoint();
     geometry_msgs::msg::PoseStamped goal;
-    goal.header.stamp = now(); goal.header.frame_id = frame_id_;
+    goal.header.stamp = now();
+    goal.header.frame_id = frame_id_;
     goal.pose.position.x = waypoint.position_world.x();
     goal.pose.position.y = waypoint.position_world.y();
     goal.pose.position.z = waypoint.position_world.z();
@@ -241,38 +262,62 @@ private:
   void update()
   {
     publish_goal();
-    publish_status();
-    if (!manager_) {return;}
+    if (!manager_) {
+      return;
+    }
     const auto steady_now = std::chrono::steady_clock::now();
     const bool fresh = latest_odometry_ && latest_odometry_reception_time_ &&
       std::chrono::duration<double>(steady_now - *latest_odometry_reception_time_).count() <=
       odometry_timeout_;
     if (!fresh) {
-      if (!odometry_stale_) {manager_->reset_acceptance_progress(); odometry_stale_ = true;}
+      if (!odometry_stale_) {
+        manager_->reset_acceptance_progress();
+        odometry_stale_ = true;
+        RCLCPP_WARN(
+          get_logger(), "odometry timed out; waypoint acceptance progress was reset");
+      }
       return;
     }
-    odometry_stale_ = false;
     VehicleState state;
     if (!vehicle_state_from_odometry(*latest_odometry_, state)) {
-      manager_->reset_acceptance_progress(); invalid_odometry_logged_ = true; return;
+      manager_->reset_acceptance_progress();
+      if (!invalid_odometry_logged_) {
+        RCLCPP_WARN(
+          get_logger(), "received invalid odometry; waypoint acceptance progress was reset");
+        invalid_odometry_logged_ = true;
+      }
+      return;
     }
+    if (odometry_stale_) {
+      RCLCPP_INFO(get_logger(), "odometry recovered after timeout");
+    }
+    odometry_stale_ = false;
     invalid_odometry_logged_ = false;
+
     const std::size_t accepted = manager_->current_index();
     const auto output = manager_->update(state, fixed_update_dt_);
     if (output.waypoint_accepted) {
-      RCLCPP_INFO(get_logger(), "waypoint %zu accepted%s", accepted,
+      RCLCPP_INFO(
+        get_logger(), "waypoint %zu accepted%s", accepted,
         output.mission_complete ? "; mission complete" : "");
-      publish_goal(); publish_status();
+      publish_goal();
+      publish_status();
     }
   }
 
   std::unique_ptr<WaypointManager> manager_;
-  double position_tolerance_{0.20}, linear_speed_tolerance_{0.15};
-  double yaw_tolerance_{0.10}, angular_speed_tolerance_{0.20}, hold_duration_{1.0};
-  double fixed_update_dt_{0.05}, odometry_timeout_{0.25}, minimum_altitude_{0.0};
+  double position_tolerance_{0.20};
+  double linear_speed_tolerance_{0.15};
+  double yaw_tolerance_{0.10};
+  double angular_speed_tolerance_{0.20};
+  double hold_duration_{1.0};
+  double fixed_update_dt_{0.05};
+  double odometry_timeout_{0.25};
+  double minimum_altitude_{0.0};
   std::string frame_id_{"map"};
   std::vector<double> workspace_;
-  bool odometry_stale_{false}, invalid_odometry_logged_{false};
+  bool odometry_stale_{false};
+  bool invalid_odometry_logged_{false};
   std::optional<nav_msgs::msg::Odometry> latest_odometry_;
   std::optional<std::chrono::steady_clock::time_point> latest_odometry_reception_time_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_subscription_;

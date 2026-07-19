@@ -52,4 +52,19 @@ TEST(GoalInput, ExplicitYawDegreesAreConvertedWhilePlainYawRemainsRadians)
   EXPECT_THROW(parse_goal_arguments({"1", "2", "3", "yaw=nan"}), std::invalid_argument);
 }
 
+TEST(GoalInput, GoalVisualizerIsNotAControlConsumer)
+{
+  EXPECT_FALSE(has_control_goal_consumer({
+      {"goal_visualizer_node", "geometry_msgs/msg/PoseStamped"},
+      {"/tools/goal_visualizer_node", "geometry_msgs/msg/PoseStamped"},
+      {"_NODE_NAME_UNKNOWN_", "geometry_msgs/msg/PoseStamped"}}));
+  EXPECT_TRUE(has_control_goal_consumer({
+      {"goal_visualizer_node", "geometry_msgs/msg/PoseStamped"},
+      {"position_controller_node", "geometry_msgs/msg/PoseStamped"}}));
+  EXPECT_TRUE(has_control_goal_consumer({
+      {"custom_goal_consumer", "geometry_msgs/msg/PoseStamped"}}));
+  EXPECT_FALSE(has_control_goal_consumer({
+      {"custom_goal_consumer", "geometry_msgs/msg/PoseArray"}}));
+}
+
 }  // namespace drone_mission

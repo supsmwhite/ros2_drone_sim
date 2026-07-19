@@ -1,5 +1,4 @@
 #include <set>
-#include <cmath>
 
 #include <gtest/gtest.h>
 
@@ -21,27 +20,8 @@ TEST(GoalVisualization, SingleGoalHasPointArrowLabelAndClear)
   EXPECT_EQ(markers.markers[2].type, visualization_msgs::msg::Marker::ARROW);
   EXPECT_EQ(markers.markers[3].text, "GOAL CURRENT");
 
-  const auto complete = make_single_goal_markers(pose, "map", stamp, true);
-  EXPECT_EQ(complete.markers[3].text, "GOAL DONE");
-  EXPECT_FLOAT_EQ(complete.markers[1].color.g, 0.85F);
-}
-
-TEST(GoalVisualization, SingleGoalAcceptanceChecksPoseYawAndMotion)
-{
-  geometry_msgs::msg::Pose goal;
-  goal.position.x = 1.0;
-  goal.position.z = 1.5;
-  goal.orientation.z = std::sin(0.25);
-  goal.orientation.w = std::cos(0.25);
-  nav_msgs::msg::Odometry odometry;
-  odometry.pose.pose = goal;
-  EXPECT_TRUE(single_goal_within_tolerance(goal, odometry, 0.2, 0.15, 0.1, 0.2));
-
-  odometry.twist.twist.linear.x = 0.2;
-  EXPECT_FALSE(single_goal_within_tolerance(goal, odometry, 0.2, 0.15, 0.1, 0.2));
-  odometry.twist.twist.linear.x = 0.0;
-  odometry.pose.pose.position.x += 0.3;
-  EXPECT_FALSE(single_goal_within_tolerance(goal, odometry, 0.2, 0.15, 0.1, 0.2));
+  EXPECT_FLOAT_EQ(markers.markers[1].color.r, 1.0F);
+  EXPECT_FLOAT_EQ(markers.markers[1].color.g, 0.35F);
 }
 
 TEST(GoalVisualization, MissionMarkersAreStableAndClearOldTask)

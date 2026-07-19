@@ -105,6 +105,7 @@ ros2 run drone_mission goal_cli single 2.0 1.0 1.5 0.0
 
 工具会检查输入和工作空间，等待 `/drone/goal` 订阅者并发布 `map` 系目标。
 原有 `ros2 topic pub` 方式仍然兼容。
+单目标 Marker 始终标记为 `GOAL CURRENT`；可视化节点不根据 Odom 推断任务完成。
 
 最后一项可继续使用弧度，也可用更直观的角度格式。例如朝向 90°：
 

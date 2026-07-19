@@ -30,7 +30,7 @@ target_include_directories(goal_visualization PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_compile_options(goal_visualization PRIVATE -Wall -Wextra -Wpedantic)
-ament_target_dependencies(goal_visualization geometry_msgs nav_msgs visualization_msgs)
+ament_target_dependencies(goal_visualization geometry_msgs visualization_msgs)
 
 add_library(waypoint_manager src/waypoint_manager.cpp)
 target_include_directories(waypoint_manager
@@ -71,7 +71,7 @@ target_link_libraries(goal_cli goal_input)
 add_executable(goal_visualizer_node src/goal_visualizer_node.cpp)
 target_compile_options(goal_visualizer_node PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(
-  goal_visualizer_node geometry_msgs nav_msgs rclcpp std_msgs visualization_msgs)
+  goal_visualizer_node geometry_msgs rclcpp std_msgs visualization_msgs)
 target_link_libraries(goal_visualizer_node goal_visualization)
 
 if(BUILD_TESTING)
@@ -90,6 +90,7 @@ if(BUILD_TESTING)
 
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/test_waypoint_service.py TIMEOUT 30)
+  add_launch_test(test/test_goal_visualizer_node.py TIMEOUT 30)
 
   ament_add_gtest(
     test_piecewise_quintic_trajectory test/test_piecewise_quintic_trajectory.cpp)

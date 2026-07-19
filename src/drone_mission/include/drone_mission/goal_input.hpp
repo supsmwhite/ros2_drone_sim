@@ -19,6 +19,12 @@ struct GoalConstraints
   double z_max{5.0};
 };
 
+struct GoalSubscriptionEndpoint
+{
+  std::string node_name;
+  std::string topic_type;
+};
+
 std::vector<double> parse_finite_numbers(const std::vector<std::string> & arguments);
 std::vector<double> parse_goal_arguments(const std::vector<std::string> & arguments);
 void validate_constraints(const GoalConstraints & constraints);
@@ -26,6 +32,7 @@ geometry_msgs::msg::Pose make_goal_pose(
   double x, double y, double z, double yaw, const GoalConstraints & constraints);
 std::vector<geometry_msgs::msg::Pose> make_goal_poses(
   const std::vector<double> & values, const GoalConstraints & constraints);
+bool has_control_goal_consumer(const std::vector<GoalSubscriptionEndpoint> & endpoints);
 
 }  // namespace drone_mission
 

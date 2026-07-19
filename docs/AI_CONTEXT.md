@@ -124,8 +124,8 @@ RViz；公开 Launch 文件名和默认行为保持不变。`basic_sim` 与 `mis
 `start_with_configured_waypoints:=false` 等待 `goal_cli multi`。
 
 `goal_cli` 的纯数字 yaw 保持弧度兼容，同时支持 `yaw=30`、`yaw=60`、
-`yaw=90` 这类角度输入。单目标 Marker 根据 Odom 的位置、速度、yaw、角速度及
-稳定保持时间，从 `GOAL CURRENT` 切换为绿色 `GOAL DONE`。
+`yaw=90` 这类角度输入。单目标 Marker 仅显示权威目标内容并保持
+`GOAL CURRENT`；多目标的 CURRENT/DONE 来自 waypoint manager 任务状态。
 
 ## 正式配置与参数
 

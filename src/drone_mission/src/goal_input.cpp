@@ -95,4 +95,20 @@ std::vector<geometry_msgs::msg::Pose> make_goal_poses(
   return poses;
 }
 
+bool has_control_goal_consumer(const std::vector<GoalSubscriptionEndpoint> & endpoints)
+{
+  for (const auto & endpoint : endpoints) {
+    const auto separator = endpoint.node_name.find_last_of('/');
+    const std::string basename = separator == std::string::npos ?
+      endpoint.node_name : endpoint.node_name.substr(separator + 1U);
+    if (endpoint.node_name != "_NODE_NAME_UNKNOWN_" &&
+      endpoint.topic_type == "geometry_msgs/msg/PoseStamped" &&
+      basename != "goal_visualizer_node")
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace drone_mission

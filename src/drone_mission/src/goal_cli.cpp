@@ -21,6 +21,35 @@ namespace
 constexpr auto kDiscoveryTimeout = std::chrono::seconds(10);
 constexpr auto kDeliveryDelay = std::chrono::milliseconds(300);
 
+bool control_goal_consumer_available(rclcpp::Node & node)
+{
+  std::vector<drone_mission::GoalSubscriptionEndpoint> endpoints;
+  for (const auto & endpoint : node.get_subscriptions_info_by_topic("/drone/goal")) {
+    endpoints.push_back({endpoint.node_name(), endpoint.topic_type()});
+  }
+  if (drone_mission::has_control_goal_consumer(endpoints)) {
+    return true;
+  }
+
+  const auto graph = node.get_node_graph_interface();
+  for (const auto & [node_name, node_namespace] : graph->get_node_names_and_namespaces()) {
+    if (node_name == "goal_visualizer_node") {
+      continue;
+    }
+    const auto subscriptions = graph->get_subscriber_names_and_types_by_node(
+      node_name, node_namespace);
+    const auto goal = subscriptions.find("/drone/goal");
+    if (goal != subscriptions.end() &&
+      std::find(
+        goal->second.begin(), goal->second.end(), "geometry_msgs/msg/PoseStamped") !=
+      goal->second.end())
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 void print_usage(const char * program)
 {
   std::cout << "Usage:\n  " << program << " single x y z yaw_rad|yaw=degrees\n  " << program
@@ -51,14 +80,15 @@ int run_single(
 {
   auto publisher = node->create_publisher<geometry_msgs::msg::PoseStamped>("/drone/goal", 10);
   const auto deadline = std::chrono::steady_clock::now() + kDiscoveryTimeout;
-  while (rclcpp::ok() && publisher->get_subscription_count() == 0U &&
+  while (rclcpp::ok() && !control_goal_consumer_available(*node) &&
     std::chrono::steady_clock::now() < deadline)
   {
     rclcpp::spin_some(node);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
-  if (publisher->get_subscription_count() == 0U) {
-    std::cerr << "Error: /drone/goal has no subscriber after 10 seconds.\n";
+  if (!control_goal_consumer_available(*node)) {
+    std::cerr << "Error: /drone/goal has no control consumer after 10 seconds "
+              << "(goal_visualizer_node does not count).\n";
     return 3;
   }
   geometry_msgs::msg::PoseStamped message;

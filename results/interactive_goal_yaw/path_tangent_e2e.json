@@ -1,16 +1,21 @@
 {
   "tested_commit": null,
-  "base_commit": "b29c477f2e2b23b0416cf58b244842ae37f62b7e",
+  "base_commit": "0a65a0abd035d256829ece380db8ae0ebdb26434",
   "branch": "feat/interactive-goal-yaw",
-  "tested_at": "2026-07-19T20:28:24+08:00",
-  "working_tree_state": "dirty: uncommitted interactive terminal yaw implementation",
-  "command": "source /opt/ros/humble/setup.bash && source install/setup.bash && colcon test --packages-select drone_bringup --ctest-args -R test_interactive_goal_navigation_e2e --output-on-failure --event-handlers console_direct+",
+  "tested_at": "2026-07-19T22:28:15+08:00",
+  "working_tree_state": "dirty: uncommitted yaw completion acceptance patch",
+  "command": "source /opt/ros/humble/setup.bash && source install/setup.bash && colcon test --event-handlers console_direct+",
   "parameters": {
     "yaw_mode": "path_tangent",
     "tangent_speed_threshold_m_per_s": 0.1,
     "terminal_blend_distance_m": 0.8,
     "yaw_filter_time_constant_s": 0.3,
-    "max_yaw_rate_rad_per_s": 0.8
+    "max_yaw_rate_rad_per_s": 0.8,
+    "goal_position_tolerance_m": 0.2,
+    "goal_speed_tolerance_m_per_s": 0.15,
+    "goal_yaw_tolerance_rad": 0.1,
+    "goal_angular_speed_tolerance_rad_per_s": 0.2,
+    "goal_hold_duration_s": 1.0
   },
   "goal_count": 3,
   "goals": [
@@ -20,25 +25,45 @@
   ],
   "visit_order_zero_based": [0, 1, 2],
   "mission_success": true,
-  "task_time_s": 49.936,
+  "task_time_s": 54.705,
+  "actual_yaw_at_goal_acceptance_rad": [
+    1.5757332621927365,
+    -3.1368121876845,
+    -1.5658494878223683
+  ],
   "actual_yaw_error_at_goal_acceptance_rad": [
-    0.7359278281362185,
-    0.5312191608881938,
-    0.035898076622778545
+    0.004936935397839903,
+    0.004780465905293486,
+    0.004946838972528234
+  ],
+  "actual_angular_speed_at_goal_acceptance_rad_per_s": [
+    0.01420073680947058,
+    0.01375986892922946,
+    0.014233028786704365
+  ],
+  "position_error_at_goal_acceptance_m": [
+    0.006909929239315927,
+    0.0039360778713339335,
+    0.009487141831719583
+  ],
+  "speed_at_goal_acceptance_m_per_s": [
+    0.001957476564869946,
+    0.001932608621163407,
+    0.0031140778792597976
   ],
   "minimum_reference_yaw_error_before_goal_switch_rad": [
-    0.3982972281780664,
-    0.197720608673214,
-    0.000005126935770639857
+    0.00036406221974896253,
+    0.00035057530717401837,
+    0.00000047218536685236843
   ],
-  "maximum_adjacent_yaw_reference_jump_rad": 0.016216,
-  "maximum_yaw_reference_rate_rad_per_s": 0.800737,
-  "maximum_position_tracking_error_m": 0.020015,
-  "final_position_error_m": 0.003632,
-  "final_speed_m_per_s": 0.004595,
-  "minimum_inflated_obstacle_clearance_m": 0.240015,
+  "maximum_adjacent_yaw_reference_jump_rad": 0.016197,
+  "maximum_yaw_reference_rate_rad_per_s": 0.801009,
+  "maximum_position_tracking_error_m": 0.016303,
+  "final_position_error_m": 0.000904,
+  "final_speed_m_per_s": 0.004396,
+  "minimum_inflated_obstacle_clearance_m": 0.239990,
   "collision_count": 0,
   "controller_saturation_count": 0,
   "non_finite_value_count": 0,
-  "note": "The existing position/speed goal-acceptance gate can switch intermediate goals before the rate-limited and filtered yaw reference, and therefore the vehicle yaw, fully settles to terminal yaw. This run records that existing behavior without changing the prohibited yaw algorithm, controller, or hold parameters."
+  "note": "Each visited-goal transition now requires position, linear speed, shortest-angle yaw error, and angular-speed norm to remain below their tolerances for the full hold duration. Metrics come from the successful full regression run on the explicitly dirty worktree described above."
 }

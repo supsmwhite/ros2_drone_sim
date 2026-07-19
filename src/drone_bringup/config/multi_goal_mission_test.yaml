@@ -16,6 +16,8 @@ multi_goal_static_avoidance_node:
     takeoff_hold_duration: 1.0
     goal_position_tolerance: 0.20
     goal_speed_tolerance: 0.15
+    goal_yaw_tolerance: 0.10
+    goal_angular_speed_tolerance: 0.20
     goal_hold_duration: 1.0
     resolution: 0.25
     max_grid_nodes: 200000

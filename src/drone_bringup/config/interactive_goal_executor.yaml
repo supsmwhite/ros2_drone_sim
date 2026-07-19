@@ -3,3 +3,5 @@ multi_goal_static_avoidance_node:
     goal_source: interactive
     max_goals: 8
     interactive_mission_odom_wait_timeout: 3.0
+    goal_yaw_tolerance: 0.10
+    goal_angular_speed_tolerance: 0.20

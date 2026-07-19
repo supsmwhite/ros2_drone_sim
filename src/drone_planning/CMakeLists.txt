@@ -76,6 +76,15 @@ target_include_directories(yaw_reference_generator
 target_compile_options(yaw_reference_generator PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(yaw_reference_generator Eigen3::Eigen)
 
+add_library(goal_completion_gate src/goal_completion_gate.cpp)
+target_include_directories(goal_completion_gate
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_options(goal_completion_gate PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(goal_completion_gate yaw_reference_generator)
+
 add_library(multi_goal_visualization src/multi_goal_visualization.cpp)
 target_include_directories(multi_goal_visualization
   PUBLIC
@@ -134,7 +143,7 @@ ament_target_dependencies(
   drone_msgs geometry_msgs nav_msgs rclcpp std_msgs visualization_msgs)
 target_link_libraries(
   multi_goal_static_avoidance_node
-  mission_failure_safety multi_goal_visualization planned_trajectory_builder
+  goal_completion_gate mission_failure_safety multi_goal_visualization planned_trajectory_builder
   yaw_reference_generator astar_planner Eigen3::Eigen)
 
 add_executable(map_reachability_check src/map_reachability_check.cpp)
@@ -196,12 +205,20 @@ if(BUILD_TESTING)
     test_interactive_goal_editor PRIVATE -Wall -Wextra -Wpedantic)
   target_link_libraries(
     test_interactive_goal_editor interactive_goal_editor Eigen3::Eigen)
+
+  ament_add_gtest(
+    test_goal_completion_yaw test/test_goal_completion_gate.cpp)
+  target_compile_options(
+    test_goal_completion_yaw PRIVATE -Wall -Wextra -Wpedantic)
+  target_link_libraries(
+    test_goal_completion_yaw goal_completion_gate)
 endif()
 
 install(DIRECTORY include/ DESTINATION include)
 install(
   TARGETS static_environment collision_checker astar_planner path_simplifier
-    planned_trajectory_builder yaw_reference_generator multi_goal_visualization mission_failure_safety
+    planned_trajectory_builder yaw_reference_generator goal_completion_gate
+    multi_goal_visualization mission_failure_safety
     interactive_goal_editor
     static_environment_node astar_planner_node planned_trajectory_node
     multi_goal_static_avoidance_node map_reachability_check interactive_goal_editor_node

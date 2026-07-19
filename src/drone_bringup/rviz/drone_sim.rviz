@@ -71,14 +71,14 @@ Visualization Manager:
     - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/Path
-      Color: 20; 220; 60
+      Color: 0; 255; 255
       Enabled: true
       Head Diameter: 0.06
       Head Length: 0.08
       Length: 0.3
       Line Style: Lines
-      Line Width: 0.025
-      Name: Drone Path
+      Line Width: 0.055
+      Name: Actual Flight Path
       Offset:
         X: 0
         Y: 0
@@ -116,6 +116,17 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /drone/goal
       Value: false
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/mission/goal_markers
+      Name: Obstacle-Free Goal Markers
+      Namespaces: {}
+      Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Topic:

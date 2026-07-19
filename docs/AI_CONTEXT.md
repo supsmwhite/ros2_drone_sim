@@ -56,7 +56,8 @@ StaticEnvironment
 |---|---|
 | `quadrotor_dynamics_node` | 接收四电机 RPM，推进刚体并发布状态 |
 | `position_controller_node` | 接收 Pose 目标或轨迹 setpoint，发布 RPM 和诊断 |
-| `waypoint_manager_node` | 无障碍离散多目标任务 |
+| `waypoint_manager_node` | YAML 或 Service 输入的无障碍离散多目标任务 |
+| `goal_visualizer_node` | 无障碍单/多目标统一 Marker 显示 |
 | `trajectory_mission_node` | 无障碍分段五次轨迹任务 |
 | `static_environment_node` | 地图 Marker 和实时碰撞状态 |
 | `astar_planner_node` | 单次 3D A* 原始路径规划 |
@@ -87,7 +88,9 @@ StaticEnvironment
 - `/drone/environment/markers`、`/drone/environment/in_collision`。
 - `/drone/multi_goal/current_goal_index`、`visited_goals`、`complete`、`success`。
 - `/drone/multi_goal/goal_markers`、`/drone/multi_goal/current_goal_pose`。
-- `/drone/mission/current_waypoint_index`、`/drone/mission/complete`。
+- `/drone/mission/goals`、`/drone/mission/current_waypoint_index`、`/drone/mission/complete`。
+- `/drone/mission/execute`：复用 `ExecuteGoalSequence` 的运行时任务接口；执行中拒绝抢占。
+- `/drone/mission/goal_markers`：无障碍单目标与多目标统一 MarkerArray。
 
 ### 交互导航
 
@@ -114,6 +117,15 @@ StaticEnvironment
 | `interactive_goal_navigation_sim.launch.py` | RViz 编辑、预检和实际导航 |
 | `disturbance_hover_sim.launch.py` | 自动悬停目标和外力输入能力，不主动发布扰力 |
 | `disturbance_visual_demo.launch.py` | `short_gust` / `persistent_release` 扰动演示 |
+
+`simulation_core.launch.py` 是内部公共入口，集中创建动力学、控制器、模型和
+RViz；公开 Launch 文件名和默认行为保持不变。`basic_sim` 与 `mission_sim` 自动
+启动 `goal_visualizer_node`。`mission_sim` 默认加载 YAML，也可设置
+`start_with_configured_waypoints:=false` 等待 `goal_cli multi`。
+
+`goal_cli` 的纯数字 yaw 保持弧度兼容，同时支持 `yaw=30`、`yaw=60`、
+`yaw=90` 这类角度输入。单目标 Marker 根据 Odom 的位置、速度、yaw、角速度及
+稳定保持时间，从 `GOAL CURRENT` 切换为绿色 `GOAL DONE`。
 
 ## 正式配置与参数
 
@@ -189,15 +201,13 @@ StaticEnvironment
 - 静态环境没有物理碰撞反作用。
 - 没有动态障碍、局部规划和在线重规划。
 - 静态避障 yaw 为零或未结合路径方向。
-- 普通无障碍单目标只能通过 `/drone/goal` Topic 输入，缺少一键交互入口。
-- 普通无障碍位置实验没有独立目标 Marker。
+- 无障碍运行时任务首版不支持抢占，执行中请求会被拒绝。
 - 交互执行首版不支持同一 Launch 内提交第二份任务、替换或抢占。
 
 ## 下一阶段优先级
 
-1. 普通单目标增加一键输入入口和目标 Marker。
-2. 静态避障增加基于路径切线或目标要求的 yaw 行为。
-3. 整理整体报告与答辩材料。
+1. 静态避障增加基于路径切线或目标要求的 yaw 行为。
+2. 整理整体报告与答辩材料。
 
 速度优化不再是默认主线。高度积分、姿态积分、动态障碍、完整风场、状态估计等均为有明确需求时再评估的可选扩展。
 

@@ -100,11 +100,38 @@ ros2 launch drone_bringup basic_sim.launch.py
 ```bash
 source ~/ros2_drone_sim/install/setup.bash
 
-ros2 topic pub --once /drone/goal geometry_msgs/msg/PoseStamped \
-  "{header: {frame_id: map}, pose: {position: {x: 2.0, y: 1.0, z: 1.5}, orientation: {w: 1.0}}}"
+ros2 run drone_mission goal_cli single 2.0 1.0 1.5 0.0
 ```
 
-这是当前核心演示中唯一必须使用第二个终端输入目标的基础实验。
+工具会检查输入和工作空间，等待 `/drone/goal` 订阅者并发布 `map` 系目标。
+原有 `ros2 topic pub` 方式仍然兼容。
+
+最后一项可继续使用弧度，也可用更直观的角度格式。例如朝向 90°：
+
+```bash
+ros2 run drone_mission goal_cli single 2.0 1.0 1.5 yaw=90
+```
+
+### 命令行多目标
+
+终端 1 启动等待运行时任务的无障碍仿真：
+
+```bash
+ros2 launch drone_bringup mission_sim.launch.py start_with_configured_waypoints:=false
+```
+
+终端 2 提交任意数量的 `[x y z yaw]` 目标组：
+
+```bash
+ros2 run drone_mission goal_cli multi \
+  0.0 0.0 1.5 yaw=0 \
+  2.0 0.0 1.5 yaw=0 \
+  2.0 1.5 1.8 yaw=90
+```
+
+任务通过 `/drone/mission/execute` 提交。任务执行中不允许抢占，新请求会返回
+拒绝原因。默认 `mission_sim.launch.py` 仍从 `config/mission.yaml` 自启动，也可用
+`mission_config:=<yaml>` 选择任务文件。
 
 ### 任务、轨迹与避障
 
@@ -303,18 +330,14 @@ ros2 param get /quadrotor_dynamics_node enable_external_wrench
 - 静态环境提供碰撞检查和状态监测，不模拟物理碰撞反作用。
 - 尚无动态障碍、局部规划和在线重规划。
 - 静态避障任务当前 yaw 为零或未结合路径方向规划。
-- 普通无障碍单目标通过 `/drone/goal` Topic 输入，缺少一键参数或交互入口。
-- 普通无障碍位置实验尚未单独显示目标 Marker。
-
-后三项主要影响展示和交互完整性，不影响当前已验证的规划、控制与安全链路。
+- 无障碍命令行任务不支持抢占；执行中提交的新任务会被明确拒绝。
 
 ## 后续优化
 
 近期展示与交互优化：
 
-1. 为普通单目标实验增加一键参数或交互输入，并显示目标点 Marker；
-2. 静态避障根据路径切线或目标要求设置 yaw；
-3. 整理整体报告和答辩材料。
+1. 静态避障根据路径切线或目标要求设置 yaw；
+2. 整理整体报告和答辩材料。
 
 可选扩展：只有出现明确物理需求时再评估垂向持续扰动与高度积分；其后可研究动态障碍和在线重规划、更完整的时空风场、传感器噪声与状态估计。这些不是当前里程碑缺陷或默认必做项。
 

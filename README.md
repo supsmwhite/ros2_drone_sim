@@ -69,6 +69,26 @@ ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py
 
 在 RViz 中自行选择多个目标，预览后执行导航。
 
+### 静态避障路径切线 yaw
+
+三个静态避障入口默认使用兼容模式 `yaw_mode:=fixed`，保持原有固定 yaw。显式选择
+`path_tangent` 后，yaw 参考跟随五次轨迹的水平速度切线；水平速度低于 `0.10 m/s`
+时保持最近有效方向，通过最短角误差避免 `±π` 跳变，并在目标前 `0.80 m` 内平滑
+混合到当前目标指定 yaw。最终参考还经过 `0.30 s` 一阶滤波和 `0.80 rad/s`
+速率限制。
+
+```bash
+ros2 launch drone_bringup static_avoidance_sim.launch.py yaw_mode:=fixed
+ros2 launch drone_bringup static_avoidance_sim.launch.py yaw_mode:=path_tangent
+ros2 launch drone_bringup multi_goal_static_avoidance_sim.launch.py yaw_mode:=path_tangent
+ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py yaw_mode:=path_tangent
+```
+
+可覆盖参数为 `fixed_yaw`、`tangent_speed_threshold`、
+`terminal_blend_distance`、`yaw_filter_time_constant` 和 `max_yaw_rate`。该能力只是
+基于轨迹水平切线的平滑 yaw 参考生成，不改变 A*、路径简化、位置轨迹、碰撞检查或
+控制器，也不是完整姿态规划或最优 yaw 规划。
+
 ```bash
 ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=short_gust
 ```
@@ -206,6 +226,11 @@ ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=persistent_
 | 最终位置误差 | `0.001536 m` |
 | 最终速度 | `0.004355 m/s` |
 | 碰撞 / 控制器饱和 | `无 / 0` |
+
+路径切线 yaw 定向验证中，单目标任务最大相邻 yaw 跳变 `0.016161 rad`、最大 yaw
+参考变化率 `0.800119 rad/s`、最终 yaw 误差 `0 rad`；三目标任务对应为
+`0.016328 rad`、`0.800272 rad/s`、`0 rad`，目标顺序、轨迹安全和完成状态保持正常。
+完整 fixed 对照与 path-tangent 指标见 `results/static_avoidance_yaw/`。
 
 持续 `0.30 N` 外力下，以末 3 秒平均误差作为稳态指标：
 

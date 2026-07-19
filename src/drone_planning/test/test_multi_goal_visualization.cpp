@@ -38,7 +38,9 @@ TEST(MultiGoalVisualizationTest, RejectsInvalidGoalLists)
   EXPECT_THROW(
     parse_goals({0.0, 0.0, 1.5, std::numeric_limits<double>::infinity()}),
     std::invalid_argument);
-  EXPECT_THROW(parse_goals({0.0, 0.0, 1.5, 0.1}), std::invalid_argument);
+  const auto nonzero_yaw = parse_goals({0.0, 0.0, 1.5, 0.1});
+  ASSERT_EQ(nonzero_yaw.size(), 1U);
+  EXPECT_DOUBLE_EQ(nonzero_yaw.front().yaw, 0.1);
 }
 
 TEST(MultiGoalVisualizationTest, MarksCurrentCompletedAndWaitingGoals)

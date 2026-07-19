@@ -17,6 +17,12 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_rviz', default_value='true'),
         DeclareLaunchArgument('astar_config', default_value=astar_default),
+        DeclareLaunchArgument('yaw_mode', default_value='fixed'),
+        DeclareLaunchArgument('fixed_yaw', default_value='0.0'),
+        DeclareLaunchArgument('tangent_speed_threshold', default_value='0.10'),
+        DeclareLaunchArgument('terminal_blend_distance', default_value='0.80'),
+        DeclareLaunchArgument('yaw_filter_time_constant', default_value='0.30'),
+        DeclareLaunchArgument('max_yaw_rate', default_value='0.80'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(core), launch_arguments={
                 'use_rviz': LaunchConfiguration('use_rviz'),
@@ -29,5 +35,11 @@ def generate_launch_description():
         Node(package='drone_planning', executable='planned_trajectory_node',
              name='planned_trajectory_node', output='screen', parameters=[
                  environment, LaunchConfiguration('astar_config'), trajectory,
-                 {'execution_enabled': True}]),
+                 {'execution_enabled': True,
+                  'yaw_mode': LaunchConfiguration('yaw_mode'),
+                  'fixed_yaw': LaunchConfiguration('fixed_yaw'),
+                  'tangent_speed_threshold': LaunchConfiguration('tangent_speed_threshold'),
+                  'terminal_blend_distance': LaunchConfiguration('terminal_blend_distance'),
+                  'yaw_filter_time_constant': LaunchConfiguration('yaw_filter_time_constant'),
+                  'max_yaw_rate': LaunchConfiguration('max_yaw_rate')}]),
     ])

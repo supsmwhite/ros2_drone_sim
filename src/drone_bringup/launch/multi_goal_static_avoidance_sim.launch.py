@@ -22,6 +22,12 @@ def generate_launch_description():
         DeclareLaunchArgument('mission_config', default_value=mission_default),
         DeclareLaunchArgument('dynamics_config', default_value=dynamics_default),
         DeclareLaunchArgument('controller_config', default_value=controller_default),
+        DeclareLaunchArgument('yaw_mode', default_value='fixed'),
+        DeclareLaunchArgument('fixed_yaw', default_value='0.0'),
+        DeclareLaunchArgument('tangent_speed_threshold', default_value='0.10'),
+        DeclareLaunchArgument('terminal_blend_distance', default_value='0.80'),
+        DeclareLaunchArgument('yaw_filter_time_constant', default_value='0.30'),
+        DeclareLaunchArgument('max_yaw_rate', default_value='0.80'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(core), launch_arguments={
                 'use_rviz': LaunchConfiguration('use_rviz'),
@@ -32,5 +38,11 @@ def generate_launch_description():
              name='static_environment_node', output='screen', parameters=[environment]),
         Node(package='drone_planning', executable='multi_goal_static_avoidance_node',
              name='multi_goal_static_avoidance_node', output='screen', parameters=[
-                 environment, astar, trajectory, LaunchConfiguration('mission_config')]),
+                 environment, astar, trajectory, LaunchConfiguration('mission_config'),
+                 {'yaw_mode': LaunchConfiguration('yaw_mode'),
+                  'fixed_yaw': LaunchConfiguration('fixed_yaw'),
+                  'tangent_speed_threshold': LaunchConfiguration('tangent_speed_threshold'),
+                  'terminal_blend_distance': LaunchConfiguration('terminal_blend_distance'),
+                  'yaw_filter_time_constant': LaunchConfiguration('yaw_filter_time_constant'),
+                  'max_yaw_rate': LaunchConfiguration('max_yaw_rate')}]),
     ])

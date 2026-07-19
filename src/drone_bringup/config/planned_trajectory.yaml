@@ -12,6 +12,12 @@
     max_refinement_iterations: 8
     max_insertions_per_refinement: 3
     fixed_yaw: 0.0
+    # Static-avoidance yaw generation defaults. Keep fixed for compatibility.
+    yaw_mode: fixed
+    tangent_speed_threshold: 0.10
+    terminal_blend_distance: 0.80
+    yaw_filter_time_constant: 0.30
+    max_yaw_rate: 0.80
     execution_enabled: false
     publish_frequency: 50.0
     odometry_timeout: 0.25

@@ -1,0 +1,73 @@
+{
+  "source": {
+    "git_commit": null,
+    "working_tree_state": "uncommitted implementation under test",
+    "tested_at": "2026-07-19T18:58:21+08:00 through 2026-07-19T19:03:20+08:00",
+    "note": "Scenario runs preceded the implementation commit; no commit SHA is claimed."
+  },
+  "parameters": {
+    "fixed_yaw_rad": 0.0,
+    "tangent_speed_threshold_mps": 0.1,
+    "terminal_blend_distance_m": 0.8,
+    "yaw_filter_time_constant_s": 0.3,
+    "max_yaw_rate_radps": 0.8
+  },
+  "scenarios": [
+    {
+      "name": "single_goal_fixed",
+      "yaw_mode": "fixed",
+      "command": "colcon test --packages-select drone_bringup --ctest-args -R '^test_test_static_avoidance_e2e.py$' --output-on-failure --event-handlers console_direct+",
+      "success": true,
+      "visited_goal_order": [0],
+      "mission_complete_time_s": 66.344,
+      "max_tracking_error_m": 0.030812,
+      "final_position_error_m": 0.006753,
+      "final_speed_mps": 0.004725,
+      "minimum_obstacle_clearance_m": 0.094306,
+      "collision_count": 0,
+      "controller_saturation_count": 0,
+      "max_adjacent_yaw_jump_rad": 0.0,
+      "max_yaw_reference_rate_radps": 0.0,
+      "final_yaw_error_rad": 0.0,
+      "nonfinite_count": 0
+    },
+    {
+      "name": "single_goal_path_tangent",
+      "yaw_mode": "path_tangent",
+      "command": "STATIC_AVOIDANCE_YAW_MODE=path_tangent colcon test --packages-select drone_bringup --ctest-args -R '^test_test_static_avoidance_e2e.py$' --output-on-failure --event-handlers console_direct+",
+      "success": true,
+      "visited_goal_order": [0],
+      "mission_complete_time_s": 66.345,
+      "max_tracking_error_m": 0.031013,
+      "final_position_error_m": 0.006762,
+      "final_speed_mps": 0.004756,
+      "minimum_obstacle_clearance_m": 0.094028,
+      "collision_count": 0,
+      "controller_saturation_count": 0,
+      "max_adjacent_yaw_jump_rad": 0.016161,
+      "max_yaw_reference_rate_radps": 0.800119,
+      "mean_tangent_yaw_error_rad": 0.052637,
+      "final_yaw_error_rad": 0.0,
+      "nonfinite_count": 0
+    },
+    {
+      "name": "multi_goal_path_tangent",
+      "yaw_mode": "path_tangent",
+      "command": "MULTI_GOAL_YAW_MODE=path_tangent colcon test --packages-select drone_bringup --ctest-args -R '^test_test_multi_goal_static_avoidance_e2e.py$' --output-on-failure --event-handlers console_direct+",
+      "success": true,
+      "visited_goal_order": [0, 1, 2],
+      "mission_complete_time_s": 138.960,
+      "max_tracking_error_m": 0.039032,
+      "final_position_error_m": 0.001432,
+      "final_speed_mps": 0.004316,
+      "minimum_obstacle_clearance_m": 0.094029,
+      "collision_count": 0,
+      "controller_saturation_count": 0,
+      "max_adjacent_yaw_jump_rad": 0.016328,
+      "max_yaw_reference_rate_radps": 0.800272,
+      "mean_tangent_yaw_error_rad": 0.130313,
+      "final_yaw_error_rad": 0.0,
+      "nonfinite_count": 0
+    }
+  ]
+}

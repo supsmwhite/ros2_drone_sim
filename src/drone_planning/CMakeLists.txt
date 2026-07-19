@@ -67,6 +67,15 @@ target_link_libraries(
   planned_trajectory_builder path_simplifier collision_checker
     drone_mission::piecewise_quintic_trajectory Eigen3::Eigen)
 
+add_library(yaw_reference_generator src/yaw_reference_generator.cpp)
+target_include_directories(yaw_reference_generator
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_options(yaw_reference_generator PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(yaw_reference_generator Eigen3::Eigen)
+
 add_library(multi_goal_visualization src/multi_goal_visualization.cpp)
 target_include_directories(multi_goal_visualization
   PUBLIC
@@ -113,7 +122,7 @@ target_compile_options(planned_trajectory_node PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(
   planned_trajectory_node drone_msgs geometry_msgs nav_msgs rclcpp std_msgs)
 target_link_libraries(
-  planned_trajectory_node planned_trajectory_builder Eigen3::Eigen)
+  planned_trajectory_node planned_trajectory_builder yaw_reference_generator Eigen3::Eigen)
 
 add_executable(
   multi_goal_static_avoidance_node src/multi_goal_static_avoidance_node.cpp)
@@ -125,7 +134,7 @@ ament_target_dependencies(
 target_link_libraries(
   multi_goal_static_avoidance_node
   mission_failure_safety multi_goal_visualization planned_trajectory_builder
-  astar_planner Eigen3::Eigen)
+  yaw_reference_generator astar_planner Eigen3::Eigen)
 
 add_executable(map_reachability_check src/map_reachability_check.cpp)
 target_compile_options(map_reachability_check PRIVATE -Wall -Wextra -Wpedantic)
@@ -162,6 +171,10 @@ if(BUILD_TESTING)
   target_link_libraries(
     test_planned_trajectory_builder planned_trajectory_builder astar_planner Eigen3::Eigen)
 
+  ament_add_gtest(test_yaw_reference_generator test/test_yaw_reference_generator.cpp)
+  target_compile_options(test_yaw_reference_generator PRIVATE -Wall -Wextra -Wpedantic)
+  target_link_libraries(test_yaw_reference_generator yaw_reference_generator Eigen3::Eigen)
+
   ament_add_gtest(
     test_multi_goal_visualization test/test_multi_goal_visualization.cpp)
   target_compile_options(
@@ -187,7 +200,7 @@ endif()
 install(DIRECTORY include/ DESTINATION include)
 install(
   TARGETS static_environment collision_checker astar_planner path_simplifier
-    planned_trajectory_builder multi_goal_visualization mission_failure_safety
+    planned_trajectory_builder yaw_reference_generator multi_goal_visualization mission_failure_safety
     interactive_goal_editor
     static_environment_node astar_planner_node planned_trajectory_node
     multi_goal_static_avoidance_node map_reachability_check interactive_goal_editor_node

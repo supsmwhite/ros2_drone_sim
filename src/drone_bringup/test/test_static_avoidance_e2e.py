@@ -23,6 +23,7 @@ from std_msgs.msg import Bool, UInt32
 
 
 FINAL_TARGET = (13.2, 5.5, 1.5)
+YAW_MODE = os.environ.get('STATIC_AVOIDANCE_YAW_MODE', 'fixed')
 DISCOVERY_TIMEOUT = 8.0
 MISSION_TIMEOUT = 85.0
 POST_COMPLETE_OBSERVATION = 3.0
@@ -82,7 +83,7 @@ def generate_test_description():
     )
     simulation = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(static_avoidance_sim),
-        launch_arguments={'use_rviz': 'false'}.items(),
+        launch_arguments={'use_rviz': 'false', 'yaw_mode': YAW_MODE}.items(),
     )
     return launch.LaunchDescription([
         simulation,
@@ -133,6 +134,12 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
         max_tracking_error = 0.0
         minimum_sampled_clearance = math.inf
         health_errors = []
+        previous_yaw = None
+        previous_yaw_stamp = None
+        max_adjacent_yaw_jump = 0.0
+        max_yaw_reference_rate = 0.0
+        tangent_error_sum = 0.0
+        tangent_error_samples = 0
 
         def on_planning_success(message):
             nonlocal path_planning_success
@@ -175,6 +182,9 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
             nonlocal latest_setpoint, last_setpoint_time, setpoint_samples
             nonlocal setpoints_after_complete, preparation_complete_time
             nonlocal trajectory_start_time
+            nonlocal previous_yaw, previous_yaw_stamp
+            nonlocal max_adjacent_yaw_jump, max_yaw_reference_rate
+            nonlocal tangent_error_sum, tangent_error_samples
             values = (
                 message.position.x, message.position.y, message.position.z,
                 message.velocity.x, message.velocity.y, message.velocity.z,
@@ -194,6 +204,23 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
                 trajectory_start_time = time.monotonic()
                 preparation_complete_time = trajectory_start_time
             latest_setpoint = message
+            stamp = message.header.stamp.sec + 1.0e-9 * message.header.stamp.nanosec
+            if previous_yaw is not None:
+                jump = abs(message.yaw - previous_yaw)
+                max_adjacent_yaw_jump = max(max_adjacent_yaw_jump, jump)
+                stamp_dt = stamp - previous_yaw_stamp
+                if stamp_dt > 0.0:
+                    max_yaw_reference_rate = max(
+                        max_yaw_reference_rate, jump / stamp_dt)
+            previous_yaw = message.yaw
+            previous_yaw_stamp = stamp
+            horizontal_speed = math.hypot(message.velocity.x, message.velocity.y)
+            remaining = math.dist(values[0:3], FINAL_TARGET)
+            if horizontal_speed >= 0.15 and remaining >= 0.8:
+                tangent = math.atan2(message.velocity.y, message.velocity.x)
+                tangent_error_sum += abs(math.remainder(
+                    message.yaw - tangent, 2.0 * math.pi))
+                tangent_error_samples += 1
             last_setpoint_time = time.monotonic()
             setpoint_samples += 1
             if mission_complete_time is not None:
@@ -386,6 +413,12 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
                 f'max_tracking_error={max_tracking_error:.6f}m '
                 f'minimum_sampled_clearance={minimum_sampled_clearance:.6f}m '
                 f'controller_saturated_true_logs={saturation_true_count} '
+                f'yaw_mode={YAW_MODE} max_adjacent_yaw_jump={max_adjacent_yaw_jump:.6f}rad '
+                f'max_yaw_reference_rate={max_yaw_reference_rate:.6f}rad/s '
+                f'mean_tangent_yaw_error='
+                f'{tangent_error_sum / max(tangent_error_samples, 1):.6f}rad '
+                f'final_yaw_error='
+                f'{abs(math.remainder(latest_setpoint.yaw, 2.0 * math.pi)):.6f}rad '
                 f'final_position_error={final_error:.6f}m '
                 f'final_speed={latest_speed:.6f}m/s '
                 f'odom_samples={odom_samples} setpoint_samples={setpoint_samples} '
@@ -401,6 +434,15 @@ class TestStaticAvoidanceEndToEnd(unittest.TestCase):
             self.assertLess(max_tracking_error, 0.10, summary)
             self.assertGreater(minimum_sampled_clearance, 0.05, summary)
             self.assertEqual(saturation_true_count, 0, summary)
+            self.assertLess(max_adjacent_yaw_jump, 0.10, summary)
+            self.assertLessEqual(max_yaw_reference_rate, 0.82, summary)
+            self.assertLess(
+                abs(math.remainder(latest_setpoint.yaw, 2.0 * math.pi)), 0.05, summary)
+            if YAW_MODE == 'path_tangent':
+                self.assertGreater(tangent_error_samples, 100, summary)
+                self.assertLess(tangent_error_sum / tangent_error_samples, 0.35, summary)
+            else:
+                self.assertLess(max_adjacent_yaw_jump, 1.0e-9, summary)
             self.assertEqual(latest_setpoint.header.frame_id, 'map', summary)
             self.assertLess(
                 norm3(tuple(

@@ -26,9 +26,6 @@ std::vector<MissionGoal> parse_goals(const std::vector<double> & values)
     if (!goal.position.allFinite() || !std::isfinite(goal.yaw)) {
       throw std::invalid_argument("all multi-goal positions and yaw values must be finite");
     }
-    if (goal.yaw != 0.0) {
-      throw std::invalid_argument("the first multi-goal avoidance version requires yaw=0");
-    }
     goals.push_back(goal);
   }
   return goals;

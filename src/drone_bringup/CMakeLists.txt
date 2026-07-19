@@ -32,6 +32,11 @@ if(BUILD_TESTING)
     test/test_launch_structure.py
   )
 
+  ament_add_pytest_test(
+    test_assessment_launch_structure
+    test/test_assessment_launch_structure.py
+  )
+
   add_launch_test(
     test/test_single_goal_e2e.py
     TIMEOUT 70

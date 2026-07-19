@@ -201,7 +201,11 @@ RViz；公开 Launch 文件名和默认行为保持不变。`basic_sim` 与 `mis
 
 ### 自动测试
 
-提交候选版本已在测试前元数据提交 `9289cdb2adf2d260c2cb41cd8e7cdf66d0114120` 上完成最终回归：构建 6 个 package 成功；`288 tests, 0 errors, 0 failures, 0 skipped`。实际环境、时间与统计记录在 `results/submission_validation.json`；其中 `tested_commit` 指向被测试提交，而不是后续验证记录提交。
+路径切线 yaw 提交候选已在
+`558e30fbad58eb18d8ae0764c9d60ed60e42b76f` 上完成最终回归：构建 6 个
+package 成功；`330 tests, 0 errors, 0 failures, 0 skipped`。实际命令、时间与统计记录在
+`results/static_avoidance_yaw/full_regression.json`；其中 `tested_commit` 指向被测试提交，
+不是后续验证记录提交。
 
 `results/` 中既有量化指标属于开发阶段实验数据，必须保留其原始 `git_commit` 等来源字段；提交收尾不得手工改写旧 SHA，也不得声称所有长时间实验已在提交候选上重跑。核心演示的人工视觉验收由用户在提交收尾前完成，与自动回归分开记录。
 

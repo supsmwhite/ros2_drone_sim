@@ -267,7 +267,7 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
             message.client_id = 'navigation_e2e'
             message.marker_name = 'goal_candidate'
             message.control_name = control_name or (
-                'menu' if menu_entry else 'move_xy')
+                'menu' if menu_entry else 'move_x')
             message.event_type = event_type
             message.menu_entry_id = menu_entry
             message.pose.position.x, message.pose.position.y, message.pose.position.z = point

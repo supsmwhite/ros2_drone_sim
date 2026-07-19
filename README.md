@@ -167,7 +167,7 @@ ros2 run drone_mission goal_cli multi \
 ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py
 ```
 
-在 RViz 工具栏选择 `Interact`，拖动 `goal_candidate` 的水平控制面设置 x/y、竖直箭头设置高度，并用水平旋转环自由设置世界 Z 轴 yaw。右键 `Set Yaw` 可精确选择 `0°、±45°、±90°、±135°、180°`。右键依次使用 `Add Goal` 添加多个目标，选择 `Validate & Preview`；状态为 READY 且蓝色预览完整后，选择 `Execute Validated Mission`。执行前会从实际 Odom 再次预检完整序列，任一段无安全路径时均不起飞。
+在 RViz 工具栏选择 `Interact`，拖动 `goal_candidate` 的 X/Y 水平箭头设置位置、Z 竖直箭头设置高度，并用水平旋转环自由设置世界 Z 轴 yaw。平移箭头与旋转环采用不同形状和方向，不会重叠抢占操作。右键 `Set Yaw` 可精确选择 `0°、±45°、±90°、±135°、180°`。右键依次使用 `Add Goal` 添加多个目标，选择 `Validate & Preview`；状态为 READY 且蓝色预览完整后，选择 `Execute Validated Mission`。执行前会从实际 Odom 再次预检完整序列，任一段无安全路径时均不起飞。
 
 候选与每个已添加目标都独立保存位置和终端 yaw，方向箭头及 `P<n> yaw=<角度>` 标签显示保存结果。改变位置、高度或 yaw 都会使旧预览失效，需重新验证。当前不支持直接编辑任意历史目标；请用 `Undo Last Goal` 恢复最后一个目标为候选，修改后重新添加。`Print Mission YAML` 输出可复制的 `[x,y,z,yaw]` 弧度格式，并保留 6 位小数。
 

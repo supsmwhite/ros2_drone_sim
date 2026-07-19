@@ -127,11 +127,10 @@ TEST(InteractiveGoalEditorGeometryTest, SnapsOnlyToRequestedResolutionAndCanReva
   EXPECT_THROW(snap_goal_candidate({0.0, 0.0, 1.5}, 0.0), std::invalid_argument);
 }
 
-TEST(InteractiveGoalEditorMarkerTest, ContainsOnlyWorldFixedPlaneAxisAndMenuControls)
+TEST(InteractiveGoalEditorMarkerTest, SeparatesWorldTranslationAxesFromYawRing)
 {
   const auto marker = make_goal_candidate_marker(
     {{0.0, 0.0, 1.5}, M_PI / 2.0}, 4U, GoalDraftState::Editing, "EDITING");
-  std::size_t planes = 0U;
   std::size_t axes = 0U;
   std::size_t menus = 0U;
   for (const auto & control : marker.controls) {
@@ -141,30 +140,34 @@ TEST(InteractiveGoalEditorMarkerTest, ContainsOnlyWorldFixedPlaneAxisAndMenuCont
     EXPECT_NE(
       control.interaction_mode,
       visualization_msgs::msg::InteractiveMarkerControl::MOVE_ROTATE);
+    EXPECT_NE(
+      control.interaction_mode,
+      visualization_msgs::msg::InteractiveMarkerControl::MOVE_PLANE);
     if (control.interaction_mode ==
-      visualization_msgs::msg::InteractiveMarkerControl::MOVE_PLANE)
-    {
-      ++planes;
-      EXPECT_EQ(
-        control.orientation_mode,
-        visualization_msgs::msg::InteractiveMarkerControl::FIXED);
-      EXPECT_NEAR(std::abs(control.orientation.y), std::sqrt(0.5), 1.0e-12);
-    } else if (control.interaction_mode ==
       visualization_msgs::msg::InteractiveMarkerControl::MOVE_AXIS)
     {
       ++axes;
       EXPECT_EQ(
         control.orientation_mode,
         visualization_msgs::msg::InteractiveMarkerControl::FIXED);
-      EXPECT_NEAR(std::abs(control.orientation.y), std::sqrt(0.5), 1.0e-12);
+      if (control.name == "move_x") {
+        EXPECT_DOUBLE_EQ(control.orientation.w, 1.0);
+      } else if (control.name == "move_y") {
+        EXPECT_NEAR(control.orientation.w, std::sqrt(0.5), 1.0e-12);
+        EXPECT_NEAR(control.orientation.z, std::sqrt(0.5), 1.0e-12);
+      } else if (control.name == "move_z") {
+        EXPECT_NEAR(control.orientation.w, std::sqrt(0.5), 1.0e-12);
+        EXPECT_NEAR(control.orientation.y, std::sqrt(0.5), 1.0e-12);
+      } else {
+        ADD_FAILURE() << "unexpected translation control: " << control.name;
+      }
     } else if (control.interaction_mode ==
       visualization_msgs::msg::InteractiveMarkerControl::MENU)
     {
       ++menus;
     }
   }
-  EXPECT_EQ(planes, 1U);
-  EXPECT_EQ(axes, 1U);
+  EXPECT_EQ(axes, 3U);
   EXPECT_EQ(menus, 1U);
   EXPECT_EQ(
     std::count_if(

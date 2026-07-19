@@ -116,7 +116,7 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
             message.client_id = 'launch_test'
             message.marker_name = 'goal_candidate'
             message.control_name = control_name or (
-                'menu' if menu_entry else 'move_xy')
+                'menu' if menu_entry else 'move_x')
             message.event_type = event_type
             message.menu_entry_id = menu_entry
             message.pose.position.x = x
@@ -178,6 +178,14 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
                 entry.title == 'Set Yaw'
                 for marker in latest['marker_update'].markers
                 for entry in marker.menu_entries))
+            control_names = {
+                control.name
+                for marker in latest['marker_update'].markers
+                for control in marker.controls
+            }
+            self.assertTrue({'move_x', 'move_y', 'move_z', 'rotate_z'} <=
+                            control_names)
+            self.assertNotIn('move_xy', control_names)
 
             topic_names = dict(node.get_topic_names_and_types())
             self.assertIn(

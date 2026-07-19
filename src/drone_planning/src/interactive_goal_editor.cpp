@@ -77,12 +77,33 @@ visualization_msgs::msg::InteractiveMarkerControl world_z_control(
   control.name = name;
   control.interaction_mode = mode;
   control.orientation_mode = visualization_msgs::msg::InteractiveMarkerControl::FIXED;
-  // Interactive Marker controls act along their local x axis.  This +90 degree
-  // rotation around world y maps local x to world -z, so MOVE_PLANE is world XY
-  // and MOVE_AXIS is the world z line (the sign does not affect dragging).
+  // Interactive Marker controls act along their local x axis. This +90 degree
+  // rotation around world y maps local x to world -z (the sign does not matter).
   const double half_sqrt = std::sqrt(0.5);
   control.orientation.w = half_sqrt;
   control.orientation.y = half_sqrt;
+  return control;
+}
+
+visualization_msgs::msg::InteractiveMarkerControl world_x_move_control()
+{
+  visualization_msgs::msg::InteractiveMarkerControl control;
+  control.name = "move_x";
+  control.interaction_mode = visualization_msgs::msg::InteractiveMarkerControl::MOVE_AXIS;
+  control.orientation_mode = visualization_msgs::msg::InteractiveMarkerControl::FIXED;
+  control.orientation.w = 1.0;
+  return control;
+}
+
+visualization_msgs::msg::InteractiveMarkerControl world_y_move_control()
+{
+  visualization_msgs::msg::InteractiveMarkerControl control;
+  control.name = "move_y";
+  control.interaction_mode = visualization_msgs::msg::InteractiveMarkerControl::MOVE_AXIS;
+  control.orientation_mode = visualization_msgs::msg::InteractiveMarkerControl::FIXED;
+  const double half_sqrt = std::sqrt(0.5);
+  control.orientation.w = half_sqrt;
+  control.orientation.z = half_sqrt;
   return control;
 }
 
@@ -221,9 +242,8 @@ visualization_msgs::msg::InteractiveMarker make_goal_candidate_marker(
   body.markers.push_back(label);
   marker.controls.push_back(body);
 
-  marker.controls.push_back(
-    world_z_control(
-      "move_xy", visualization_msgs::msg::InteractiveMarkerControl::MOVE_PLANE));
+  marker.controls.push_back(world_x_move_control());
+  marker.controls.push_back(world_y_move_control());
   marker.controls.push_back(
     world_z_control(
       "move_z", visualization_msgs::msg::InteractiveMarkerControl::MOVE_AXIS));

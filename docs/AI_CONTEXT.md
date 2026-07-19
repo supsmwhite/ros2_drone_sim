@@ -99,7 +99,7 @@ StaticEnvironment
 - `/drone/interactive_goals/execute`：`ExecuteGoalSequence` Service。
 - `/drone/interactive_mission/active`、`status`、`draft_revision`。
 
-交互编辑器只在 READY 后允许执行。候选和已添加目标统一保存 `{position, yaw}`；RViz 候选具有世界 XY 平移、Z 高度和绕世界 Z 轴旋转控制，`Set Yaw` 菜单提供 `0°、±45°、±90°、±135°、180°`。改变 yaw 与改变位置一样增加 draft revision 并使 READY 失效。`selected_goals`、执行 Service 请求和 YAML 均保留各目标 yaw。执行节点从新鲜实际 Odom 对完整目标序列重新预检；地面预检失败时保持零 setpoint/零 RPM，飞行开始后的失败则保持最近有限安全位置。
+交互编辑器只在 READY 后允许执行。候选和已添加目标统一保存 `{position, yaw}`；RViz 候选使用彼此独立的世界 X/Y/Z 平移箭头和绕世界 Z 轴旋转环，避免水平平移平面与 yaw 圆环重叠，`Set Yaw` 菜单提供 `0°、±45°、±90°、±135°、180°`。改变 yaw 与改变位置一样增加 draft revision 并使 READY 失效。`selected_goals`、执行 Service 请求和 YAML 均保留各目标 yaw。执行节点从新鲜实际 Odom 对完整目标序列重新预检；地面预检失败时保持零 setpoint/零 RPM，飞行开始后的失败则保持最近有限安全位置。
 
 ## Launch 入口
 

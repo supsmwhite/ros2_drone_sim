@@ -353,8 +353,8 @@ private:
         publish_state();
         return;
       }
-      const double yaw = feedback->control_name == "move_xy" ||
-        feedback->control_name == "move_z" ? editor_.candidate().yaw : *feedback_yaw;
+      const bool translation_control = feedback->control_name.rfind("move_", 0U) == 0U;
+      const double yaw = translation_control ? editor_.candidate().yaw : *feedback_yaw;
       if (!editor_.set_candidate({position, yaw})) {
         status_override_ = "EDIT REJECTED: invalid pose";
         rebuild_candidate_marker();

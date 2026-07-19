@@ -35,7 +35,8 @@ def generate_test_description():
             os.path.join(bringup, 'config', 'astar.yaml'),
             os.path.join(bringup, 'config', 'planned_trajectory.yaml'),
             os.path.join(bringup, 'config', 'interactive_goal_executor.yaml'),
-            {'interactive_mission_odom_wait_timeout': 1.0},
+            {'interactive_mission_odom_wait_timeout': 1.0,
+             'yaw_mode': 'path_tangent'},
         ],
     )
     return launch.LaunchDescription([
@@ -110,12 +111,15 @@ class TestInteractiveMissionService(unittest.TestCase):
                 ([], 'map', 'empty'),
                 ([pose(0.8, 0.7, 2.0)], 'odom', 'frame_id'),
                 ([pose(float('nan'), 0.7, 2.0)], 'map', 'non-finite'),
-                ([pose(0.8, 0.7, 2.0, 0.2)], 'map', 'yaw=0'),
                 ([pose(0.8, 0.7, 0.3)], 'map', 'navigation floor'),
                 ([pose(20.0, 0.7, 2.0)], 'map', 'safe workspace'),
                 ([pose(2.6, -0.5, 1.5)], 'map', 'inflated obstacle'),
                 ([pose(0.8, 0.7, 2.0)] * 9, 'map', 'max_goals'),
             ]
+            invalid_orientation = pose(0.8, 0.7, 2.0)
+            invalid_orientation.orientation.w = 0.0
+            invalid_requests.append(
+                ([invalid_orientation], 'map', 'invalid orientation'))
             for poses, frame, reason in invalid_requests:
                 response = call(poses, frame)
                 self.assertFalse(response.accepted)
@@ -123,7 +127,7 @@ class TestInteractiveMissionService(unittest.TestCase):
                 self.assertIn(reason, response.message)
 
             response = call([
-                pose(3.5, 1.0, 2.5),
+                pose(3.5, 1.0, 2.5, 0.2),
                 pose(5.5, 1.0, 4.0),
                 pose(7.0, 5.0, 4.0),
             ], revision=42)

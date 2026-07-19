@@ -2,7 +2,13 @@
 
 ## 稳定里程碑与开发边界
 
-当前稳定里程碑：静态避障、交互导航、外部扰动与水平积分阶段。
+当前阶段：功能完整版本冻结与 main 收束
+
+下一阶段：assessment scope consolidation
+
+禁止事项：当前阶段不得删除旧节点、Launch 或测试
+
+当前稳定版本是覆盖静态避障、交互导航、路径切线 yaw、目标 yaw 完成门控、外部扰动与水平积分的功能完整基线。当前阶段不得继续扩展新功能。
 
 后续开发应从最新 `main` 新建独立功能分支。本文只记录当前有效实现、正式参数和正式结果，不作为历史开发日志。
 
@@ -56,7 +62,8 @@ StaticEnvironment
 |---|---|
 | `quadrotor_dynamics_node` | 接收四电机 RPM，推进刚体并发布状态 |
 | `position_controller_node` | 接收 Pose 目标或轨迹 setpoint，发布 RPM 和诊断 |
-| `waypoint_manager_node` | 无障碍离散多目标任务 |
+| `waypoint_manager_node` | YAML 或 Service 输入的无障碍离散多目标任务 |
+| `goal_visualizer_node` | 无障碍单/多目标统一 Marker 显示 |
 | `trajectory_mission_node` | 无障碍分段五次轨迹任务 |
 | `static_environment_node` | 地图 Marker 和实时碰撞状态 |
 | `astar_planner_node` | 单次 3D A* 原始路径规划 |
@@ -87,7 +94,9 @@ StaticEnvironment
 - `/drone/environment/markers`、`/drone/environment/in_collision`。
 - `/drone/multi_goal/current_goal_index`、`visited_goals`、`complete`、`success`。
 - `/drone/multi_goal/goal_markers`、`/drone/multi_goal/current_goal_pose`。
-- `/drone/mission/current_waypoint_index`、`/drone/mission/complete`。
+- `/drone/mission/goals`、`/drone/mission/current_waypoint_index`、`/drone/mission/complete`。
+- `/drone/mission/execute`：复用 `ExecuteGoalSequence` 的运行时任务接口；执行中拒绝抢占。
+- `/drone/mission/goal_markers`：无障碍单目标与多目标统一 MarkerArray。
 
 ### 交互导航
 
@@ -96,7 +105,7 @@ StaticEnvironment
 - `/drone/interactive_goals/execute`：`ExecuteGoalSequence` Service。
 - `/drone/interactive_mission/active`、`status`、`draft_revision`。
 
-交互编辑器只在 READY 后允许执行。执行节点从新鲜实际 Odom 对完整目标序列重新预检；地面预检失败时保持零 setpoint/零 RPM，飞行开始后的失败则保持最近有限安全位置。
+交互编辑器只在 READY 后允许执行。候选和已添加目标统一保存 `{position, yaw}`；RViz 候选使用大半径世界 XY 平移外圈、独立的小半径世界 Z yaw 内圈和 Z 平移箭头，两圈具有显式且互不重叠的鼠标命中区域，`Set Yaw` 菜单提供 `0°、±45°、±90°、±135°、180°`。改变 yaw 与改变位置一样增加 draft revision 并使 READY 失效。`selected_goals`、执行 Service 请求和 YAML 均保留各目标 yaw。执行节点从新鲜实际 Odom 对完整目标序列重新预检；地面预检失败时保持零 setpoint/零 RPM，飞行开始后的失败则保持最近有限安全位置。
 
 ## Launch 入口
 
@@ -114,6 +123,15 @@ StaticEnvironment
 | `interactive_goal_navigation_sim.launch.py` | RViz 编辑、预检和实际导航 |
 | `disturbance_hover_sim.launch.py` | 自动悬停目标和外力输入能力，不主动发布扰力 |
 | `disturbance_visual_demo.launch.py` | `short_gust` / `persistent_release` 扰动演示 |
+
+`simulation_core.launch.py` 是内部公共入口，集中创建动力学、控制器、模型和
+RViz；公开 Launch 文件名和默认行为保持不变。`basic_sim` 与 `mission_sim` 自动
+启动 `goal_visualizer_node`。`mission_sim` 默认加载 YAML，也可设置
+`start_with_configured_waypoints:=false` 等待 `goal_cli multi`。
+
+`goal_cli` 的纯数字 yaw 保持弧度兼容，同时支持 `yaw=30`、`yaw=60`、
+`yaw=90` 这类角度输入。单目标 Marker 仅显示权威目标内容并保持
+`GOAL CURRENT`；多目标的 CURRENT/DONE 来自 waypoint manager 任务状态。
 
 ## 正式配置与参数
 
@@ -146,7 +164,9 @@ StaticEnvironment
 - 基础安全半径 `0.25 m`，规划额外裕量 `0.10 m`，有效规划半径 `0.35 m`。
 - 多目标导航最低球心高度 `0.50 m`。
 - 默认多目标：P1 `(13.2,5.5,1.5,0)`、P2 `(7.0,5.0,4.0,0)`、P3 `(0.8,0.7,2.0,0)`。
-- 当前静态避障任务要求或生成零 yaw；未按路径切线规划机头方向。
+- 静态避障 yaw 默认 `fixed`；可选 `path_tangent` 使用轨迹水平速度切线，低速保持
+  最近有效 yaw，在目标前 `0.80 m` 内混合至当前 waypoint yaw，并以 `0.30 s`
+  一阶滤波和 `0.80 rad/s` 限速。阈值为 `0.10 m/s`。
 
 ## 当前正式结果
 
@@ -160,6 +180,30 @@ StaticEnvironment
 - 最终误差 `0.001536 m`，最终速度 `0.004355 m/s`。
 - 无点/线段碰撞、非有限值或控制器饱和；饱和计数 `0`。
 
+### 静态避障路径切线 yaw 验证
+
+数据源：`results/static_avoidance_yaw/scenario_metrics.json`。这些场景来自提交前工作树，
+结果文件明确保留该来源，不伪造提交 SHA。
+
+- 单目标 fixed 对照：任务成功，最大跟踪误差 `0.030812 m`，最小净空
+  `0.094306 m`，最大相邻 yaw 跳变与最终 yaw 误差均为 `0`。
+- 单目标 path-tangent：任务成功，最大跟踪误差 `0.031013 m`，最小净空
+  `0.094028 m`，最大相邻 yaw 跳变 `0.016161 rad`，最大参考变化率
+  `0.800119 rad/s`，平均切线误差 `0.052637 rad`，最终 yaw 误差 `0`。
+- 三目标 path-tangent：依序访问 P1/P2/P3，最大跟踪误差 `0.039032 m`，最小净空
+  `0.094029 m`，最大相邻 yaw 跳变 `0.016328 rad`，最大参考变化率
+  `0.800272 rad/s`，平均切线误差 `0.130313 rad`，最终 yaw 误差 `0`；无碰撞、
+  非有限值或控制器饱和。
+
+### 交互终端 yaw 验证
+
+`results/interactive_goal_yaw/path_tangent_e2e.json` 记录提交
+`06013d454a1287427b61ce9c52374ff1a03fc3fe` 上的三目标 `90°、180°、-90°`
+自动闭环场景。任务依序成功，目标切换同时要求位置、线速度、最短角 yaw 误差和角速度
+在完整保持时间内满足阈值；无碰撞、饱和或非有限值。本次最终完整回归构建 6 个
+package，并通过 `342 tests, 0 errors, 0 failures, 0 skipped`。后续仅包含验证记录和文档
+的提交不声明经过这次测试。
+
 ### 外力与水平积分
 
 数据源：`results/horizontal_integral_upgrade/selected/regression_summary.json` 和 `repeat_results.json`。
@@ -172,7 +216,11 @@ StaticEnvironment
 
 ### 自动测试
 
-提交候选版本已在测试前元数据提交 `9289cdb2adf2d260c2cb41cd8e7cdf66d0114120` 上完成最终回归：构建 6 个 package 成功；`288 tests, 0 errors, 0 failures, 0 skipped`。实际环境、时间与统计记录在 `results/submission_validation.json`；其中 `tested_commit` 指向被测试提交，而不是后续验证记录提交。
+路径切线 yaw 提交候选已在
+`558e30fbad58eb18d8ae0764c9d60ed60e42b76f` 上完成最终回归：构建 6 个
+package 成功；`330 tests, 0 errors, 0 failures, 0 skipped`。实际命令、时间与统计记录在
+`results/static_avoidance_yaw/full_regression.json`；其中 `tested_commit` 指向被测试提交，
+不是后续验证记录提交。
 
 `results/` 中既有量化指标属于开发阶段实验数据，必须保留其原始 `git_commit` 等来源字段；提交收尾不得手工改写旧 SHA，也不得声称所有长时间实验已在提交候选上重跑。核心演示的人工视觉验收由用户在提交收尾前完成，与自动回归分开记录。
 
@@ -188,18 +236,17 @@ StaticEnvironment
 - 外力是质心处集中等效力，不是完整空间风场。
 - 静态环境没有物理碰撞反作用。
 - 没有动态障碍、局部规划和在线重规划。
-- 静态避障 yaw 为零或未结合路径方向。
-- 普通无障碍单目标只能通过 `/drone/goal` Topic 输入，缺少一键交互入口。
-- 普通无障碍位置实验没有独立目标 Marker。
+- 静态避障已有可选的路径水平切线 yaw 参考，但默认仍为 fixed；它不包含 yaw
+  加速度规划、完整姿态规划或最优 yaw 求解。
+- 无障碍运行时任务首版不支持抢占，执行中请求会被拒绝。
 - 交互执行首版不支持同一 Launch 内提交第二份任务、替换或抢占。
+- 交互目标只支持 Undo 最后一个目标后重建，不支持直接修改任意历史目标；终端 yaw 编辑不是完整姿态规划。
 
 ## 下一阶段优先级
 
-1. 普通单目标增加一键输入入口和目标 Marker。
-2. 静态避障增加基于路径切线或目标要求的 yaw 行为。
-3. 整理整体报告与答辩材料。
+下一阶段：`assessment scope consolidation`。
 
-速度优化不再是默认主线。高度积分、姿态积分、动态障碍、完整风场、状态估计等均为有明确需求时再评估的可选扩展。
+后续应从最新 `main` 新建独立分支，只进行面向考核的入口收束、结构优化以及报告和答辩材料整理。当前功能完整基线不再扩展新功能，也不得在本阶段删除旧节点、Launch 或测试。
 
 ## 构建与测试
 

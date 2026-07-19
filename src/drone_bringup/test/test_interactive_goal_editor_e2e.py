@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import math
 import os
 import time
 import unittest
@@ -18,7 +19,10 @@ import pytest
 import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, String, UInt32
-from visualization_msgs.msg import InteractiveMarkerFeedback
+from visualization_msgs.msg import (
+    InteractiveMarkerControl, InteractiveMarkerFeedback,
+    InteractiveMarkerUpdate,
+)
 
 
 @pytest.mark.launch_test
@@ -88,6 +92,10 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
             node.create_subscription(
                 UInt32, '/drone/interactive_goals/count',
                 lambda message: latest.__setitem__('count', message), qos),
+            node.create_subscription(
+                InteractiveMarkerUpdate,
+                '/drone/interactive_goals/goal_editor/update',
+                lambda message: latest.__setitem__('marker_update', message), 10),
         ]
         feedback_publisher = node.create_publisher(
             InteractiveMarkerFeedback,
@@ -101,18 +109,21 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
                     return
             self.fail(f'timed out waiting for {description}; latest={latest}')
 
-        def feedback(event_type, x=0.0, y=0.0, z=1.5, menu_entry=0):
+        def feedback(event_type, x=0.0, y=0.0, z=1.5, menu_entry=0,
+                     yaw=0.0, control_name=None):
             message = InteractiveMarkerFeedback()
             message.header.frame_id = 'map'
             message.client_id = 'launch_test'
             message.marker_name = 'goal_candidate'
-            message.control_name = 'menu' if menu_entry else 'move_xy'
+            message.control_name = control_name or (
+                'menu' if menu_entry else 'move_xy')
             message.event_type = event_type
             message.menu_entry_id = menu_entry
             message.pose.position.x = x
             message.pose.position.y = y
             message.pose.position.z = z
-            message.pose.orientation.w = 1.0
+            message.pose.orientation.z = math.sin(0.5 * yaw)
+            message.pose.orientation.w = math.cos(0.5 * yaw)
             feedback_publisher.publish(message)
 
         def set_candidate(x, y, z):
@@ -125,8 +136,19 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
         def select_menu(entry_id):
             feedback(InteractiveMarkerFeedback.MENU_SELECT, menu_entry=entry_id)
 
-        def add_goal(index, point):
+        def set_yaw(yaw):
+            candidate = latest.get('candidate_point', (0.0, 0.0, 1.5))
+            feedback(InteractiveMarkerFeedback.POSE_UPDATE, *candidate, yaw=yaw,
+                     control_name='rotate_z')
+            end = time.monotonic() + 0.15
+            while time.monotonic() < end:
+                rclpy.spin_once(node, timeout_sec=0.02)
+
+        def add_goal(index, point, yaw_menu_entry=None):
             set_candidate(*point)
+            latest['candidate_point'] = point
+            if yaw_menu_entry is not None:
+                set_yaw(yaw_menu_entry)
             select_menu(1)  # Add Goal is the first menu entry.
             spin_until(
                 lambda: latest.get('count') is not None and
@@ -144,6 +166,40 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
             self.assertEqual(latest['count'].data, 0)
             self.assertEqual(len(latest['path'].poses), 0)
             self.assertFalse(latest['ready'].data)
+
+            set_candidate(0.8, 0.7, 2.0)
+            spin_until(
+                lambda: 'marker_update' in latest and any(
+                    control.interaction_mode == InteractiveMarkerControl.ROTATE_AXIS
+                    for marker in latest['marker_update'].markers
+                    for control in marker.controls),
+                3.0, 'candidate Z-axis rotation control')
+            self.assertTrue(any(
+                entry.title == 'Set Yaw'
+                for marker in latest['marker_update'].markers
+                for entry in marker.menu_entries))
+            control_names = {
+                control.name
+                for marker in latest['marker_update'].markers
+                for control in marker.controls
+            }
+            self.assertTrue({'move_xy', 'move_z', 'rotate_z'} <=
+                            control_names)
+            self.assertNotIn('move_x', control_names)
+            self.assertNotIn('move_y', control_names)
+            controls = {
+                control.name: control
+                for marker in latest['marker_update'].markers
+                for control in marker.controls
+            }
+            self.assertEqual(
+                controls['move_xy'].interaction_mode,
+                InteractiveMarkerControl.MOVE_PLANE)
+            self.assertEqual(len(controls['move_xy'].markers), 1)
+            self.assertEqual(len(controls['rotate_z'].markers), 1)
+            self.assertGreater(
+                controls['move_xy'].markers[0].scale.x,
+                controls['rotate_z'].markers[0].scale.x * 2.0)
 
             topic_names = dict(node.get_topic_names_and_types())
             self.assertIn(
@@ -168,8 +224,14 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
                 (7.0, 5.0, 4.0),
                 (0.8, 0.7, 2.0),
             ]
-            for index, point in enumerate(legal_three[:2], start=1):
-                add_goal(index, point)
+            add_goal(1, legal_three[0], math.pi / 2.0)
+            add_goal(2, legal_three[1], math.pi)
+            self.assertAlmostEqual(latest['goals'].poses[0].orientation.z,
+                                   math.sqrt(0.5), places=6)
+            self.assertAlmostEqual(latest['goals'].poses[0].orientation.w,
+                                   math.sqrt(0.5), places=6)
+            self.assertAlmostEqual(latest['goals'].poses[1].orientation.z, 1.0,
+                                   places=6)
             # Validate implicitly confirms the distinct current candidate as P3.
             set_candidate(*legal_three[2])
             select_menu(8)  # Validate & Preview follows the height submenu.
@@ -180,6 +242,28 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
             self.assertEqual(latest['count'].data, 3)
             self.assertGreater(len(latest['path'].poses), 2)
             self.assertIn('READY', latest['status'].data)
+
+            # A yaw-only draft change invalidates READY. Undo restores P3 as the
+            # candidate so it can be rebuilt with a different terminal yaw.
+            feedback(InteractiveMarkerFeedback.POSE_UPDATE, *legal_three[2],
+                     yaw=-math.pi / 2.0, control_name='rotate_z')
+            spin_until(lambda: not latest['ready'].data, 3.0,
+                       'preview invalidation after yaw edit')
+            select_menu(2)  # Undo P3 and restore its complete pose as candidate.
+            spin_until(lambda: latest['count'].data == 2, 3.0,
+                       'P3 removed before yaw rebuild')
+            feedback(InteractiveMarkerFeedback.POSE_UPDATE, *legal_three[2],
+                     yaw=-math.pi / 2.0, control_name='rotate_z')
+            edit_deadline = time.monotonic() + 0.15
+            while time.monotonic() < edit_deadline:
+                rclpy.spin_once(node, timeout_sec=0.02)
+            select_menu(1)
+            select_menu(8)
+            spin_until(
+                lambda: latest['ready'].data and latest['count'].data == 3,
+                45.0, 'READY restored after rebuilding yaw-edited P3')
+            self.assertAlmostEqual(latest['goals'].poses[2].orientation.z,
+                                   -math.sqrt(0.5), places=6)
 
             # Editing after READY invalidates and clears the latched preview immediately.
             set_candidate(0.85, 0.75, 2.0)
@@ -199,6 +283,9 @@ class TestInteractiveGoalEditorEndToEnd(unittest.TestCase):
             ]
             for index, point in enumerate(legal_five, start=1):
                 add_goal(index, point)
+            spin_until(
+                lambda: len(latest['goals'].poses) == 5,
+                3.0, 'five-goal pose array')
             self.assertEqual(len(latest['goals'].poses), 5)
             self.assertEqual(latest['count'].data, 5)
             select_menu(8)

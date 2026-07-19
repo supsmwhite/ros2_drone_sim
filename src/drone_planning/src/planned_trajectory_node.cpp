@@ -16,6 +16,7 @@
 #include "drone_mission/piecewise_quintic_trajectory.hpp"
 #include "drone_msgs/msg/trajectory_setpoint.hpp"
 #include "drone_planning/planned_trajectory_builder.hpp"
+#include "drone_planning/yaw_reference_generator.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "nav_msgs/msg/path.hpp"
@@ -127,6 +128,18 @@ public:
       static_cast<std::size_t>(max_insertions_per_refinement);
     parameters.fixed_yaw = declare_parameter<double>("fixed_yaw", 0.0);
 
+    YawReferenceParameters yaw_parameters;
+    yaw_parameters.mode = parse_yaw_mode(declare_parameter<std::string>("yaw_mode", "fixed"));
+    yaw_parameters.fixed_yaw = parameters.fixed_yaw;
+    yaw_parameters.tangent_speed_threshold =
+      declare_parameter<double>("tangent_speed_threshold", 0.10);
+    yaw_parameters.terminal_blend_distance =
+      declare_parameter<double>("terminal_blend_distance", 0.80);
+    yaw_parameters.filter_time_constant =
+      declare_parameter<double>("yaw_filter_time_constant", 0.30);
+    yaw_parameters.max_yaw_rate = declare_parameter<double>("max_yaw_rate", 0.80);
+    yaw_generator_ = std::make_unique<YawReferenceGenerator>(yaw_parameters);
+
     execution_enabled_ = declare_parameter<bool>("execution_enabled", false);
     const double publish_frequency = declare_parameter<double>("publish_frequency", 50.0);
     odometry_timeout_ = declare_parameter<double>("odometry_timeout", 0.25);
@@ -174,6 +187,20 @@ public:
         [this](const nav_msgs::msg::Odometry::SharedPtr message) {
           latest_odometry_ = *message;
           latest_odometry_reception_time_ = std::chrono::steady_clock::now();
+          if (!yaw_initialized_from_odometry_) {
+            const auto & q = message->pose.pose.orientation;
+            const double norm_squared = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
+            if (std::isfinite(norm_squared) && norm_squared > 1.0e-12) {
+              const double scale = 1.0 / std::sqrt(norm_squared);
+              const double yaw = std::atan2(
+                2.0 * (q.w * q.z + q.x * q.y) * scale * scale,
+                1.0 - 2.0 * (q.y * q.y + q.z * q.z) * scale * scale);
+              if (std::isfinite(yaw)) {
+                yaw_generator_->initialize(yaw);
+                yaw_initialized_from_odometry_ = true;
+              }
+            }
+          }
         });
       setpoint_publisher_ = create_publisher<drone_msgs::msg::TrajectorySetpoint>(
         "/drone/trajectory_setpoint", 10);
@@ -258,7 +285,8 @@ private:
     RCLCPP_ERROR(get_logger(), "planned trajectory generation failed: %s", reason.c_str());
   }
 
-  void publish_sample(const drone_mission::TrajectorySample & sample, bool complete_value)
+  void publish_sample(
+    const drone_mission::TrajectorySample & sample, bool complete_value, double dt)
   {
     drone_msgs::msg::TrajectorySetpoint setpoint;
     setpoint.header.stamp = now();
@@ -272,7 +300,9 @@ private:
     setpoint.acceleration.x = sample.acceleration_world.x();
     setpoint.acceleration.y = sample.acceleration_world.y();
     setpoint.acceleration.z = sample.acceleration_world.z();
-    setpoint.yaw = sample.yaw;
+    setpoint.yaw = yaw_generator_->update(
+      sample.position_world, sample.velocity_world, simplified_path_world_.back(),
+      sample.yaw, dt);
     setpoint_publisher_->publish(setpoint);
 
     std_msgs::msg::UInt32 segment;
@@ -318,7 +348,7 @@ private:
         RCLCPP_INFO(get_logger(), "takeoff preparation complete");
         RCLCPP_INFO(get_logger(), "planned trajectory execution started");
       }
-      publish_sample(sample, false);
+      publish_sample(sample, false, dt);
       return;
     }
 
@@ -335,7 +365,7 @@ private:
       execution_state_ = ExecutionState::HoldingFinal;
       RCLCPP_INFO(get_logger(), "planned trajectory complete; holding final setpoint");
     }
-    publish_sample(sample, execution_state_ == ExecutionState::HoldingFinal);
+    publish_sample(sample, execution_state_ == ExecutionState::HoldingFinal, dt);
   }
 
   void handle_path(const nav_msgs::msg::Path & message)
@@ -433,10 +463,12 @@ private:
   std::size_t current_segment_{0U};
   bool processed_path_{false};
   bool execution_enabled_{false};
+  bool yaw_initialized_from_odometry_{false};
   ExecutionState execution_state_{ExecutionState::WaitingForPath};
   std::vector<Eigen::Vector3d> simplified_path_world_;
   std::optional<drone_mission::PiecewiseQuinticTrajectory> trajectory_;
   std::unique_ptr<PlannedTrajectoryBuilder> builder_;
+  std::unique_ptr<YawReferenceGenerator> yaw_generator_;
   std::chrono::steady_clock::time_point last_update_time_;
   std::optional<nav_msgs::msg::Odometry> latest_odometry_;
   std::optional<std::chrono::steady_clock::time_point> latest_odometry_reception_time_;

@@ -25,6 +25,11 @@ from visualization_msgs.msg import InteractiveMarkerFeedback
 
 
 TARGETS = ((3.5, 1.0, 2.5), (5.5, 1.0, 4.0), (7.0, 5.0, 4.0))
+EXPECTED_YAWS = (math.pi / 2.0, math.pi, -math.pi / 2.0)
+GOAL_POSITION_TOLERANCE = 0.20
+GOAL_SPEED_TOLERANCE = 0.15
+GOAL_YAW_TOLERANCE = 0.10
+GOAL_ANGULAR_SPEED_TOLERANCE = 0.20
 BASE_INFLATED_OBSTACLES = (
     ((1.95, -2.75, -0.25), (3.25, 1.75, 4.95)),
     ((3.95, 1.55, -0.25), (5.25, 6.75, 4.95)),
@@ -42,7 +47,7 @@ def generate_test_description():
     simulation = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
             bringup, 'launch', 'interactive_goal_navigation_sim.launch.py')),
-        launch_arguments={'use_rviz': 'false'}.items(),
+        launch_arguments={'use_rviz': 'false', 'yaw_mode': 'path_tangent'}.items(),
     )
     return launch.LaunchDescription([
         simulation,
@@ -98,15 +103,43 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
         accepted_time = None
         mission_complete_time = None
         success_false_after_accept = False
+        previous_yaw_reference = None
+        previous_yaw_stamp = None
+        maximum_yaw_jump = 0.0
+        maximum_yaw_reference_rate = 0.0
+        accepted_actual_yaws = []
+        goal_position_errors = []
+        goal_speeds = []
+        goal_yaw_errors = []
+        goal_angular_speeds = []
+        goal_yaw_reference_errors = [math.inf, math.inf, math.inf]
+        non_finite_count = 0
 
         def on_odom(message):
             nonlocal previous_position, maximum_tracking_error, minimum_clearance
+            nonlocal non_finite_count
             position = (message.pose.pose.position.x, message.pose.pose.position.y,
                         message.pose.pose.position.z)
             velocity = (message.twist.twist.linear.x, message.twist.twist.linear.y,
                         message.twist.twist.linear.z)
-            if not all(math.isfinite(value) for value in position + velocity):
+            angular_velocity = (
+                message.twist.twist.angular.x,
+                message.twist.twist.angular.y,
+                message.twist.twist.angular.z)
+            if not all(math.isfinite(value) for value in
+                       position + velocity + angular_velocity):
                 health_errors.append('non-finite Odom')
+                non_finite_count += 1
+            orientation = message.pose.pose.orientation
+            yaw = math.atan2(
+                2.0 * (orientation.w * orientation.z +
+                       orientation.x * orientation.y),
+                1.0 - 2.0 * (orientation.y * orientation.y +
+                             orientation.z * orientation.z))
+            if math.isfinite(yaw):
+                latest['actual_yaw'] = yaw
+            else:
+                non_finite_count += 1
             for lower, upper in BASE_INFLATED_OBSTACLES:
                 minimum_clearance = min(
                     minimum_clearance, distance_to_box(position, lower, upper))
@@ -116,6 +149,7 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
             previous_position = position
             latest['position'] = position
             latest['speed'] = norm3(velocity)
+            latest['angular_speed'] = norm3(angular_velocity)
             # The takeoff setpoint intentionally steps from the ground to the
             # configured navigation altitude.  Tracking error is an execution
             # metric, so exclude that pre-navigation climb.
@@ -126,8 +160,33 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
                     math.dist(position, latest['setpoint']))
 
         def on_setpoint(message):
+            nonlocal previous_yaw_reference, previous_yaw_stamp
+            nonlocal maximum_yaw_jump, maximum_yaw_reference_rate
+            nonlocal non_finite_count
             latest['setpoint'] = (
                 message.position.x, message.position.y, message.position.z)
+            stamp = message.header.stamp.sec + 1.0e-9 * message.header.stamp.nanosec
+            if not math.isfinite(message.yaw):
+                non_finite_count += 1
+                return
+            if previous_yaw_reference is not None:
+                jump = abs(math.atan2(
+                    math.sin(message.yaw - previous_yaw_reference),
+                    math.cos(message.yaw - previous_yaw_reference)))
+                maximum_yaw_jump = max(maximum_yaw_jump, jump)
+                delta_time = stamp - previous_yaw_stamp
+                if delta_time > 1.0e-6:
+                    maximum_yaw_reference_rate = max(
+                        maximum_yaw_reference_rate, jump / delta_time)
+            previous_yaw_reference = message.yaw
+            previous_yaw_stamp = stamp
+            if 'goal_index' in latest:
+                expected = EXPECTED_YAWS[latest['goal_index']]
+                error = abs(math.atan2(
+                    math.sin(message.yaw - expected),
+                    math.cos(message.yaw - expected)))
+                goal_yaw_reference_errors[latest['goal_index']] = min(
+                    goal_yaw_reference_errors[latest['goal_index']], error)
 
         def on_rpm(message):
             nonlocal maximum_rpm, nonzero_rpm_before_execute
@@ -144,12 +203,24 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
                 nonzero_rpm_before_execute = True
 
         def on_goal_index(message):
+            latest['goal_index'] = message.data
             if not goal_indices or goal_indices[-1] != message.data:
                 goal_indices.append(message.data)
 
         def on_visited(message):
             if not visited_counts or visited_counts[-1] != message.data:
                 visited_counts.append(message.data)
+                if message.data > 0:
+                    accepted_index = message.data - 1
+                    expected = EXPECTED_YAWS[accepted_index]
+                    accepted_actual_yaws.append(latest['actual_yaw'])
+                    goal_position_errors.append(math.dist(
+                        latest['position'], TARGETS[accepted_index]))
+                    goal_speeds.append(latest['speed'])
+                    goal_yaw_errors.append(abs(math.atan2(
+                        math.sin(latest['actual_yaw'] - expected),
+                        math.cos(latest['actual_yaw'] - expected))))
+                    goal_angular_speeds.append(latest['angular_speed'])
 
         def on_success(message):
             nonlocal success_false_after_accept
@@ -208,16 +279,19 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
                     return
             self.fail(f'timed out waiting for {description}; latest={latest}')
 
-        def feedback(event_type, point=(0.0, 0.0, 1.5), menu_entry=0):
+        def feedback(event_type, point=(0.0, 0.0, 1.5), menu_entry=0,
+                     yaw=0.0, control_name=None):
             message = InteractiveMarkerFeedback()
             message.header.frame_id = 'map'
             message.client_id = 'navigation_e2e'
             message.marker_name = 'goal_candidate'
-            message.control_name = 'menu' if menu_entry else 'move_xy'
+            message.control_name = control_name or (
+                'menu' if menu_entry else 'move_xy')
             message.event_type = event_type
             message.menu_entry_id = menu_entry
             message.pose.position.x, message.pose.position.y, message.pose.position.z = point
-            message.pose.orientation.w = 1.0
+            message.pose.orientation.z = math.sin(0.5 * yaw)
+            message.pose.orientation.w = math.cos(0.5 * yaw)
             feedback_publisher.publish(message)
 
         def set_candidate(point):
@@ -229,6 +303,13 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
 
         def menu(entry):
             feedback(InteractiveMarkerFeedback.MENU_SELECT, menu_entry=entry)
+
+        def set_yaw(point, yaw):
+            feedback(InteractiveMarkerFeedback.POSE_UPDATE, point, yaw=yaw,
+                     control_name='rotate_z')
+            end = time.monotonic() + 0.12
+            while time.monotonic() < end:
+                rclpy.spin_once(node, timeout_sec=0.02)
 
         try:
             spin_until(
@@ -251,10 +332,12 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
 
             for index, target in enumerate(TARGETS[:2], start=1):
                 set_candidate(target)
+                set_yaw(target, EXPECTED_YAWS[index - 1])
                 menu(1)
                 spin_until(lambda: latest.get('count') == index, 3.0, f'goal {index}')
             # The final candidate is confirmed by Validate & Preview itself.
             set_candidate(TARGETS[2])
+            set_yaw(TARGETS[2], EXPECTED_YAWS[2])
             menu(8)  # Validate & Preview.
             spin_until(
                 lambda: latest.get('ready') is True and
@@ -265,6 +348,13 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
                 (pose.position.x, pose.position.y, pose.position.z)
                 for pose in latest['goals'].poses]
             self.assertEqual(snapshot, list(TARGETS))
+            selected_yaws = [
+                math.atan2(
+                    2.0 * pose.orientation.w * pose.orientation.z,
+                    1.0 - 2.0 * pose.orientation.z * pose.orientation.z)
+                for pose in latest['goals'].poses]
+            for actual, expected in zip(selected_yaws, EXPECTED_YAWS):
+                self.assertAlmostEqual(actual, expected, places=6)
 
             menu(9)  # Execute Validated Mission.
             spin_until(lambda: latest.get('active') is True, 8.0, 'execution active')
@@ -306,6 +396,19 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
             self.assertGreaterEqual(minimum_clearance, 0.085)
             self.assertLess(math.dist(latest['position'], TARGETS[-1]), 0.05)
             self.assertLess(latest['speed'], 0.03)
+            self.assertEqual(len(accepted_actual_yaws), 3)
+            self.assertEqual(len(goal_position_errors), 3)
+            self.assertEqual(len(goal_speeds), 3)
+            self.assertEqual(len(goal_yaw_errors), 3)
+            self.assertEqual(len(goal_angular_speeds), 3)
+            for error in goal_position_errors:
+                self.assertLess(error, GOAL_POSITION_TOLERANCE)
+            for speed in goal_speeds:
+                self.assertLess(speed, GOAL_SPEED_TOLERANCE)
+            for error in goal_yaw_errors:
+                self.assertLess(error, GOAL_YAW_TOLERANCE)
+            for speed in goal_angular_speeds:
+                self.assertLess(speed, GOAL_ANGULAR_SPEED_TOLERANCE)
 
             output = b''.join(event.text for event in proc_output)
             self.assertIn(b'preview and execution enabled', output)
@@ -318,7 +421,18 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
                 f'minimum_clearance={minimum_clearance:.6f}m '
                 f'maximum_rpm={maximum_rpm:.1f} final_error='
                 f'{math.dist(latest["position"], TARGETS[-1]):.6f}m '
-                f'final_speed={latest["speed"]:.6f}m/s saturation_count={saturation_count}')
+                f'final_speed={latest["speed"]:.6f}m/s '
+                f'accepted_actual_yaws={accepted_actual_yaws} '
+                f'goal_position_errors={goal_position_errors} '
+                f'goal_speeds={goal_speeds} '
+                f'goal_yaw_errors={goal_yaw_errors} '
+                f'goal_angular_speeds={goal_angular_speeds} '
+                f'goal_yaw_reference_errors={goal_yaw_reference_errors} '
+                f'maximum_yaw_jump={maximum_yaw_jump:.6f}rad '
+                f'maximum_yaw_reference_rate={maximum_yaw_reference_rate:.6f}rad/s '
+                f'collision_count={len([error for error in health_errors if "collision" in error])} '
+                f'non_finite_count={non_finite_count} '
+                f'saturation_count={saturation_count}')
         finally:
             for subscription in subscriptions:
                 node.destroy_subscription(subscription)

@@ -8,6 +8,8 @@
 
 ## 当前里程碑
 
+当前版本已冻结为功能完整基线。本轮之后不再继续扩展新功能；面向考核的入口收束和结构优化将在后续独立分支中进行，现有历史入口、节点、Launch 和测试继续保留。
+
 当前阶段已完成：
 
 - 基础悬停与单目标三维位置控制；
@@ -31,7 +33,14 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-常用一键入口：
+当前推荐主展示入口：
+
+```bash
+ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py \
+  yaw_mode:=path_tangent
+```
+
+基础控制、无障碍任务、静态避障和扰动入口仍保留：
 
 ```bash
 ros2 launch drone_bringup basic_sim.launch.py
@@ -69,6 +78,26 @@ ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py
 
 在 RViz 中自行选择多个目标，预览后执行导航。
 
+### 静态避障路径切线 yaw
+
+三个静态避障入口默认使用兼容模式 `yaw_mode:=fixed`，保持原有固定 yaw。显式选择
+`path_tangent` 后，yaw 参考跟随五次轨迹的水平速度切线；水平速度低于 `0.10 m/s`
+时保持最近有效方向，通过最短角误差避免 `±π` 跳变，并在目标前 `0.80 m` 内平滑
+混合到当前目标指定 yaw。最终参考还经过 `0.30 s` 一阶滤波和 `0.80 rad/s`
+速率限制。
+
+```bash
+ros2 launch drone_bringup static_avoidance_sim.launch.py yaw_mode:=fixed
+ros2 launch drone_bringup static_avoidance_sim.launch.py yaw_mode:=path_tangent
+ros2 launch drone_bringup multi_goal_static_avoidance_sim.launch.py yaw_mode:=path_tangent
+ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py yaw_mode:=path_tangent
+```
+
+可覆盖参数为 `fixed_yaw`、`tangent_speed_threshold`、
+`terminal_blend_distance`、`yaw_filter_time_constant` 和 `max_yaw_rate`。该能力只是
+基于轨迹水平切线的平滑 yaw 参考生成，不改变 A*、路径简化、位置轨迹、碰撞检查或
+控制器，也不是完整姿态规划或最优 yaw 规划。
+
 ```bash
 ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=short_gust
 ```
@@ -100,11 +129,39 @@ ros2 launch drone_bringup basic_sim.launch.py
 ```bash
 source ~/ros2_drone_sim/install/setup.bash
 
-ros2 topic pub --once /drone/goal geometry_msgs/msg/PoseStamped \
-  "{header: {frame_id: map}, pose: {position: {x: 2.0, y: 1.0, z: 1.5}, orientation: {w: 1.0}}}"
+ros2 run drone_mission goal_cli single 2.0 1.0 1.5 0.0
 ```
 
-这是当前核心演示中唯一必须使用第二个终端输入目标的基础实验。
+工具会检查输入和工作空间，等待 `/drone/goal` 订阅者并发布 `map` 系目标。
+原有 `ros2 topic pub` 方式仍然兼容。
+单目标 Marker 始终标记为 `GOAL CURRENT`；可视化节点不根据 Odom 推断任务完成。
+
+最后一项可继续使用弧度，也可用更直观的角度格式。例如朝向 90°：
+
+```bash
+ros2 run drone_mission goal_cli single 2.0 1.0 1.5 yaw=90
+```
+
+### 命令行多目标
+
+终端 1 启动等待运行时任务的无障碍仿真：
+
+```bash
+ros2 launch drone_bringup mission_sim.launch.py start_with_configured_waypoints:=false
+```
+
+终端 2 提交任意数量的 `[x y z yaw]` 目标组：
+
+```bash
+ros2 run drone_mission goal_cli multi \
+  0.0 0.0 1.5 yaw=0 \
+  2.0 0.0 1.5 yaw=0 \
+  2.0 1.5 1.8 yaw=90
+```
+
+任务通过 `/drone/mission/execute` 提交。任务执行中不允许抢占，新请求会返回
+拒绝原因。默认 `mission_sim.launch.py` 仍从 `config/mission.yaml` 自启动，也可用
+`mission_config:=<yaml>` 选择任务文件。
 
 ### 任务、轨迹与避障
 
@@ -119,7 +176,20 @@ ros2 topic pub --once /drone/goal geometry_msgs/msg/PoseStamped \
 ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py
 ```
 
-在 RViz 工具栏选择 `Interact`，拖动 `goal_candidate` 的水平控制面和竖直箭头。右键依次使用 `Add Goal` 添加多个目标，选择 `Validate & Preview`；状态为 READY 且蓝色预览完整后，选择 `Execute Validated Mission`。执行前会从实际 Odom 再次预检完整序列，任一段无安全路径时均不起飞。
+在 RViz 工具栏选择 `Interact`，拖动 `goal_candidate` 的青色外圈可快速设置 X/Y 平面位置，拖动 Z 竖直箭头设置高度，拖动内部小旋转环设置世界 Z 轴 yaw。外部平移圈和内部 yaw 圈具有独立的半径与鼠标命中区域，不会重叠抢占操作。右键 `Set Yaw` 可精确选择 `0°、±45°、±90°、±135°、180°`。右键依次使用 `Add Goal` 添加多个目标，选择 `Validate & Preview`；状态为 READY 且蓝色预览完整后，选择 `Execute Validated Mission`。执行前会从实际 Odom 再次预检完整序列，任一段无安全路径时均不起飞。
+
+候选与每个已添加目标都独立保存位置和终端 yaw，方向箭头及 `P<n> yaw=<角度>` 标签显示保存结果。改变位置、高度或 yaw 都会使旧预览失效，需重新验证。当前不支持直接编辑任意历史目标；请用 `Undo Last Goal` 恢复最后一个目标为候选，修改后重新添加。`Print Mission YAML` 输出可复制的 `[x,y,z,yaw]` 弧度格式，并保留 6 位小数。
+
+默认 `yaw_mode:=fixed` 仍让整段任务使用全局 `fixed_yaw`；目标 yaw 会被保存和传递，但不改变兼容行为。`yaw_mode:=path_tangent` 飞行时跟随路径切线，并在每个终点平滑过渡到该交互目标的 yaw。这项能力准确称为“交互式多目标终端 yaw 编辑与路径切线 yaw 执行”，不是完整姿态规划。
+
+三目标终端 yaw 演示：
+
+```bash
+ros2 launch drone_bringup interactive_goal_navigation_sim.launch.py \
+  yaw_mode:=path_tangent
+```
+
+依次设置 `P1=90°、P2=180°、P3=-90°`，再执行 `Validate & Preview` 和 `Execute Validated Mission`。默认 fixed 对照仍使用不带参数的同一 Launch 命令。
 
 ### 扰动实验
 
@@ -179,6 +249,20 @@ ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=persistent_
 | 最终速度 | `0.004355 m/s` |
 | 碰撞 / 控制器饱和 | `无 / 0` |
 
+路径切线 yaw 定向验证中，单目标任务最大相邻 yaw 跳变 `0.016161 rad`、最大 yaw
+参考变化率 `0.800119 rad/s`、最终 yaw 误差 `0 rad`；三目标任务对应为
+`0.016328 rad`、`0.800272 rad/s`、`0 rad`，目标顺序、轨迹安全和完成状态保持正常。
+完整 fixed 对照与 path-tangent 指标见 `results/static_avoidance_yaw/`。
+
+交互终端 yaw 自动闭环场景使用 `90°、180°、-90°`，三目标依序完成；最大相邻
+yaw 参考跳变 `0.016216 rad`、最大参考变化率 `0.800737 rad/s`、最大位置跟踪误差
+`0.020015 m`、最小膨胀障碍净空 `0.240015 m`，无碰撞、饱和或非有限值。既有
+位置/速度到点门控会在中间目标 yaw 完全稳定前切换下一段，目标接受瞬间的机体 yaw
+误差为 `0.735928/0.531219/0.035898 rad`；本轮按边界只记录该现象，未修改 yaw
+算法、控制器或保持参数。工作树来源和完整指标见 `results/interactive_goal_yaw/`。
+同一提交候选工作树的最终完整回归构建 6 个 package，`334 tests, 0 errors,
+0 failures, 0 skipped`；来源命令和工作树状态见该目录的 `full_regression.json`。
+
 持续 `0.30 N` 外力下，以末 3 秒平均误差作为稳态指标：
 
 | 控制基线 | 稳态误差 |
@@ -188,7 +272,11 @@ ros2 launch drone_bringup disturbance_visual_demo.launch.py profile:=persistent_
 
 当前基线的三次独立 `0.30 N × 10 s` 撤力重复实验：恢复时间 `4.600580–4.601050 s`，反向超调 `0.107763–0.107767 m`；三次均无控制器饱和。
 
-提交候选版本已在 `9289cdb2adf2d260c2cb41cd8e7cdf66d0114120` 上完成最终回归：构建 6 个 package 成功，`288 tests, 0 errors, 0 failures, 0 skipped`；真实环境、时间和统计见 `results/submission_validation.json`。这里的开发阶段实验数据不会因提交收尾而重写来源 SHA，也不表示全部长时间实验已在提交候选上重新执行。核心演示的人工视觉验收由用户在提交收尾前完成。
+路径切线 yaw 提交候选已在 `558e30fbad58eb18d8ae0764c9d60ed60e42b76f`
+上完成最终回归：构建 6 个 package 成功，
+`330 tests, 0 errors, 0 failures, 0 skipped`；真实命令和统计见
+`results/static_avoidance_yaw/full_regression.json`。提交前场景指标继续保留其工作树来源，
+没有改写为该 SHA，也不表示人工 RViz 视觉验收已由自动测试替代。
 
 正式数据见：
 
@@ -302,21 +390,12 @@ ros2 param get /quadrotor_dynamics_node enable_external_wrench
 - 外力是作用于质心的集中等效力，不是空间变化的完整风场。
 - 静态环境提供碰撞检查和状态监测，不模拟物理碰撞反作用。
 - 尚无动态障碍、局部规划和在线重规划。
-- 静态避障任务当前 yaw 为零或未结合路径方向规划。
-- 普通无障碍单目标通过 `/drone/goal` Topic 输入，缺少一键参数或交互入口。
-- 普通无障碍位置实验尚未单独显示目标 Marker。
+- 静态避障默认保留固定 yaw 兼容模式，并可显式选择路径切线 yaw。
+- 无障碍命令行任务不支持抢占；执行中提交的新任务会被明确拒绝。
 
-后三项主要影响展示和交互完整性，不影响当前已验证的规划、控制与安全链路。
+## 后续工作
 
-## 后续优化
-
-近期展示与交互优化：
-
-1. 为普通单目标实验增加一键参数或交互输入，并显示目标点 Marker；
-2. 静态避障根据路径切线或目标要求设置 yaw；
-3. 整理整体报告和答辩材料。
-
-可选扩展：只有出现明确物理需求时再评估垂向持续扰动与高度积分；其后可研究动态障碍和在线重规划、更完整的时空风场、传感器噪声与状态估计。这些不是当前里程碑缺陷或默认必做项。
+下一阶段为 `assessment scope consolidation`：从功能完整基线新建独立分支，进行面向考核的入口收束、结构优化以及报告和答辩材料整理。当前阶段停止新增功能，不删除现有节点、Launch、历史入口或测试。
 
 ## References and acknowledgments
 

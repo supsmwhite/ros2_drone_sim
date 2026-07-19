@@ -72,31 +72,6 @@ std::vector<AxisAlignedBox> parse_obstacles(const std::vector<double> & values)
   return obstacles;
 }
 
-std_msgs::msg::ColorRGBA goal_color(
-  GoalDraftState state, std::size_t index, std::optional<std::size_t> failed_index)
-{
-  std_msgs::msg::ColorRGBA color;
-  color.a = 0.95F;
-  if (failed_index && index == *failed_index) {
-    color.r = 0.95F;
-    color.g = 0.08F;
-    color.b = 0.05F;
-  } else if (state == GoalDraftState::Ready) {
-    color.r = 0.10F;
-    color.g = 0.90F;
-    color.b = 0.20F;
-  } else if (state == GoalDraftState::Validating) {
-    color.r = 0.10F;
-    color.g = 0.35F;
-    color.b = 1.0F;
-  } else {
-    color.r = 1.0F;
-    color.g = 0.75F;
-    color.b = 0.05F;
-  }
-  return color;
-}
-
 std::string segment_name(std::size_t segment_index)
 {
   if (segment_index == 0U) {
@@ -285,7 +260,7 @@ private:
   CandidateValidation candidate_validation() const
   {
     return validate_goal_candidate(
-      editor_.candidate(), *collision_checker_, minimum_navigation_altitude_);
+      editor_.candidate().position, *collision_checker_, minimum_navigation_altitude_);
   }
 
   void quick_validate()
@@ -313,6 +288,16 @@ private:
         "Execute Validated Mission", [this](const auto &) {execute_validated_mission();});
     }
     menu_handler_.insert("Print Mission YAML", [this](const auto &) {print_yaml();});
+    const auto yaw_menu = menu_handler_.insert("Set Yaw");
+    const std::vector<std::pair<std::string, double>> yaw_options{
+      {"0 deg", 0.0}, {"45 deg", M_PI / 4.0}, {"90 deg", M_PI / 2.0},
+      {"135 deg", 3.0 * M_PI / 4.0}, {"180 deg", M_PI},
+      {"-135 deg", -3.0 * M_PI / 4.0}, {"-90 deg", -M_PI / 2.0},
+      {"-45 deg", -M_PI / 4.0}};
+    for (const auto & option : yaw_options) {
+      menu_handler_.insert(
+        yaw_menu, option.first, [this, yaw = option.second](const auto &) {set_yaw(yaw);});
+    }
   }
 
   bool editor_locked() const
@@ -358,17 +343,33 @@ private:
     }
     status_override_.reset();
     if (feedback->event_type == visualization_msgs::msg::InteractiveMarkerFeedback::POSE_UPDATE) {
-      editor_.set_candidate(
-        Eigen::Vector3d(
-          feedback->pose.position.x, feedback->pose.position.y, feedback->pose.position.z));
+      const Eigen::Vector3d position(
+        feedback->pose.position.x, feedback->pose.position.y, feedback->pose.position.z);
+      const auto feedback_yaw = yaw_from_quaternion(feedback->pose.orientation);
+      if (!position.allFinite() || !feedback_yaw) {
+        status_override_ = "EDIT REJECTED: invalid pose";
+        RCLCPP_WARN(get_logger(), "%s", status_override_->c_str());
+        rebuild_candidate_marker();
+        publish_state();
+        return;
+      }
+      const bool translation_control = feedback->control_name.rfind("move_", 0U) == 0U;
+      const double yaw = translation_control ? editor_.candidate().yaw : *feedback_yaw;
+      if (!editor_.set_candidate({position, yaw})) {
+        status_override_ = "EDIT REJECTED: invalid pose";
+        rebuild_candidate_marker();
+        publish_state();
+        return;
+      }
       invalidate_preview_storage();
       rebuild_candidate_marker();
       publish_state();
     } else if (feedback->event_type ==
       visualization_msgs::msg::InteractiveMarkerFeedback::MOUSE_UP)
     {
-      const Eigen::Vector3d snapped = snap_goal_candidate(editor_.candidate(), snap_resolution_);
-      editor_.set_candidate(snapped);
+      const Eigen::Vector3d snapped =
+        snap_goal_candidate(editor_.candidate().position, snap_resolution_);
+      editor_.set_candidate_position(snapped);
       invalidate_preview_storage();
       quick_validate();
       rebuild_candidate_marker();
@@ -425,9 +426,24 @@ private:
       return;
     }
     status_override_.reset();
-    Eigen::Vector3d candidate = editor_.candidate();
-    candidate.z() = height;
-    editor_.set_candidate(candidate);
+    Eigen::Vector3d position = editor_.candidate().position;
+    position.z() = height;
+    editor_.set_candidate_position(position);
+    invalidate_preview_storage();
+    quick_validate();
+    rebuild_candidate_marker();
+    publish_state();
+  }
+
+  void set_yaw(double yaw)
+  {
+    if (reject_if_locked("SET YAW")) {
+      return;
+    }
+    status_override_.reset();
+    if (!editor_.set_candidate_yaw(yaw)) {
+      status_override_ = "SET YAW REJECTED: non-finite yaw";
+    }
     invalidate_preview_storage();
     quick_validate();
     rebuild_candidate_marker();
@@ -445,7 +461,9 @@ private:
       return;
     }
     const bool candidate_is_last_goal =
-      !editor_.goals().empty() && editor_.goals().back().isApprox(editor_.candidate(), 1.0e-9);
+      !editor_.goals().empty() &&
+      editor_.goals().back().position.isApprox(editor_.candidate().position, 1.0e-9) &&
+      std::abs(normalize_angle(editor_.goals().back().yaw - editor_.candidate().yaw)) < 1.0e-9;
     if (!candidate_is_last_goal) {
       std::string reason;
       if (!editor_.add_goal(candidate_validation(), reason)) {
@@ -461,7 +479,7 @@ private:
         editor_.goals().size());
     }
     std::uint64_t revision = 0U;
-    std::vector<Eigen::Vector3d> goals;
+    std::vector<InteractiveGoal> goals;
     if (!editor_.begin_validation(revision, goals)) {
       rebuild_candidate_marker();
       publish_state();
@@ -488,7 +506,7 @@ private:
           try {
             for (std::size_t index = 0U; index < goals.size(); ++index) {
               AStarPlanner planner(checker, resolution, max_grid_nodes);
-              const auto astar = planner.plan(segment_start, goals[index]);
+              const auto astar = planner.plan(segment_start, goals[index].position);
               if (!astar.success()) {
                 result.message = "REJECTED: segment " + segment_name(index) +
                 " A* failure";
@@ -518,7 +536,7 @@ private:
               {
                 result.preview_points.push_back(endpoint);
               }
-              segment_start = goals[index];
+              segment_start = goals[index].position;
             }
             result.success = true;
             result.message = "READY: all " + std::to_string(goals.size()) +
@@ -580,17 +598,8 @@ private:
     }
 
     auto request = std::make_shared<drone_msgs::srv::ExecuteGoalSequence::Request>();
-    request->goals.header.frame_id = frame_id_;
+    request->goals = make_selected_goals(editor_.goals(), frame_id_);
     request->goals.header.stamp = now();
-    request->goals.poses.reserve(editor_.goals().size());
-    for (const auto & point : editor_.goals()) {
-      geometry_msgs::msg::Pose pose;
-      pose.position.x = point.x();
-      pose.position.y = point.y();
-      pose.position.z = point.z();
-      pose.orientation.w = 1.0;
-      request->goals.poses.push_back(pose);
-    }
     request->draft_revision = editor_.draft_revision();
     submitted_revision_ = request->draft_revision;
     execute_request_pending_ = true;
@@ -631,62 +640,23 @@ private:
         get_logger(), "Print Mission YAML rejected: run successful Validate & Preview first");
       return;
     }
-    std::ostringstream yaml;
-    yaml << "goals:\n  [\n" << std::fixed << std::setprecision(2);
-    for (std::size_t index = 0U; index < editor_.goals().size(); ++index) {
-      const auto & goal = editor_.goals()[index];
-      yaml << "    " << goal.x() << ", " << goal.y() << ", " << goal.z() << ", 0.00";
-      yaml << (index + 1U == editor_.goals().size() ? "\n" : ",\n");
-    }
-    yaml << "  ]";
+    const std::string yaml = format_mission_yaml(editor_.goals());
     RCLCPP_INFO(
       get_logger(), "Validated mission YAML (copy only; no file was changed):\n%s",
-      yaml.str().c_str());
+      yaml.c_str());
   }
 
   visualization_msgs::msg::MarkerArray make_goal_markers() const
   {
-    visualization_msgs::msg::MarkerArray array;
-    visualization_msgs::msg::Marker clear;
-    clear.action = visualization_msgs::msg::Marker::DELETEALL;
-    array.markers.push_back(clear);
+    auto array = make_interactive_goal_markers(
+      editor_.goals(), editor_.state(), editor_.failed_goal_index(), frame_id_);
     if (editor_locked()) {
+      array.markers.resize(1U);
       return array;
     }
     const auto stamp = now();
-    for (std::size_t index = 0U; index < editor_.goals().size(); ++index) {
-      const auto & point = editor_.goals()[index];
-      visualization_msgs::msg::Marker sphere;
-      sphere.header.frame_id = frame_id_;
-      sphere.header.stamp = stamp;
-      sphere.ns = "interactive_goals";
-      sphere.id = static_cast<int>(2U * index);
-      sphere.type = visualization_msgs::msg::Marker::SPHERE;
-      sphere.action = visualization_msgs::msg::Marker::ADD;
-      sphere.pose.position.x = point.x();
-      sphere.pose.position.y = point.y();
-      sphere.pose.position.z = point.z();
-      sphere.pose.orientation.w = 1.0;
-      sphere.scale.x = 0.30;
-      sphere.scale.y = 0.30;
-      sphere.scale.z = 0.30;
-      sphere.color = goal_color(editor_.state(), index, editor_.failed_goal_index());
-      array.markers.push_back(sphere);
-
-      visualization_msgs::msg::Marker label = sphere;
-      label.ns = "interactive_goal_labels";
-      label.id = static_cast<int>(2U * index + 1U);
-      label.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
-      label.pose.position.z += 0.32;
-      label.scale.x = 0.0;
-      label.scale.y = 0.0;
-      label.scale.z = 0.22;
-      label.color.r = 1.0F;
-      label.color.g = 1.0F;
-      label.color.b = 1.0F;
-      label.color.a = 1.0F;
-      label.text = "P" + std::to_string(index + 1U);
-      array.markers.push_back(label);
+    for (auto & marker : array.markers) {
+      marker.header.stamp = stamp;
     }
     return array;
   }
@@ -715,18 +685,8 @@ private:
   void publish_state()
   {
     goal_markers_publisher_->publish(make_goal_markers());
-    geometry_msgs::msg::PoseArray goals;
-    goals.header.frame_id = frame_id_;
+    auto goals = make_selected_goals(editor_.goals(), frame_id_);
     goals.header.stamp = now();
-    goals.poses.reserve(editor_.goals().size());
-    for (const auto & point : editor_.goals()) {
-      geometry_msgs::msg::Pose pose;
-      pose.position.x = point.x();
-      pose.position.y = point.y();
-      pose.position.z = point.z();
-      pose.orientation.w = 1.0;
-      goals.poses.push_back(pose);
-    }
     selected_goals_publisher_->publish(goals);
     preview_path_publisher_->publish(make_preview_path());
     std_msgs::msg::String status;

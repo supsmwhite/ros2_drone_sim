@@ -20,6 +20,17 @@ ament_target_dependencies(
 
 if(BUILD_TESTING)
   find_package(launch_testing_ament_cmake REQUIRED)
+  find_package(ament_cmake_pytest REQUIRED)
+
+  ament_add_pytest_test(
+    test_physical_parameter_consistency
+    test/test_physical_parameter_consistency.py
+  )
+
+  ament_add_pytest_test(
+    test_launch_structure
+    test/test_launch_structure.py
+  )
 
   add_launch_test(
     test/test_single_goal_e2e.py

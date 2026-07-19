@@ -212,5 +212,19 @@ TEST(WaypointManager, YawWrapUsesShortestAngularError)
   EXPECT_TRUE(output.mission_complete);
 }
 
+TEST(WaypointManager, ReplacingTaskResetsIndexTimerAndCompletion)
+{
+  auto manager = manager_with({waypoint(0.0, 0.0, 1.0)});
+  manager.update(settled_at(manager.current_waypoint()), 1.0);
+  ASSERT_TRUE(manager.mission_complete());
+
+  manager.replace_waypoints({waypoint(2.0, 0.0, 1.5), waypoint(2.0, 1.0, 1.5)});
+
+  EXPECT_FALSE(manager.mission_complete());
+  EXPECT_EQ(manager.current_index(), 0U);
+  EXPECT_EQ(manager.waypoints().size(), 2U);
+  EXPECT_FALSE(manager.update(settled_at(manager.current_waypoint()), 0.9).waypoint_accepted);
+}
+
 }  // namespace
 }  // namespace drone_mission

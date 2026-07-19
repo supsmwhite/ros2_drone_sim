@@ -2,6 +2,7 @@
 build/
 install/
 log/
+docs/learning_notes/
 
 # VS Code: keep shared workspace settings, ignore other local state
 .vscode/*

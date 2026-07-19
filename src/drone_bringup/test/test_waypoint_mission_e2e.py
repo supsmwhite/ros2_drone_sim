@@ -20,6 +20,7 @@ import launch_testing.markers
 from nav_msgs.msg import Odometry
 import pytest
 import rclpy
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, UInt32
 
 
@@ -179,10 +180,14 @@ class TestWaypointMissionEndToEnd(unittest.TestCase):
             latest_speed = math.sqrt(
                 twist.linear.x ** 2 + twist.linear.y ** 2 + twist.linear.z ** 2)
 
+        state_qos = QoSProfile(
+            depth=1,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            reliability=ReliabilityPolicy.RELIABLE)
         index_subscription = node.create_subscription(
-            UInt32, '/drone/mission/current_waypoint_index', on_index, 10)
+            UInt32, '/drone/mission/current_waypoint_index', on_index, state_qos)
         complete_subscription = node.create_subscription(
-            Bool, '/drone/mission/complete', on_complete, 10)
+            Bool, '/drone/mission/complete', on_complete, state_qos)
         goal_subscription = node.create_subscription(
             PoseStamped, '/drone/goal', on_goal, 10)
         odom_subscription = node.create_subscription(

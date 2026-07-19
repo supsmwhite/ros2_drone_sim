@@ -18,9 +18,11 @@
 #include "drone_msgs/msg/trajectory_setpoint.hpp"
 #include "drone_msgs/srv/execute_goal_sequence.hpp"
 #include "drone_planning/astar_planner.hpp"
+#include "drone_planning/goal_completion_gate.hpp"
 #include "drone_planning/mission_failure_safety.hpp"
 #include "drone_planning/multi_goal_visualization.hpp"
 #include "drone_planning/planned_trajectory_builder.hpp"
+#include "drone_planning/yaw_reference_generator.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -92,13 +94,13 @@ struct PreflightResult
   std::string message;
 };
 
-bool quaternion_has_zero_yaw(const geometry_msgs::msg::Quaternion & orientation)
+std::optional<double> quaternion_yaw(const geometry_msgs::msg::Quaternion & orientation)
 {
   const double norm_squared = orientation.x * orientation.x +
     orientation.y * orientation.y + orientation.z * orientation.z +
     orientation.w * orientation.w;
   if (!std::isfinite(norm_squared) || norm_squared < 1.0e-12) {
-    return false;
+    return std::nullopt;
   }
   const double inverse_norm = 1.0 / std::sqrt(norm_squared);
   const double x = orientation.x * inverse_norm;
@@ -106,7 +108,7 @@ bool quaternion_has_zero_yaw(const geometry_msgs::msg::Quaternion & orientation)
   const double z = orientation.z * inverse_norm;
   const double w = orientation.w * inverse_norm;
   const double yaw = std::atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
-  return std::isfinite(yaw) && std::abs(yaw) <= 1.0e-9;
+  return std::isfinite(yaw) ? std::optional<double>(yaw) : std::nullopt;
 }
 
 }  // namespace
@@ -176,6 +178,9 @@ public:
     goal_position_tolerance_ =
       declare_parameter<double>("goal_position_tolerance", 0.20);
     goal_speed_tolerance_ = declare_parameter<double>("goal_speed_tolerance", 0.15);
+    goal_yaw_tolerance_ = declare_parameter<double>("goal_yaw_tolerance", 0.10);
+    goal_angular_speed_tolerance_ =
+      declare_parameter<double>("goal_angular_speed_tolerance", 0.20);
     goal_hold_duration_ = declare_parameter<double>("goal_hold_duration", 1.0);
     resolution_ = declare_parameter<double>("resolution", 0.25);
     const auto max_grid_nodes_parameter =
@@ -217,6 +222,19 @@ public:
       static_cast<std::size_t>(max_insertions_per_refinement);
     trajectory_parameters_.fixed_yaw = declare_parameter<double>("fixed_yaw", 0.0);
 
+    YawReferenceParameters yaw_parameters;
+    yaw_mode_ = parse_yaw_mode(declare_parameter<std::string>("yaw_mode", "fixed"));
+    yaw_parameters.mode = yaw_mode_;
+    yaw_parameters.fixed_yaw = trajectory_parameters_.fixed_yaw;
+    yaw_parameters.tangent_speed_threshold =
+      declare_parameter<double>("tangent_speed_threshold", 0.10);
+    yaw_parameters.terminal_blend_distance =
+      declare_parameter<double>("terminal_blend_distance", 0.80);
+    yaw_parameters.filter_time_constant =
+      declare_parameter<double>("yaw_filter_time_constant", 0.30);
+    yaw_parameters.max_yaw_rate = declare_parameter<double>("max_yaw_rate", 0.80);
+    yaw_generator_ = std::make_unique<YawReferenceGenerator>(yaw_parameters);
+
     if (!finite_positive(takeoff_height_) ||
       !std::isfinite(minimum_navigation_altitude_) || minimum_navigation_altitude_ < 0.0 ||
       takeoff_height_ <= minimum_navigation_altitude_ ||
@@ -225,11 +243,16 @@ public:
       !finite_positive(takeoff_position_tolerance_) ||
       !finite_positive(takeoff_speed_tolerance_) || !finite_positive(takeoff_hold_duration_) ||
       !finite_positive(goal_position_tolerance_) || !finite_positive(goal_speed_tolerance_) ||
+      !finite_positive(goal_yaw_tolerance_) ||
+      !finite_positive(goal_angular_speed_tolerance_) ||
       !finite_positive(goal_hold_duration_) || !finite_positive(resolution_) ||
-      !finite_positive(reference_path_sample_period_) || trajectory_parameters_.fixed_yaw != 0.0)
+      !finite_positive(reference_path_sample_period_))
     {
       throw std::invalid_argument("multi-goal mission scalar parameters are invalid");
     }
+    goal_completion_gate_ = GoalCompletionGate(
+      {goal_position_tolerance_, goal_speed_tolerance_, goal_yaw_tolerance_,
+        goal_angular_speed_tolerance_, goal_hold_duration_});
 
     const AxisAlignedBox original_workspace = parse_workspace(workspace_values);
     const auto obstacles = parse_obstacles(obstacle_values);
@@ -401,8 +424,9 @@ private:
       {
         return "REJECTED: P" + std::to_string(index + 1U) + " contains non-finite values";
       }
-      if (!quaternion_has_zero_yaw(pose.orientation)) {
-        return "REJECTED: P" + std::to_string(index + 1U) + " requires yaw=0";
+      const auto yaw = quaternion_yaw(pose.orientation);
+      if (!yaw) {
+        return "REJECTED: P" + std::to_string(index + 1U) + " has invalid orientation";
       }
       if (position.z() < minimum_navigation_altitude_) {
         return "REJECTED: P" + std::to_string(index + 1U) +
@@ -412,7 +436,7 @@ private:
         return "REJECTED: P" + std::to_string(index + 1U) +
                " is outside the safe workspace or inside an inflated obstacle";
       }
-      validated_goals.push_back({position, 0.0});
+      validated_goals.push_back({position, *yaw});
     }
     return std::nullopt;
   }
@@ -523,7 +547,8 @@ private:
       preflight_start.x(), preflight_start.y(), preflight_start.z(), goals_.size());
   }
 
-  bool valid_odometry(Eigen::Vector3d & position, double & speed) const
+  bool valid_odometry(
+    Eigen::Vector3d & position, double & speed, double & yaw, double & angular_speed) const
   {
     if (!latest_odometry_) {
       return false;
@@ -532,12 +557,16 @@ private:
     const auto & twist = latest_odometry_->twist.twist;
     position = Eigen::Vector3d(pose.position.x, pose.position.y, pose.position.z);
     const Eigen::Vector3d linear_velocity(twist.linear.x, twist.linear.y, twist.linear.z);
+    const Eigen::Vector3d angular_velocity(twist.angular.x, twist.angular.y, twist.angular.z);
     speed = linear_velocity.norm();
+    angular_speed = angular_velocity.norm();
+    const auto extracted_yaw = quaternion_yaw(pose.orientation);
+    if (extracted_yaw) {
+      yaw = *extracted_yaw;
+    }
     return position.allFinite() && linear_velocity.allFinite() && std::isfinite(speed) &&
-           std::isfinite(pose.orientation.x) && std::isfinite(pose.orientation.y) &&
-           std::isfinite(pose.orientation.z) && std::isfinite(pose.orientation.w) &&
-           std::isfinite(twist.angular.x) && std::isfinite(twist.angular.y) &&
-           std::isfinite(twist.angular.z);
+           angular_velocity.allFinite() && std::isfinite(angular_speed) && extracted_yaw &&
+           std::isfinite(yaw);
   }
 
   bool odometry_is_fresh(std::chrono::steady_clock::time_point steady_now) const
@@ -567,7 +596,7 @@ private:
 
   void publish_setpoint(
     const Eigen::Vector3d & position, const Eigen::Vector3d & velocity,
-    const Eigen::Vector3d & acceleration, double yaw)
+    const Eigen::Vector3d & acceleration, double terminal_yaw)
   {
     drone_msgs::msg::TrajectorySetpoint setpoint;
     setpoint.header.stamp = now();
@@ -581,13 +610,19 @@ private:
     setpoint.acceleration.x = acceleration.x();
     setpoint.acceleration.y = acceleration.y();
     setpoint.acceleration.z = acceleration.z();
-    setpoint.yaw = yaw;
+    const Eigen::Vector3d goal_position = goals_.empty() ? position :
+      goals_[std::min(current_goal_index_, goals_.size() - 1U)].position;
+    setpoint.yaw = yaw_generator_->update(
+      position, velocity, goal_position, terminal_yaw, current_update_dt_);
     setpoint_publisher_->publish(setpoint);
   }
 
   void publish_hold(const Eigen::Vector3d & position)
   {
-    publish_setpoint(position, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), 0.0);
+    const double terminal_yaw = goals_.empty() ? trajectory_parameters_.fixed_yaw :
+      goals_[std::min(current_goal_index_, goals_.size() - 1U)].yaw;
+    publish_setpoint(
+      position, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), terminal_yaw);
   }
 
   void publish_status()
@@ -681,7 +716,8 @@ private:
     current_goal_pose.pose.position.x = goal.position.x();
     current_goal_pose.pose.position.y = goal.position.y();
     current_goal_pose.pose.position.z = goal.position.z();
-    current_goal_pose.pose.orientation.w = 1.0;
+    current_goal_pose.pose.orientation.z = std::sin(0.5 * goal.yaw);
+    current_goal_pose.pose.orientation.w = std::cos(0.5 * goal.yaw);
     current_goal_pose_publisher_->publish(current_goal_pose);
 
     last_visualized_goal_index_ = current_goal_index_;
@@ -799,10 +835,18 @@ private:
     const auto steady_now = std::chrono::steady_clock::now();
     const double dt = std::chrono::duration<double>(steady_now - last_update_time_).count();
     last_update_time_ = steady_now;
+    current_update_dt_ = dt;
     Eigen::Vector3d odometry_position;
     double speed = 0.0;
+    double actual_yaw = 0.0;
+    double angular_speed = 0.0;
     const bool valid_fresh_odometry =
-      odometry_is_fresh(steady_now) && valid_odometry(odometry_position, speed);
+      odometry_is_fresh(steady_now) &&
+      valid_odometry(odometry_position, speed, actual_yaw, angular_speed);
+    if (valid_fresh_odometry && !yaw_initialized_from_odometry_) {
+      yaw_generator_->initialize(actual_yaw);
+      yaw_initialized_from_odometry_ = true;
+    }
     visualization_actual_speed_ = valid_fresh_odometry ?
       std::optional<double>(speed) : std::nullopt;
     visualization_reference_speed_ = 0.0;
@@ -909,10 +953,12 @@ private:
           visualization_reference_speed_ = sample.velocity_world.norm();
           current_segment_ = sample.segment_index;
           publish_setpoint(
-            sample.position_world, sample.velocity_world, sample.acceleration_world, sample.yaw);
+            sample.position_world, sample.velocity_world, sample.acceleration_world,
+            goals_[current_goal_index_].yaw);
           if (sample.complete) {
             state_ = State::HoldingGoal;
             stable_duration_ = 0.0;
+            goal_completion_gate_.reset();
             hold_position_ = goals_[current_goal_index_].position;
             RCLCPP_INFO(
               get_logger(), "ordered goal %zu trajectory complete; waiting for stable hold",
@@ -921,28 +967,38 @@ private:
           break;
         }
       case State::HoldingGoal:
-        publish_hold(goals_[current_goal_index_].position);
-        if (valid_fresh_odometry &&
-          (odometry_position - goals_[current_goal_index_].position).norm() <
-          goal_position_tolerance_ && speed < goal_speed_tolerance_)
         {
-          stable_duration_ += dt;
-        } else {
-          stable_duration_ = 0.0;
-        }
-        if (stable_duration_ >= goal_hold_duration_) {
-          ++visited_goals_;
-          RCLCPP_INFO(get_logger(), "ordered goal %zu accepted", current_goal_index_);
-          if (current_goal_index_ + 1U < goals_.size()) {
-            ++current_goal_index_;
-            start_planning(odometry_position);
+          publish_hold(goals_[current_goal_index_].position);
+          GoalCompletionEvaluation completion;
+          double position_error = std::numeric_limits<double>::infinity();
+          if (valid_fresh_odometry) {
+            position_error = (odometry_position - goals_[current_goal_index_].position).norm();
+            const double target_yaw = goal_acceptance_target_yaw(
+              yaw_mode_, trajectory_parameters_.fixed_yaw, goals_[current_goal_index_].yaw);
+            completion = goal_completion_gate_.update(
+              {position_error, speed, actual_yaw, angular_speed}, target_yaw, dt);
           } else {
-            state_ = State::MissionComplete;
-            clear_planning_visualization_paths();
-            RCLCPP_INFO(get_logger(), "multi-goal static avoidance mission complete");
+            goal_completion_gate_.reset();
           }
+          if (completion.complete) {
+            ++visited_goals_;
+            RCLCPP_INFO(
+              get_logger(),
+              "ordered goal P%zu accepted: position_error=%.6f m speed=%.6f m/s "
+              "yaw_error=%.6f rad angular_speed=%.6f rad/s",
+              current_goal_index_ + 1U, position_error, speed, completion.yaw_error,
+              angular_speed);
+            if (current_goal_index_ + 1U < goals_.size()) {
+              ++current_goal_index_;
+              start_planning(odometry_position);
+            } else {
+              state_ = State::MissionComplete;
+              clear_planning_visualization_paths();
+              RCLCPP_INFO(get_logger(), "multi-goal static avoidance mission complete");
+            }
+          }
+          break;
         }
-        break;
       case State::MissionComplete:
         publish_hold(goals_.back().position);
         break;
@@ -952,7 +1008,7 @@ private:
         {
           publish_setpoint(
             command->position_world, command->velocity_world,
-            command->acceleration_world, 0.0);
+            command->acceleration_world, yaw_generator_->reference());
         } else if (flight_started_) {
           RCLCPP_FATAL_THROTTLE(
             get_logger(), *get_clock(), 1000,
@@ -981,6 +1037,8 @@ private:
   double takeoff_hold_duration_{1.0};
   double goal_position_tolerance_{0.20};
   double goal_speed_tolerance_{0.15};
+  double goal_yaw_tolerance_{0.10};
+  double goal_angular_speed_tolerance_{0.20};
   double goal_hold_duration_{1.0};
   double resolution_{0.25};
   double reference_path_sample_period_{0.05};
@@ -988,12 +1046,16 @@ private:
   double stable_duration_{0.0};
   double trajectory_elapsed_{0.0};
   double trajectory_total_duration_{0.0};
+  double current_update_dt_{0.02};
   std::size_t max_grid_nodes_{200000U};
   std::size_t max_goals_{8U};
   std::size_t current_goal_index_{0U};
   std::size_t current_segment_{0U};
   std::size_t visited_goals_{0U};
+  bool yaw_initialized_from_odometry_{false};
+  YawMode yaw_mode_{YawMode::Fixed};
   State state_{State::WaitingForOdometry};
+  GoalCompletionGate goal_completion_gate_;
   PlannedTrajectoryParameters trajectory_parameters_;
   std::vector<MissionGoal> goals_;
   Eigen::Vector3d initial_position_{Eigen::Vector3d::Zero()};
@@ -1003,6 +1065,7 @@ private:
   std::unique_ptr<CollisionChecker> takeoff_collision_checker_;
   std::unique_ptr<CollisionChecker> navigation_collision_checker_;
   std::optional<drone_mission::PiecewiseQuinticTrajectory> trajectory_;
+  std::unique_ptr<YawReferenceGenerator> yaw_generator_;
   std::optional<std::future<SegmentPlan>> planning_future_;
   std::optional<std::future<PreflightResult>> preflight_future_;
   std::chrono::steady_clock::time_point last_update_time_;

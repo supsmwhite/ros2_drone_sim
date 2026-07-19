@@ -26,9 +26,6 @@ std::vector<MissionGoal> parse_goals(const std::vector<double> & values)
     if (!goal.position.allFinite() || !std::isfinite(goal.yaw)) {
       throw std::invalid_argument("all multi-goal positions and yaw values must be finite");
     }
-    if (goal.yaw != 0.0) {
-      throw std::invalid_argument("the first multi-goal avoidance version requires yaw=0");
-    }
     goals.push_back(goal);
   }
   return goals;
@@ -46,7 +43,7 @@ visualization_msgs::msg::MarkerArray make_goal_markers(
   double nominal_speed)
 {
   visualization_msgs::msg::MarkerArray result;
-  result.markers.reserve(goals.size() * 2U + 1U);
+  result.markers.reserve(goals.size() * 3U + 1U);
   const std::size_t completed_count = state == MissionVisualizationState::Complete ?
     goals.size() : std::min(visited_goals, goals.size());
 
@@ -58,7 +55,7 @@ visualization_msgs::msg::MarkerArray make_goal_markers(
     body.header.frame_id = frame_id;
     body.header.stamp = stamp;
     body.ns = "multi_goal_points";
-    body.id = static_cast<int>(2U * index);
+    body.id = static_cast<int>(3U * index);
     body.type = visualization_msgs::msg::Marker::SPHERE;
     body.action = visualization_msgs::msg::Marker::ADD;
     body.pose.position.x = goals[index].position.x();
@@ -85,18 +82,32 @@ visualization_msgs::msg::MarkerArray make_goal_markers(
     }
     result.markers.push_back(body);
 
+    visualization_msgs::msg::Marker arrow = body;
+    arrow.ns = "multi_goal_directions";
+    arrow.id = static_cast<int>(3U * index + 1U);
+    arrow.type = visualization_msgs::msg::Marker::ARROW;
+    arrow.pose.orientation.z = std::sin(0.5 * goals[index].yaw);
+    arrow.pose.orientation.w = std::cos(0.5 * goals[index].yaw);
+    arrow.scale.x = 0.58;
+    arrow.scale.y = 0.10;
+    arrow.scale.z = 0.10;
+    result.markers.push_back(arrow);
+
     visualization_msgs::msg::Marker label;
     label.header = body.header;
     label.ns = "multi_goal_labels";
-    label.id = static_cast<int>(2U * index + 1U);
+    label.id = static_cast<int>(3U * index + 2U);
     label.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
     label.action = visualization_msgs::msg::Marker::ADD;
     label.pose = body.pose;
     label.pose.position.z += 0.35;
     label.scale.z = 0.30;
     label.color = body.color;
-    label.text = "P" + std::to_string(index + 1U) + "  " +
-      (completed ? "DONE" : (current ? "CURRENT" : "WAITING"));
+    std::ostringstream label_text;
+    label_text << "P" << index + 1U << "  " <<
+      (completed ? "DONE" : (current ? "CURRENT" : "WAITING")) << " yaw=" <<
+      std::fixed << std::setprecision(0) << goals[index].yaw * 180.0 / M_PI << " deg";
+    label.text = label_text.str();
     result.markers.push_back(label);
   }
 

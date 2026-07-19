@@ -19,6 +19,18 @@ bool finite_positive(double value)
   return std::isfinite(value) && value > 0.0;
 }
 
+void validate_waypoints(const std::vector<Waypoint> & waypoints)
+{
+  if (waypoints.empty()) {
+    throw std::invalid_argument("waypoints must contain at least one target");
+  }
+  for (const auto & waypoint : waypoints) {
+    if (!finite_vector(waypoint.position_world) || !std::isfinite(waypoint.yaw)) {
+      throw std::invalid_argument("all waypoint values must be finite");
+    }
+  }
+}
+
 }  // namespace
 
 WaypointManager::WaypointManager(
@@ -35,14 +47,7 @@ WaypointManager::WaypointManager(
   angular_speed_tolerance_(angular_speed_tolerance),
   hold_duration_(hold_duration)
 {
-  if (waypoints_.empty()) {
-    throw std::invalid_argument("waypoints must contain at least one target");
-  }
-  for (const auto & waypoint : waypoints_) {
-    if (!finite_vector(waypoint.position_world) || !std::isfinite(waypoint.yaw)) {
-      throw std::invalid_argument("all waypoint values must be finite");
-    }
-  }
+  validate_waypoints(waypoints_);
   if (!finite_positive(position_tolerance_) ||
     !finite_positive(linear_speed_tolerance_) ||
     !finite_positive(yaw_tolerance_) ||
@@ -51,6 +56,15 @@ WaypointManager::WaypointManager(
   {
     throw std::invalid_argument("waypoint tolerances and hold duration must be finite and positive");
   }
+}
+
+void WaypointManager::replace_waypoints(std::vector<Waypoint> waypoints)
+{
+  validate_waypoints(waypoints);
+  waypoints_ = std::move(waypoints);
+  current_index_ = 0U;
+  stable_duration_ = 0.0;
+  mission_complete_ = false;
 }
 
 WaypointManagerOutput WaypointManager::update(const VehicleState & state, double dt)
@@ -102,6 +116,11 @@ void WaypointManager::reset_acceptance_progress()
 const Waypoint & WaypointManager::current_waypoint() const
 {
   return waypoints_.at(current_index_);
+}
+
+const std::vector<Waypoint> & WaypointManager::waypoints() const
+{
+  return waypoints_;
 }
 
 std::size_t WaypointManager::current_index() const

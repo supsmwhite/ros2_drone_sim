@@ -307,6 +307,59 @@ TEST(PlannedTrajectoryBuilder, InvalidParametersAreRejected)
   parameters = PlannedTrajectoryParameters{};
   parameters.max_insertions_per_refinement = 0U;
   EXPECT_THROW(PlannedTrajectoryBuilder(default_checker(), parameters), std::invalid_argument);
+  parameters = PlannedTrajectoryParameters{};
+  parameters.shortcut_preferred_clearance = -0.01;
+  EXPECT_THROW(PlannedTrajectoryBuilder(default_checker(), parameters), std::invalid_argument);
+  parameters.shortcut_preferred_clearance =
+    std::numeric_limits<double>::quiet_NaN();
+  EXPECT_THROW(PlannedTrajectoryBuilder(default_checker(), parameters), std::invalid_argument);
+}
+
+TEST(PlannedTrajectoryBuilder, ClearancePreferenceIsPassedToSimplifier)
+{
+  const CollisionChecker checker(
+    StaticEnvironment(
+      box(-5.0, 5.0, -5.0, 5.0, -2.0, 2.0),
+      {box(-0.5, 0.5, -0.5, 0.5, -1.0, 1.0)}),
+    0.0);
+  const std::vector<Eigen::Vector3d> raw_path{
+    Eigen::Vector3d(-2.0, 0.70, 0.0),
+    Eigen::Vector3d(-1.0, 1.20, 0.0),
+    Eigen::Vector3d(2.0, 0.70, 0.0)};
+  PlannedTrajectoryParameters parameters;
+  parameters.shortcut_preferred_clearance = 0.30;
+  parameters.velocity_scale_candidates = {0.0};
+  parameters.max_reference_speed = 5.0;
+  parameters.max_reference_acceleration = 5.0;
+  const auto result = PlannedTrajectoryBuilder(checker, parameters).build(raw_path);
+  expect_valid_result(checker, parameters, raw_path, result);
+  EXPECT_TRUE(result.clearance_preference_enabled);
+  EXPECT_EQ(result.simplified_path_raw_indices, (std::vector<std::size_t>{0U, 1U, 2U}));
+  EXPECT_EQ(result.preferred_shortcut_count, 2U);
+  EXPECT_EQ(result.fallback_shortcut_count, 0U);
+}
+
+TEST(PlannedTrajectoryBuilder, ClearanceFallbackStillBuildsSafeTrajectory)
+{
+  const CollisionChecker checker(
+    StaticEnvironment(
+      box(-5.0, 5.0, -5.0, 5.0, -2.0, 2.0),
+      {box(-0.5, 0.5, -0.5, 0.5, -1.0, 1.0)}),
+    0.0);
+  const std::vector<Eigen::Vector3d> raw_path{
+    Eigen::Vector3d(-2.0, 0.70, 0.0),
+    Eigen::Vector3d(0.0, 0.70, 0.0),
+    Eigen::Vector3d(2.0, 0.70, 0.0)};
+  PlannedTrajectoryParameters parameters;
+  parameters.shortcut_preferred_clearance = 0.30;
+  parameters.velocity_scale_candidates = {0.0};
+  parameters.max_reference_speed = 5.0;
+  parameters.max_reference_acceleration = 5.0;
+  const auto result = PlannedTrajectoryBuilder(checker, parameters).build(raw_path);
+  expect_valid_result(checker, parameters, raw_path, result);
+  EXPECT_EQ(result.simplified_path_raw_indices, (std::vector<std::size_t>{0U, 2U}));
+  EXPECT_EQ(result.preferred_shortcut_count, 0U);
+  EXPECT_EQ(result.fallback_shortcut_count, 1U);
 }
 
 }  // namespace

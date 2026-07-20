@@ -41,6 +41,14 @@ std::vector<Eigen::Vector3d> detour_path()
     Eigen::Vector3d(2.0, 0.0, 0.0)};
 }
 
+void expect_all_segments_collision_free(
+  const CollisionChecker & checker, const std::vector<Eigen::Vector3d> & points)
+{
+  for (std::size_t index = 1U; index < points.size(); ++index) {
+    EXPECT_FALSE(checker.segment_in_collision(points[index - 1U], points[index]));
+  }
+}
+
 TEST(PathSimplifier, RejectsTooFewPoints)
 {
   const PathSimplifier simplifier(empty_checker());
@@ -119,6 +127,78 @@ TEST(PathSimplifier, RepeatedResultIsExactlyDeterministic)
   for (std::size_t index = 0U; index < first.size(); ++index) {
     EXPECT_TRUE(first[index].isApprox(second[index], 0.0));
   }
+}
+
+TEST(PathSimplifier, ZeroPreferencePreservesLegacyIndicesAndDiagnostics)
+{
+  const auto input = detour_path();
+  const auto legacy = PathSimplifier(obstacle_checker()).simplify_with_indices(input);
+  const auto explicit_zero =
+    PathSimplifier(obstacle_checker(), 0.0).simplify_with_indices(input);
+  EXPECT_EQ(explicit_zero.raw_indices, legacy.raw_indices);
+  EXPECT_FALSE(explicit_zero.clearance_preference_enabled);
+  EXPECT_EQ(explicit_zero.preferred_shortcut_count, 0U);
+  EXPECT_EQ(explicit_zero.fallback_shortcut_count, 0U);
+  EXPECT_EQ(
+    explicit_zero.collision_only_shortcut_count,
+    explicit_zero.raw_indices.size() - 1U);
+}
+
+TEST(PathSimplifier, PreferenceChoosesCloserSaferWaypoint)
+{
+  const auto checker = obstacle_checker();
+  const std::vector<Eigen::Vector3d> input{
+    Eigen::Vector3d(-2.0, 0.70, 0.0),
+    Eigen::Vector3d(-1.0, 1.20, 0.0),
+    Eigen::Vector3d(2.0, 0.70, 0.0)};
+  const auto result = PathSimplifier(checker, 0.30).simplify_with_indices(input);
+  EXPECT_EQ(result.raw_indices, (std::vector<std::size_t>{0U, 1U, 2U}));
+  EXPECT_EQ(result.preferred_shortcut_count, 2U);
+  EXPECT_EQ(result.fallback_shortcut_count, 0U);
+  expect_all_segments_collision_free(checker, result.points);
+}
+
+TEST(PathSimplifier, PreferenceStillChoosesFarthestQualifyingWaypoint)
+{
+  const auto checker = obstacle_checker();
+  const std::vector<Eigen::Vector3d> input{
+    Eigen::Vector3d(-2.0, 0.70, 0.0),
+    Eigen::Vector3d(-1.0, 1.20, 0.0),
+    Eigen::Vector3d(1.0, 1.20, 0.0),
+    Eigen::Vector3d(2.0, 0.70, 0.0)};
+  const auto result = PathSimplifier(checker, 0.30).simplify_with_indices(input);
+  EXPECT_EQ(result.raw_indices, (std::vector<std::size_t>{0U, 2U, 3U}));
+  EXPECT_EQ(result.preferred_shortcut_count, 2U);
+  EXPECT_EQ(result.fallback_shortcut_count, 0U);
+}
+
+TEST(PathSimplifier, MissingPreferredCandidateFallsBackWithoutFailure)
+{
+  const auto checker = obstacle_checker();
+  const std::vector<Eigen::Vector3d> input{
+    Eigen::Vector3d(-2.0, 0.70, 0.0),
+    Eigen::Vector3d(0.0, 0.70, 0.0),
+    Eigen::Vector3d(2.0, 0.70, 0.0)};
+  const auto legacy = PathSimplifier(checker).simplify_with_indices(input);
+  const auto result = PathSimplifier(checker, 0.30).simplify_with_indices(input);
+  EXPECT_EQ(result.raw_indices, legacy.raw_indices);
+  EXPECT_EQ(result.raw_indices, (std::vector<std::size_t>{0U, 2U}));
+  EXPECT_EQ(result.preferred_shortcut_count, 0U);
+  EXPECT_EQ(result.fallback_shortcut_count, 1U);
+  EXPECT_TRUE(result.points.front().isApprox(input.front(), 0.0));
+  EXPECT_TRUE(result.points.back().isApprox(input.back(), 0.0));
+  expect_all_segments_collision_free(checker, result.points);
+}
+
+TEST(PathSimplifier, InvalidPreferredClearanceIsRejected)
+{
+  EXPECT_THROW(PathSimplifier(empty_checker(), -0.01), std::invalid_argument);
+  EXPECT_THROW(
+    PathSimplifier(empty_checker(), std::numeric_limits<double>::quiet_NaN()),
+    std::invalid_argument);
+  EXPECT_THROW(
+    PathSimplifier(empty_checker(), std::numeric_limits<double>::infinity()),
+    std::invalid_argument);
 }
 
 }  // namespace

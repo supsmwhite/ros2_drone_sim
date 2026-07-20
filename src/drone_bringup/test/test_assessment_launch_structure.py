@@ -97,6 +97,7 @@ def test_navigation_public_defaults_and_forwarded_arguments():
         'nominal_speed': '0.35',
         'max_reference_speed': '0.70',
         'max_reference_acceleration': '0.35',
+        'shortcut_preferred_clearance': '0.0',
     }
     includes = [
         action for action in description.entities
@@ -108,6 +109,40 @@ def test_navigation_public_defaults_and_forwarded_arguments():
     assert set(arguments) == set(defaults)
     for argument in arguments.values():
         assert isinstance(argument, LaunchConfiguration)
+
+
+def test_shortcut_clearance_is_forwarded_to_both_planning_consumers():
+    _, description = _load_launch('interactive_goal_navigation_sim.launch.py')
+    defaults = _declared_defaults(description)
+    assert defaults['shortcut_preferred_clearance'] == '0.0'
+    context = LaunchContext()
+    consumers = {}
+    for action in description.entities:
+        if not isinstance(action, Node):
+            continue
+        name_value = action._Node__node_name
+        name = (name_value if isinstance(name_value, str)
+                else perform_substitutions(context, name_value))
+        if name not in {
+                'interactive_goal_editor_node',
+                'multi_goal_static_avoidance_node'}:
+            continue
+        overrides = action._Node__parameters[-1]
+        normalized = {
+            perform_substitutions(context, key): value
+            for key, value in overrides.items()
+        }
+        forwarded = normalized['shortcut_preferred_clearance']
+        assert len(forwarded) == 1
+        assert isinstance(forwarded[0], LaunchConfiguration)
+        variable_name = perform_substitutions(
+            context, forwarded[0].variable_name)
+        assert variable_name == 'shortcut_preferred_clearance'
+        consumers[name] = variable_name
+    assert consumers == {
+        'interactive_goal_editor_node': 'shortcut_preferred_clearance',
+        'multi_goal_static_avoidance_node': 'shortcut_preferred_clearance',
+    }
 
 
 def test_internal_navigation_uses_one_environment_yaml_for_all_consumers():

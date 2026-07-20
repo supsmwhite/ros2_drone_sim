@@ -21,6 +21,7 @@ def generate_launch_description():
         DeclareLaunchArgument('nominal_speed', default_value='0.35'),
         DeclareLaunchArgument('max_reference_speed', default_value='0.70'),
         DeclareLaunchArgument('max_reference_acceleration', default_value='0.35'),
+        DeclareLaunchArgument('shortcut_preferred_clearance', default_value='0.0'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(navigation),
             launch_arguments={
@@ -30,6 +31,8 @@ def generate_launch_description():
                 'max_reference_speed': LaunchConfiguration('max_reference_speed'),
                 'max_reference_acceleration': LaunchConfiguration(
                     'max_reference_acceleration'),
+                'shortcut_preferred_clearance': LaunchConfiguration(
+                    'shortcut_preferred_clearance'),
             }.items(),
         ),
     ])

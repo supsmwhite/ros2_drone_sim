@@ -140,6 +140,8 @@ public:
       declare_parameter<double>("max_reference_speed", 0.70);
     trajectory_parameters_.max_reference_acceleration =
       declare_parameter<double>("max_reference_acceleration", 0.35);
+    trajectory_parameters_.shortcut_preferred_clearance =
+      declare_parameter<double>("shortcut_preferred_clearance", 0.0);
     trajectory_parameters_.velocity_scale_candidates =
       declare_parameter<std::vector<double>>(
       "velocity_scale_candidates", {1.0, 0.75, 0.5, 0.25, 0.0});

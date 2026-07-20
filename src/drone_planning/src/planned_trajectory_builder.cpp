@@ -24,6 +24,8 @@ void validate_parameters(const PlannedTrajectoryParameters & parameters)
     !finite_positive(parameters.validation_sample_period) ||
     !finite_positive(parameters.max_reference_speed) ||
     !finite_positive(parameters.max_reference_acceleration) ||
+    !std::isfinite(parameters.shortcut_preferred_clearance) ||
+    parameters.shortcut_preferred_clearance < 0.0 ||
     !std::isfinite(parameters.fixed_yaw))
   {
     throw std::invalid_argument("planned trajectory scalar parameters are invalid");
@@ -237,8 +239,14 @@ PlannedTrajectoryResult PlannedTrajectoryBuilder::build(
   const std::vector<Eigen::Vector3d> & raw_path_world) const
 {
   PlannedTrajectoryResult result;
-  const auto initial = PathSimplifier(collision_checker_).simplify_with_indices(raw_path_world);
+  const auto initial = PathSimplifier(
+    collision_checker_, parameters_.shortcut_preferred_clearance).simplify_with_indices(
+    raw_path_world);
   result.initial_simplified_point_count = initial.points.size();
+  result.preferred_shortcut_count = initial.preferred_shortcut_count;
+  result.fallback_shortcut_count = initial.fallback_shortcut_count;
+  result.collision_only_shortcut_count = initial.collision_only_shortcut_count;
+  result.clearance_preference_enabled = initial.clearance_preference_enabled;
   std::vector<std::size_t> path_indices = initial.raw_indices;
 
   for (std::size_t refinement = 0U;

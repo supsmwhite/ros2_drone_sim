@@ -202,6 +202,8 @@ public:
       declare_parameter<double>("max_reference_speed", 0.70);
     trajectory_parameters_.max_reference_acceleration =
       declare_parameter<double>("max_reference_acceleration", 0.35);
+    trajectory_parameters_.shortcut_preferred_clearance =
+      declare_parameter<double>("shortcut_preferred_clearance", 0.0);
     trajectory_parameters_.velocity_scale_candidates =
       declare_parameter<std::vector<double>>(
       "velocity_scale_candidates", {1.0, 0.75, 0.5, 0.25, 0.0});
@@ -816,7 +818,8 @@ private:
       "initial_simplified_points=%zu refinements=%zu duration=%.3f s "
       "velocity_scale=%.2f duration_scale=%.2f max_speed=%.6f m/s "
       "max_acceleration=%.6f m/s^2 raw_length=%.6f m simplified_length=%.6f m "
-      "expanded_nodes=%zu",
+      "expanded_nodes=%zu preferred_shortcuts=%zu fallback_shortcuts=%zu "
+      "collision_only_shortcuts=%zu shortcut_preferred_clearance=%.3f",
       current_goal_index_, plan.astar_result.path_world.size(),
       plan.trajectory_result.simplified_path_world.size(),
       plan.trajectory_result.initial_simplified_point_count,
@@ -827,7 +830,11 @@ private:
       plan.trajectory_result.max_reference_acceleration,
       path_length(plan.astar_result.path_world),
       path_length(plan.trajectory_result.simplified_path_world),
-      plan.astar_result.expanded_nodes);
+      plan.astar_result.expanded_nodes,
+      plan.trajectory_result.preferred_shortcut_count,
+      plan.trajectory_result.fallback_shortcut_count,
+      plan.trajectory_result.collision_only_shortcut_count,
+      trajectory_parameters_.shortcut_preferred_clearance);
   }
 
   void update()

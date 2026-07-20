@@ -19,6 +19,7 @@ struct PlannedTrajectoryParameters
   double validation_sample_period{0.02};
   double max_reference_speed{0.70};
   double max_reference_acceleration{0.35};
+  double shortcut_preferred_clearance{0.0};
   std::vector<double> velocity_scale_candidates{1.0, 0.75, 0.5, 0.25, 0.0};
   std::vector<double> duration_scale_candidates{
     1.0, 1.05, 1.10, 1.15, 1.20, 1.25, 1.5, 2.0, 3.0, 4.0};
@@ -45,6 +46,10 @@ struct PlannedTrajectoryResult
   std::vector<std::size_t> simplified_path_raw_indices;
   std::vector<double> segment_durations;
   std::size_t initial_simplified_point_count{0U};
+  std::size_t preferred_shortcut_count{0U};
+  std::size_t fallback_shortcut_count{0U};
+  std::size_t collision_only_shortcut_count{0U};
+  bool clearance_preference_enabled{false};
   std::size_t refinement_iterations{0U};
   double selected_velocity_scale{0.0};
   double selected_duration_scale{0.0};

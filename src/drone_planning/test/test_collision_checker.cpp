@@ -1,5 +1,6 @@
 #include <limits>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -179,6 +180,78 @@ TEST(CollisionChecker, NonFiniteSegmentIsInCollision)
   EXPECT_TRUE(checker.segment_in_collision(
     Eigen::Vector3d::Zero(),
     Eigen::Vector3d(std::numeric_limits<double>::quiet_NaN(), 1.0, 1.0)));
+}
+
+TEST(CollisionChecker, ZeroAdditionalClearanceMatchesFormalObstacleInflation)
+{
+  const auto checker = make_checker();
+  const std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> segments{
+    {Eigen::Vector3d(-1.0, 0.0, 0.0), Eigen::Vector3d(1.0, 0.0, 0.0)},
+    {Eigen::Vector3d(-1.0, 0.75, 0.0), Eigen::Vector3d(1.0, 0.75, 0.0)},
+    {Eigen::Vector3d(-1.0, 1.0, 0.0), Eigen::Vector3d(1.0, 1.0, 0.0)}};
+  for (const auto & segment : segments) {
+    EXPECT_EQ(
+      checker.segment_respects_additional_clearance(
+        segment.first, segment.second, 0.0),
+      !checker.segment_in_collision(segment.first, segment.second));
+  }
+}
+
+TEST(CollisionChecker, AdditionalClearanceRejectsOtherwiseSafeSegment)
+{
+  const auto checker = make_checker();
+  const Eigen::Vector3d start(-1.0, 0.90, 0.0);
+  const Eigen::Vector3d end(1.0, 0.90, 0.0);
+  EXPECT_FALSE(checker.segment_in_collision(start, end));
+  EXPECT_FALSE(checker.segment_respects_additional_clearance(start, end, 0.20));
+}
+
+TEST(CollisionChecker, SegmentFarFromPreferredInflationPasses)
+{
+  EXPECT_TRUE(make_checker().segment_respects_additional_clearance(
+    Eigen::Vector3d(-1.0, 1.10, 0.0), Eigen::Vector3d(1.0, 1.10, 0.0), 0.20));
+}
+
+TEST(CollisionChecker, FormalCollisionNeverRespectsAdditionalClearance)
+{
+  EXPECT_FALSE(make_checker().segment_respects_additional_clearance(
+    Eigen::Vector3d(-1.0, 0.0, 0.0), Eigen::Vector3d(1.0, 0.0, 0.0), 0.20));
+}
+
+TEST(CollisionChecker, InvalidAdditionalClearanceIsRejected)
+{
+  const auto checker = make_checker();
+  const Eigen::Vector3d start(-1.0, 1.0, 0.0);
+  const Eigen::Vector3d end(1.0, 1.0, 0.0);
+  EXPECT_THROW(
+    checker.segment_respects_additional_clearance(start, end, -0.01),
+    std::invalid_argument);
+  EXPECT_THROW(
+    checker.segment_respects_additional_clearance(
+      start, end, std::numeric_limits<double>::quiet_NaN()),
+    std::invalid_argument);
+  EXPECT_THROW(
+    checker.segment_respects_additional_clearance(
+      start, end, std::numeric_limits<double>::infinity()),
+    std::invalid_argument);
+}
+
+TEST(CollisionChecker, EndpointInsidePreferredInflationIsDetected)
+{
+  const auto checker = make_checker();
+  const Eigen::Vector3d start(0.90, 0.0, 0.0);
+  const Eigen::Vector3d end(1.20, 0.0, 0.0);
+  EXPECT_FALSE(checker.segment_in_collision(start, end));
+  EXPECT_FALSE(checker.segment_respects_additional_clearance(start, end, 0.20));
+}
+
+TEST(CollisionChecker, DiagonalTangentToPreferredBoxIsDetectedExactly)
+{
+  const auto checker = make_checker();
+  const Eigen::Vector3d start(-1.20, 0.70, 0.0);
+  const Eigen::Vector3d end(-0.70, 1.20, 0.0);
+  EXPECT_FALSE(checker.segment_in_collision(start, end));
+  EXPECT_FALSE(checker.segment_respects_additional_clearance(start, end, 0.20));
 }
 
 TEST(CollisionChecker, PlanningDemoHasBlockedDirectPathAndKnownSafeSnakeRoute)

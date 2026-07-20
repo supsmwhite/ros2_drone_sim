@@ -18,6 +18,10 @@ public:
   bool segment_in_collision(
     const Eigen::Vector3d & start_world,
     const Eigen::Vector3d & end_world) const;
+  bool segment_respects_additional_clearance(
+    const Eigen::Vector3d & start_world,
+    const Eigen::Vector3d & end_world,
+    double additional_clearance) const;
 
   const StaticEnvironment & environment() const;
   double safety_radius() const;

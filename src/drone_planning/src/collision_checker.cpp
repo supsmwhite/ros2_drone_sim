@@ -72,6 +72,38 @@ bool CollisionChecker::segment_in_collision(
     });
 }
 
+bool CollisionChecker::segment_respects_additional_clearance(
+  const Eigen::Vector3d & start_world, const Eigen::Vector3d & end_world,
+  double additional_clearance) const
+{
+  if (!std::isfinite(additional_clearance) || additional_clearance < 0.0) {
+    throw std::invalid_argument("additional clearance must be finite and non-negative");
+  }
+  if (segment_in_collision(start_world, end_world)) {
+    return false;
+  }
+
+  const double preferred_radius = safety_radius_ + additional_clearance;
+  if (!std::isfinite(preferred_radius)) {
+    throw std::invalid_argument("combined preferred clearance must remain finite");
+  }
+  const Eigen::Vector3d margin = Eigen::Vector3d::Constant(preferred_radius);
+  for (const auto & obstacle : environment_.obstacles()) {
+    const AxisAlignedBox preferred_obstacle{
+      obstacle.min_corner - margin,
+      obstacle.max_corner + margin};
+    if (!preferred_obstacle.min_corner.allFinite() ||
+      !preferred_obstacle.max_corner.allFinite())
+    {
+      throw std::invalid_argument("preferred obstacle bounds must remain finite");
+    }
+    if (segment_intersects_closed_box(start_world, end_world, preferred_obstacle)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 const StaticEnvironment & CollisionChecker::environment() const
 {
   return environment_;

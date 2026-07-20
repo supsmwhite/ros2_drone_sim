@@ -97,37 +97,29 @@ ros2 launch drone_bringup assessment_disturbance_sim.launch.py \
 | 位置误差、RPM、轨迹和障碍距离 | RViz、控制诊断、`results/` 正式图表/指标 | 无非有限值；误差、RPM、轨迹、最小净空可追溯 |
 | 独立抗扰加分 | 抗扰入口，两个 `profile` | 扰动阶段正确、补偿方向正确、撤力后稳定恢复 |
 
-## 已验证结果
+## 最终实验结果
 
-正式三目标静态避障任务依序访问 `(13.2,5.5,1.5)`、`(7.0,5.0,4.0)`、
-`(0.8,0.7,2.0)`：
+`results/` 已重建为最终报告专用目录。开发阶段的参数扫描、旧场景、yaw 验证、扰动
+对照和旧回归结果不再位于当前分支，但仍可从 `main`、历史提交和
+`assessment-feature-complete-v1` 标签恢复。目录只接受一次最终批准运行；`smoke`
+运行仅证明工具链可用，不作为最终报告数值。
 
-| 指标 | 结果 |
-|---|---:|
-| Launch 到任务完成 | `139.203712 s` |
-| 最大跟踪误差 | `0.028843 m` |
-| 对基础膨胀障碍物最小净空 | `0.094310 m` |
-| 最终位置误差 | `0.001536 m` |
-| 最终速度 | `0.004355 m/s` |
-| 碰撞 / 控制器饱和 | `无 / 0` |
+统一原始数据记录工具：
 
-交互 `path_tangent` 三目标 `90°、180°、-90°` 场景在提交
-`06013d454a1287427b61ce9c52374ff1a03fc3fe` 上依序完成。三个目标被接受时的 yaw
-误差约为 `0.005192 rad`、`0.004746 rad`、`0.004973 rad`；完成门控同时检查位置、
-线速度、最短角 yaw 误差和角速度，并保持完整规定时间。对应完整回归为
-`342 tests, 0 errors, 0 failures, 0 skipped`。数据源：
-`results/interactive_goal_yaw/path_tangent_e2e.json` 与 `full_regression.json`。
+```bash
+python3 tools/assessment_recorder.py --experiment hover --output results/01_hover/smoke
+```
 
-持续 `0.30 N` 外力下，水平积分关闭的 PD 对照末 3 秒平均误差为 `0.749340 m`，
-当前水平 `PD+I+FF` 基线为 `0.081989 m`。三次独立撤力实验恢复时间为
-`4.600580–4.601050 s`，均无控制器饱和。正式图表和原始数据位于
-`results/horizontal_integral_upgrade/selected/`。
+统一离线指标与图表工具：
 
-三个正式入口已有真实自动闭环验证。唯一正式地图上的交互导航代表性三目标任务
-完成时间为 `54.663 s`，最大跟踪误差 `0.019330 m`，最小障碍净空
-`0.239986 m`，最终误差 `0.000898 m`，无碰撞、非有限值或控制器饱和。自动结果
-证明统一导航链可安全执行任务，但不替代对目标选择、Marker、明显绕行和可用通道的
-RViz 人工视觉验收。
+```bash
+python3 tools/analyze_assessment_run.py results/01_hover/smoke \
+  --parameters results/parameters
+```
+
+数据结构、固定指标公式、障碍距离定义、参数快照和历史恢复方式详见
+`results/README.md`。正式交互导航目标和路线必须由项目负责人最终确认，README 不预写
+尚未正式运行的结果。
 
 ## 系统边界
 

@@ -1,0 +1,37 @@
+category,parameter,value,unit,source_file,description
+dynamics,mass,1.0,kg,dynamics.yaml,Rigid-body mass
+dynamics,inertia_xx,0.02,kg*m^2,dynamics.yaml,Roll-axis inertia
+dynamics,inertia_yy,0.02,kg*m^2,dynamics.yaml,Pitch-axis inertia
+dynamics,inertia_zz,0.04,kg*m^2,dynamics.yaml,Yaw-axis inertia
+dynamics,simulation_frequency,200.0,Hz,dynamics.yaml,Dynamics integration and odometry frequency
+dynamics,motor_time_constant,0.05,s,dynamics.yaml,First-order motor response time constant
+dynamics,min_rpm,0.0,rpm,dynamics.yaml,Minimum motor command
+dynamics,max_rpm,20000.0,rpm,dynamics.yaml,Maximum motor command
+controller,control_frequency,100.0,Hz,controller.yaml,Position controller update frequency
+controller,horizontal_position_kp_x,0.4,1/s^2,controller.yaml,X position proportional gain
+controller,horizontal_position_kp_y,0.4,1/s^2,controller.yaml,Y position proportional gain
+controller,horizontal_velocity_kd_x,1.2,1/s,controller.yaml,X velocity derivative gain
+controller,horizontal_velocity_kd_y,1.2,1/s,controller.yaml,Y velocity derivative gain
+controller,horizontal_position_ki_x,0.15,1/s^3,controller.yaml,X position integral gain
+controller,horizontal_position_ki_y,0.15,1/s^3,controller.yaml,Y position integral gain
+controller,altitude_kp,3.0,1/s^2,controller.yaml,Altitude proportional gain
+controller,vertical_velocity_kd,3.5,1/s,controller.yaml,Vertical velocity derivative gain
+controller,attitude_kp_roll,4.0,N*m/rad,controller.yaml,Roll attitude proportional gain
+controller,attitude_kp_pitch,4.0,N*m/rad,controller.yaml,Pitch attitude proportional gain
+controller,attitude_kp_yaw,1.0,N*m/rad,controller.yaml,Yaw attitude proportional gain
+controller,angular_rate_kd_roll,0.35,N*m*s/rad,controller.yaml,Roll rate derivative gain
+controller,angular_rate_kd_pitch,0.35,N*m*s/rad,controller.yaml,Pitch rate derivative gain
+controller,angular_rate_kd_yaw,0.40,N*m*s/rad,controller.yaml,Yaw rate derivative gain
+controller,max_tilt_angle,0.15,rad,controller.yaml,Maximum requested tilt angle
+environment,safety_radius,0.25,m,environment.yaml,Vehicle collision safety radius
+planning,planning_margin,0.10,m,astar.yaml,Additional planning inflation margin
+planning,resolution,0.25,m,src/drone_planning/src/multi_goal_static_avoidance_node.cpp,A-star grid resolution default used by the formal navigation node
+trajectory,nominal_speed,0.35,m/s,planned_trajectory.yaml,Nominal reference speed
+trajectory,max_reference_speed,0.70,m/s,planned_trajectory.yaml,Reference speed limit
+trajectory,max_reference_acceleration,0.35,m/s^2,planned_trajectory.yaml,Reference acceleration limit
+trajectory,max_yaw_rate,0.80,rad/s,planned_trajectory.yaml,Yaw reference rate limit
+mission,position_tolerance,0.20,m,src/drone_bringup/config/mission.yaml,Basic single and multi-goal completion position threshold
+mission,linear_speed_tolerance,0.15,m/s,src/drone_bringup/config/mission.yaml,Basic completion speed threshold
+mission,yaw_tolerance,0.10,rad,src/drone_bringup/config/mission.yaml,Basic completion yaw threshold
+mission,angular_speed_tolerance,0.20,rad/s,src/drone_bringup/config/mission.yaml,Basic completion angular-speed threshold
+mission,hold_duration,1.0,s,src/drone_bringup/config/mission.yaml,Basic completion hold duration

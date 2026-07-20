@@ -150,14 +150,16 @@ bash scripts/test_full.sh
 三个正式入口、基础入口的 single/multi 两种任务以及预检失败边界。完整档构建并测试
 整个工作区。三档通过标准均为 `errors=0`、`failures=0`。
 
-## 已验证结果与人工验收边界
+## 最终实验结果与人工验收边界
 
-历史量化结果保存在 `results/`，本轮不删除也不改写。yaw 完成门控修复后的证据为
-`results/interactive_goal_yaw/full_regression.json` 和
-`results/interactive_goal_yaw/path_tangent_e2e.json`：测试提交
-`06013d454a1287427b61ce9c52374ff1a03fc3fe`，完整回归
-`342 tests, 0 errors, 0 failures, 0 skipped`，三个目标被接受时 yaw 误差约为
-`0.005192 rad`、`0.004746 rad`、`0.004973 rad`。
+开发阶段的旧量化结果已从当前收束分支的 `results/` 移除；它们仍由 `main`、历史提交
+和 `assessment-feature-complete-v1` 标签完整保留。新 `results/` 只服务最终报告实验，
+临时调参与独立开发评测不得写入。标记为 `smoke` 的记录只验证统一记录/分析流程，
+不作为最终报告数据。
+
+后续批准的实验按 `01_hover`、`02_single_goal`、`03_multi_goal`、`04_navigation`、
+`05_disturbance`、`06_failure_case` 顺序生成。正式交互导航目标点与路线必须由用户最终
+选择，工具和文档不得代为决定或预填结果。
 
 自动回归证明执行链和安全条件，但不能替代以下人工检查：RViz 目标位置/yaw 编辑、
 原始与膨胀障碍 Marker、轨迹 Marker、明显绕行或通道视觉效果，以及抗扰箭头和撤力

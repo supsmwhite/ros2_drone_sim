@@ -187,6 +187,12 @@ disturbance 和 failure_case 的工具验证写入 `/tmp/ros2_drone_assessment_s
 原始与膨胀障碍 Marker、轨迹 Marker、明显绕行或通道视觉效果，以及抗扰箭头和撤力
 恢复过程。
 
+项目负责人已完成人工 RViz 验收：hover、single goal、multi goal、interactive
+navigation、full-map avoidance、failure rejection、short gust 和 persistent
+disturbance/release 均通过；单目标 Marker 已确认能够从 `GOAL CURRENT` 切换为
+`GOAL DONE`。导航速度与路径净空属于后续 `experiment/navigation-performance` 分支的
+性能探索，不是当前稳定基线的阻塞问题。
+
 本轮分级回归记录：
 
 | 档位 | CTest / 内部用例 | 结果 | 总耗时 |

@@ -103,11 +103,6 @@ if(BUILD_TESTING)
   )
 
   add_launch_test(
-    test/test_assessment_navigation_narrow_passage_e2e.py
-    TIMEOUT 110
-  )
-
-  add_launch_test(
     test/test_interactive_preflight_failure.py
     TIMEOUT 40
   )

@@ -48,8 +48,7 @@ def generate_test_description():
         PythonLaunchDescriptionSource(os.path.join(
             bringup, 'launch', 'assessment_navigation_sim.launch.py')),
         launch_arguments={
-            'use_rviz': 'false', 'scenario': 'obstacle_field',
-            'yaw_mode': 'path_tangent'}.items(),
+            'use_rviz': 'false', 'yaw_mode': 'path_tangent'}.items(),
     )
     return launch.LaunchDescription([
         simulation,

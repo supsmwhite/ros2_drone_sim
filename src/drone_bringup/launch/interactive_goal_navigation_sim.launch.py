@@ -18,7 +18,6 @@ def generate_launch_description():
     executor = os.path.join(share, 'config', 'interactive_goal_executor.yaml')
     return LaunchDescription([
         DeclareLaunchArgument('use_rviz', default_value='true'),
-        DeclareLaunchArgument('environment_config', default_value=environment),
         DeclareLaunchArgument('yaw_mode', default_value='fixed'),
         DeclareLaunchArgument('fixed_yaw', default_value='0.0'),
         DeclareLaunchArgument('tangent_speed_threshold', default_value='0.10'),
@@ -30,15 +29,13 @@ def generate_launch_description():
                 'use_rviz': LaunchConfiguration('use_rviz'),
                 'setpoint_source': 'trajectory'}.items()),
         Node(package='drone_planning', executable='static_environment_node',
-             name='static_environment_node', output='screen',
-             parameters=[LaunchConfiguration('environment_config')]),
+             name='static_environment_node', output='screen', parameters=[environment]),
         Node(package='drone_planning', executable='interactive_goal_editor_node',
              name='interactive_goal_editor_node', output='screen', parameters=[
-                 LaunchConfiguration('environment_config'), astar, trajectory, editor,
-                 {'execution_enabled': True}]),
+                 environment, astar, trajectory, editor, {'execution_enabled': True}]),
         Node(package='drone_planning', executable='multi_goal_static_avoidance_node',
              name='multi_goal_static_avoidance_node', output='screen',
-             parameters=[LaunchConfiguration('environment_config'), astar, trajectory, executor,
+             parameters=[environment, astar, trajectory, executor,
                          {'yaw_mode': LaunchConfiguration('yaw_mode'),
                           'fixed_yaw': LaunchConfiguration('fixed_yaw'),
                           'tangent_speed_threshold': LaunchConfiguration(

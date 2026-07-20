@@ -141,11 +141,13 @@ class TestAssessmentDisturbanceLaunch(unittest.TestCase):
             spin_until(
                 lambda: any(message.wrench.force.x > 0.29 for message in applied_forces),
                 12.0, 'applied short gust')
-            self.assertTrue(any(
-                marker.ns == 'equivalent_external_force' and
-                marker.action == Marker.ADD and len(marker.points) == 2 and
-                marker.points[1].x > marker.points[0].x
-                for array in marker_messages for marker in array.markers))
+            spin_until(
+                lambda: any(
+                    marker.ns == 'equivalent_external_force' and
+                    marker.action == Marker.ADD and len(marker.points) == 2 and
+                    marker.points[1].x > marker.points[0].x
+                    for array in marker_messages for marker in array.markers),
+                1.0, 'positive-X external-force marker')
             spin_until(
                 lambda: latest.get('integral_x', 0.0) < -0.01 and any(
                     marker.ns == 'horizontal_integral_acceleration' and

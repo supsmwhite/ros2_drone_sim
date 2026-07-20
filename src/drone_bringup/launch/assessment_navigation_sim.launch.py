@@ -10,15 +10,23 @@ from launch.substitutions import LaunchConfiguration
 SUPPORTED_SCENARIOS = ('obstacle_field', 'narrow_passage')
 
 
+def resolve_scenario_config(scenario, share):
+    filenames = {
+        'obstacle_field': 'environment.yaml',
+        'narrow_passage': 'environment_narrow_passage.yaml',
+    }
+    try:
+        return os.path.join(share, 'config', filenames[scenario])
+    except KeyError as error:
+        choices = ', '.join(SUPPORTED_SCENARIOS)
+        raise ValueError(
+            f"Unsupported assessment scenario '{scenario}'; choose: {choices}") from error
+
+
 def _include_navigation(context):
     scenario = LaunchConfiguration('scenario').perform(context)
-    if scenario not in SUPPORTED_SCENARIOS:
-        choices = ', '.join(SUPPORTED_SCENARIOS)
-        raise ValueError(f"Unsupported assessment scenario '{scenario}'; choose: {choices}")
-
-    # Both assessment views intentionally use the existing, validated six-obstacle
-    # map.  narrow_passage focuses acceptance on its 1.2 m effective corridor.
     share = get_package_share_directory('drone_bringup')
+    environment_config = resolve_scenario_config(scenario, share)
     navigation = os.path.join(
         share, 'launch', 'interactive_goal_navigation_sim.launch.py')
     return [IncludeLaunchDescription(
@@ -26,6 +34,7 @@ def _include_navigation(context):
         launch_arguments={
             'use_rviz': LaunchConfiguration('use_rviz'),
             'yaw_mode': LaunchConfiguration('yaw_mode'),
+            'environment_config': environment_config,
         }.items(),
     )]
 

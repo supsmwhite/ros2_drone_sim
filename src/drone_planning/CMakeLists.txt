@@ -121,19 +121,6 @@ ament_target_dependencies(
   static_environment_node nav_msgs rclcpp std_msgs visualization_msgs)
 target_link_libraries(static_environment_node collision_checker Eigen3::Eigen)
 
-add_executable(astar_planner_node src/astar_planner_node.cpp)
-target_compile_options(astar_planner_node PRIVATE -Wall -Wextra -Wpedantic)
-ament_target_dependencies(
-  astar_planner_node geometry_msgs nav_msgs rclcpp std_msgs)
-target_link_libraries(astar_planner_node astar_planner Eigen3::Eigen)
-
-add_executable(planned_trajectory_node src/planned_trajectory_node.cpp)
-target_compile_options(planned_trajectory_node PRIVATE -Wall -Wextra -Wpedantic)
-ament_target_dependencies(
-  planned_trajectory_node drone_msgs geometry_msgs nav_msgs rclcpp std_msgs)
-target_link_libraries(
-  planned_trajectory_node planned_trajectory_builder yaw_reference_generator Eigen3::Eigen)
-
 add_executable(
   multi_goal_static_avoidance_node src/multi_goal_static_avoidance_node.cpp)
 target_compile_options(
@@ -220,8 +207,8 @@ install(
     planned_trajectory_builder yaw_reference_generator goal_completion_gate
     multi_goal_visualization mission_failure_safety
     interactive_goal_editor
-    static_environment_node astar_planner_node planned_trajectory_node
-    multi_goal_static_avoidance_node map_reachability_check interactive_goal_editor_node
+    static_environment_node multi_goal_static_avoidance_node map_reachability_check
+    interactive_goal_editor_node
   EXPORT export_drone_planning
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib

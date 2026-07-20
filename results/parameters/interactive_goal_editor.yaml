@@ -1,0 +1,8 @@
+interactive_goal_editor_node:
+  ros__parameters:
+    max_goals: 8
+    planning_start: [0.0, 0.0, 1.5]
+    minimum_navigation_altitude: 0.50
+    snap_resolution: 0.05
+    resolution: 0.25
+    max_grid_nodes: 200000

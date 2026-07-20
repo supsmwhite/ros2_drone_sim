@@ -28,53 +28,18 @@ if(BUILD_TESTING)
   )
 
   ament_add_pytest_test(
-    test_launch_structure
-    test/test_launch_structure.py
+    test_assessment_launch_structure
+    test/test_assessment_launch_structure.py
   )
 
   add_launch_test(
-    test/test_single_goal_e2e.py
-    TIMEOUT 70
+    test/test_assessment_basic_single_e2e.py
+    TIMEOUT 90
   )
 
   add_launch_test(
-    test/test_waypoint_mission_e2e.py
-    TIMEOUT 120
-  )
-
-  add_launch_test(
-    test/test_trajectory_mission_e2e.py
-    TIMEOUT 100
-  )
-
-  add_launch_test(
-    test/test_static_environment_e2e.py
-    TIMEOUT 40
-  )
-
-  add_launch_test(
-    test/test_astar_planner_e2e.py
-    TIMEOUT 40
-  )
-
-  add_launch_test(
-    test/test_planned_trajectory_e2e.py
-    TIMEOUT 40
-  )
-
-  add_launch_test(
-    test/test_static_avoidance_e2e.py
-    TIMEOUT 80
-  )
-
-  add_launch_test(
-    test/test_multi_goal_static_avoidance_e2e.py
-    TIMEOUT 200
-  )
-
-  add_launch_test(
-    test/test_interactive_goal_editor_e2e.py
-    TIMEOUT 120
+    test/test_assessment_basic_multi_e2e.py
+    TIMEOUT 110
   )
 
   add_launch_test(
@@ -108,8 +73,8 @@ if(BUILD_TESTING)
   )
 
   add_launch_test(
-    test/test_disturbance_visual_launch.py
-    TIMEOUT 30
+    test/test_assessment_disturbance_launch.py
+    TIMEOUT 40
   )
 endif()
 

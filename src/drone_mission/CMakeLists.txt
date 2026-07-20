@@ -56,13 +56,6 @@ ament_target_dependencies(
   waypoint_manager_node drone_msgs geometry_msgs nav_msgs rclcpp std_msgs)
 target_link_libraries(waypoint_manager_node waypoint_manager Eigen3::Eigen)
 
-add_executable(trajectory_mission_node src/trajectory_mission_node.cpp)
-target_compile_options(trajectory_mission_node PRIVATE -Wall -Wextra -Wpedantic)
-ament_target_dependencies(
-  trajectory_mission_node drone_msgs geometry_msgs nav_msgs rclcpp std_msgs)
-target_link_libraries(
-  trajectory_mission_node piecewise_quintic_trajectory Eigen3::Eigen)
-
 add_executable(goal_cli src/goal_cli.cpp)
 target_compile_options(goal_cli PRIVATE -Wall -Wextra -Wpedantic)
 ament_target_dependencies(goal_cli drone_msgs geometry_msgs rclcpp)
@@ -103,7 +96,7 @@ endif()
 install(DIRECTORY include/ DESTINATION include)
 install(
   TARGETS goal_input goal_visualization waypoint_manager piecewise_quintic_trajectory
-    waypoint_manager_node trajectory_mission_node goal_cli goal_visualizer_node
+    waypoint_manager_node goal_cli goal_visualizer_node
   EXPORT export_waypoint_manager
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib

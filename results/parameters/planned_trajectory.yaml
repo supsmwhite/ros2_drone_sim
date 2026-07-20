@@ -1,0 +1,26 @@
+/**:
+  ros__parameters:
+    # 0.35 m/s keeps the default path below the strict 0.35 m/s^2 acceleration limit.
+    nominal_speed: 0.35
+    min_segment_duration: 2.0
+    validation_sample_period: 0.02
+    reference_path_sample_period: 0.05
+    max_reference_speed: 0.70
+    max_reference_acceleration: 0.35
+    velocity_scale_candidates: [1.0, 0.75, 0.5, 0.25, 0.0]
+    duration_scale_candidates: [1.0, 1.05, 1.10, 1.15, 1.20, 1.25, 1.5, 2.0, 3.0, 4.0]
+    max_refinement_iterations: 8
+    max_insertions_per_refinement: 3
+    fixed_yaw: 0.0
+    # Static-avoidance yaw generation defaults. Keep fixed for compatibility.
+    yaw_mode: fixed
+    tangent_speed_threshold: 0.10
+    terminal_blend_distance: 0.80
+    yaw_filter_time_constant: 0.30
+    max_yaw_rate: 0.80
+    execution_enabled: false
+    publish_frequency: 50.0
+    odometry_timeout: 0.25
+    preparation_position_tolerance: 0.20
+    preparation_speed_tolerance: 0.15
+    preparation_hold_duration: 1.0

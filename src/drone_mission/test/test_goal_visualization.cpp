@@ -46,6 +46,30 @@ TEST(GoalVisualization, MissionMarkersAreStableAndClearOldTask)
   const auto replacement = make_mission_goal_markers(goals, 0U, false, stamp);
   EXPECT_EQ(replacement.markers.front().action, visualization_msgs::msg::Marker::DELETEALL);
   EXPECT_EQ(replacement.markers.size(), 4U);
+  EXPECT_EQ(replacement.markers[3].text, "GOAL CURRENT");
+}
+
+TEST(GoalVisualization, SingleGoalMissionUsesCurrentAndDoneStates)
+{
+  const builtin_interfaces::msg::Time stamp;
+  geometry_msgs::msg::PoseArray goals;
+  goals.header.frame_id = "map";
+  goals.poses.resize(1);
+  goals.poses.front().orientation.w = 1.0;
+
+  const auto current = make_mission_goal_markers(goals, 0U, false, stamp);
+  ASSERT_EQ(current.markers.size(), 4U);
+  EXPECT_EQ(current.markers[3].text, "GOAL CURRENT");
+  EXPECT_NE(current.markers[3].text, "P1 CURRENT");
+  EXPECT_EQ(current.markers[1].color, current.markers[2].color);
+  EXPECT_EQ(current.markers[1].color, current.markers[3].color);
+
+  const auto done = make_mission_goal_markers(goals, 0U, true, stamp);
+  ASSERT_EQ(done.markers.size(), 4U);
+  EXPECT_EQ(done.markers[3].text, "GOAL DONE");
+  EXPECT_NE(done.markers[3].text, "P1 DONE");
+  EXPECT_EQ(done.markers[1].color, done.markers[2].color);
+  EXPECT_EQ(done.markers[1].color, done.markers[3].color);
 }
 
 TEST(GoalVisualization, CompleteMissionMarksEveryGoalDone)

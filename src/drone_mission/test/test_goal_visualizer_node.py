@@ -63,7 +63,7 @@ class TestGoalVisualizerNode(unittest.TestCase):
             deadline = time.monotonic() + 5.0
             while time.monotonic() < deadline:
                 rclpy.spin_once(node, timeout_sec=0.05)
-                if received and expected.issubset(marker_labels(received[-1])):
+                if received and marker_labels(received[-1]) == expected:
                     return
             self.fail(
                 f'expected marker labels {expected}, got '
@@ -92,6 +92,15 @@ class TestGoalVisualizerNode(unittest.TestCase):
             second.position.x = 2.0
             second.position.z = 1.5
             second.orientation.w = 1.0
+            goals.poses = [first]
+            goals_publisher.publish(goals)
+            index_publisher.publish(UInt32(data=0))
+            complete_publisher.publish(Bool(data=False))
+            wait_for_labels({'GOAL CURRENT'})
+
+            complete_publisher.publish(Bool(data=True))
+            wait_for_labels({'GOAL DONE'})
+
             goals.poses = [first, second]
             goals_publisher.publish(goals)
             index_publisher.publish(UInt32(data=0))

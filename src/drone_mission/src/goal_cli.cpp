@@ -1,54 +1,20 @@
-#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "drone_mission/goal_input.hpp"
 #include "drone_msgs/srv/execute_goal_sequence.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
-#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 namespace
 {
 
 constexpr auto kDiscoveryTimeout = std::chrono::seconds(10);
-constexpr auto kDeliveryDelay = std::chrono::milliseconds(300);
-
-bool control_goal_consumer_available(rclcpp::Node & node)
-{
-  std::vector<drone_mission::GoalSubscriptionEndpoint> endpoints;
-  for (const auto & endpoint : node.get_subscriptions_info_by_topic("/drone/goal")) {
-    endpoints.push_back({endpoint.node_name(), endpoint.topic_type()});
-  }
-  if (drone_mission::has_control_goal_consumer(endpoints)) {
-    return true;
-  }
-
-  const auto graph = node.get_node_graph_interface();
-  for (const auto & [node_name, node_namespace] : graph->get_node_names_and_namespaces()) {
-    if (node_name == "goal_visualizer_node") {
-      continue;
-    }
-    const auto subscriptions = graph->get_subscriber_names_and_types_by_node(
-      node_name, node_namespace);
-    const auto goal = subscriptions.find("/drone/goal");
-    if (goal != subscriptions.end() &&
-      std::find(
-        goal->second.begin(), goal->second.end(), "geometry_msgs/msg/PoseStamped") !=
-      goal->second.end())
-    {
-      return true;
-    }
-  }
-  return false;
-}
 
 void print_usage(const char * program)
 {
@@ -74,46 +40,7 @@ drone_mission::GoalConstraints constraints_from_node(rclcpp::Node & node)
   return constraints;
 }
 
-int run_single(
-  const std::shared_ptr<rclcpp::Node> & node,
-  const std::vector<geometry_msgs::msg::Pose> & poses)
-{
-  auto publisher = node->create_publisher<geometry_msgs::msg::PoseStamped>("/drone/goal", 10);
-  const auto deadline = std::chrono::steady_clock::now() + kDiscoveryTimeout;
-  while (rclcpp::ok() && !control_goal_consumer_available(*node) &&
-    std::chrono::steady_clock::now() < deadline)
-  {
-    rclcpp::spin_some(node);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-  if (!control_goal_consumer_available(*node)) {
-    std::cerr << "Error: /drone/goal has no control consumer after 10 seconds "
-              << "(goal_visualizer_node does not count).\n";
-    return 3;
-  }
-  geometry_msgs::msg::PoseStamped message;
-  message.header.stamp = node->now();
-  message.header.frame_id = "map";
-  message.pose = poses.front();
-  publisher->publish(message);
-  const auto until = std::chrono::steady_clock::now() + kDeliveryDelay;
-  while (rclcpp::ok() && std::chrono::steady_clock::now() < until) {
-    rclcpp::spin_some(node);
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  }
-  const double yaw = 2.0 * std::atan2(
-    message.pose.orientation.z, message.pose.orientation.w);
-  std::cout << std::fixed << std::setprecision(3)
-            << "Sent single goal in map: x=" << message.pose.position.x
-            << " y=" << message.pose.position.y << " z=" << message.pose.position.z
-            << " yaw=" << yaw
-            << " rad (" << yaw * 180.0 / 3.14159265358979323846 << " deg)"
-            << " qz=" << message.pose.orientation.z
-            << " qw=" << message.pose.orientation.w << '\n';
-  return 0;
-}
-
-int run_multi(
+int run_sequence(
   const std::shared_ptr<rclcpp::Node> & node,
   const std::vector<geometry_msgs::msg::Pose> & poses)
 {
@@ -178,7 +105,7 @@ int main(int argc, char * argv[])
     }
     const auto values = drone_mission::parse_goal_arguments(arguments);
     const auto poses = drone_mission::make_goal_poses(values, constraints);
-    result = mode == "single" ? run_single(node, poses) : run_multi(node, poses);
+    result = run_sequence(node, poses);
   } catch (const std::exception & error) {
     std::cerr << "Error: " << error.what() << '\n';
     result = 2;

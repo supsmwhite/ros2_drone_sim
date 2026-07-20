@@ -9,7 +9,8 @@ os.environ['ROS_DOMAIN_ID'] = '131'
 
 from ament_index_python.packages import get_package_share_directory
 from drone_msgs.msg import ControllerDiagnostics, MotorRPM
-from geometry_msgs.msg import PoseStamped
+from drone_msgs.srv import ExecuteGoalSequence
+from geometry_msgs.msg import Pose
 import launch
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -19,10 +20,19 @@ import launch_testing.markers
 from nav_msgs.msg import Odometry, Path
 import pytest
 import rclpy
-from visualization_msgs.msg import MarkerArray
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import Bool
+from visualization_msgs.msg import Marker, MarkerArray
 
 
 TARGETS = ((0.0, 0.0, 1.5), (2.0, 1.0, 1.5))
+
+
+def marker_labels(message):
+    return {
+        marker.text for marker in message.markers
+        if marker.type == Marker.TEXT_VIEW_FACING
+    }
 
 
 @pytest.mark.launch_test
@@ -49,6 +59,10 @@ class TestAssessmentBasicSingle(unittest.TestCase):
         rpm_samples = 0
         consecutive_saturation_samples = 0
         maximum_consecutive_saturation_samples = 0
+        state_qos = QoSProfile(
+            depth=1,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            reliability=ReliabilityPolicy.RELIABLE)
 
         def on_odom(message):
             values = (
@@ -100,9 +114,12 @@ class TestAssessmentBasicSingle(unittest.TestCase):
                 Path, '/drone/path', lambda msg: latest.__setitem__('path', msg), 10),
             node.create_subscription(
                 MarkerArray, '/drone/mission/goal_markers',
-                lambda msg: latest.__setitem__('markers', msg), 10),
+                lambda msg: latest.__setitem__('markers', msg), state_qos),
+            node.create_subscription(
+                Bool, '/drone/mission/complete',
+                lambda msg: latest.__setitem__('complete', msg.data), state_qos),
         ]
-        publisher = node.create_publisher(PoseStamped, '/drone/goal', 10)
+        client = node.create_client(ExecuteGoalSequence, '/drone/mission/execute')
 
         def spin_until(predicate, timeout, description):
             deadline = time.monotonic() + timeout
@@ -115,21 +132,27 @@ class TestAssessmentBasicSingle(unittest.TestCase):
             self.fail(f'timed out waiting for {description}; latest={latest}')
 
         def execute_target(target):
-            message = PoseStamped()
-            message.header.frame_id = 'map'
-            message.pose.position.x, message.pose.position.y, message.pose.position.z = target
-            message.pose.orientation.w = 1.0
-            publish_deadline = time.monotonic() + 0.8
-            while time.monotonic() < publish_deadline:
-                message.header.stamp = node.get_clock().now().to_msg()
-                publisher.publish(message)
-                rclpy.spin_once(node, timeout_sec=0.05)
+            request = ExecuteGoalSequence.Request()
+            request.goals.header.frame_id = 'map'
+            pose = Pose()
+            pose.position.x, pose.position.y, pose.position.z = target
+            pose.orientation.w = 1.0
+            request.goals.poses = [pose]
+            future = client.call_async(request)
+            spin_until(future.done, 5.0, f'mission response for {target}')
+            self.assertTrue(future.result().accepted, future.result().message)
+            spin_until(
+                lambda: latest.get('complete') is False and
+                marker_labels(latest.get('markers', MarkerArray())) == {'GOAL CURRENT'},
+                5.0, f'GOAL CURRENT for {target}')
+            spin_until(
+                lambda: latest.get('complete') is True and
+                marker_labels(latest.get('markers', MarkerArray())) == {'GOAL DONE'},
+                35.0, f'GOAL DONE for {target}')
             stable_since = None
 
             def stable():
                 nonlocal stable_since
-                if 'position' not in latest:
-                    return False
                 within = (math.dist(latest['position'], target) < 0.10 and
                           latest['speed'] < 0.08)
                 if not within:
@@ -138,22 +161,20 @@ class TestAssessmentBasicSingle(unittest.TestCase):
                 stable_since = stable_since or time.monotonic()
                 return time.monotonic() - stable_since >= 1.5
 
-            spin_until(stable, 35.0, f'stable target {target}')
+            spin_until(stable, 10.0, f'strict stable target {target}')
             return math.dist(latest['position'], target), latest['speed']
 
         try:
             spin_until(
-                lambda: publisher.get_subscription_count() >= 2 and
-                'position' in latest and
+                lambda: 'position' in latest and
                 {'quadrotor_dynamics_node', 'position_controller_node',
                  'waypoint_manager_node', 'goal_visualizer_node'}.issubset(
                     set(node.get_node_names())),
                 8.0, 'formal basic graph')
+            self.assertTrue(client.wait_for_service(timeout_sec=8.0))
             self.assertEqual(node.get_node_names().count('waypoint_manager_node'), 1)
             results = [execute_target(target) for target in TARGETS]
-            spin_until(
-                lambda: len(latest.get('markers', MarkerArray()).markers) >= 3,
-                3.0, 'single-goal marker')
+            self.assertEqual(marker_labels(latest['markers']), {'GOAL DONE'})
             self.assertGreater(len(latest.get('path', Path()).poses), 100)
             self.assertGreater(rpm_samples, 100)
             self.assertLess(maximum_consecutive_saturation_samples, 200)
@@ -173,7 +194,7 @@ class TestAssessmentBasicSingle(unittest.TestCase):
         finally:
             for subscription in subscriptions:
                 node.destroy_subscription(subscription)
-            node.destroy_publisher(publisher)
+            node.destroy_client(client)
             node.destroy_node()
             rclpy.shutdown()
 

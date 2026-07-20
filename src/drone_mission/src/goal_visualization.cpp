@@ -105,8 +105,9 @@ visualization_msgs::msg::MarkerArray make_mission_goal_markers(
     label.pose.position.z += 0.35;
     label.scale.z = 0.25;
     label.color = point.color;
-    label.text = "P" + std::to_string(index + 1U) +
-      (done ? " DONE" : (current ? " CURRENT" : ""));
+    const std::string prefix = goals.poses.size() == 1U ? "GOAL" :
+      "P" + std::to_string(index + 1U);
+    label.text = prefix + (done ? " DONE" : (current ? " CURRENT" : ""));
     result.markers.push_back(label);
   }
   return result;

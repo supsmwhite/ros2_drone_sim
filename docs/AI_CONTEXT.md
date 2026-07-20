@@ -12,6 +12,10 @@
 
 本阶段从冻结 `main` 建立独立分支，只增加统一入口、依赖审计和轻量结构测试。
 
+正式导航采用唯一 `environment.yaml`，`assessment_navigation_sim` 是唯一公开导航入口；
+目标位置和终端 yaw 由用户通过 RViz 交互选择。“静态避障”和“明显绕行/通道”是
+同一系统的不同人工验收方式，不是两个地图、两个 Launch 或两套执行器。
+
 默认不要加入高度积分、姿态积分、障碍地图风扰、动态障碍或 MPC。只有新任务明确要求，或出现可复现且需要对应机制解决的物理问题时，才重新评估这些方向。
 
 ## 环境与包
@@ -279,16 +283,12 @@ assessment_disturbance_sim
 节点。入口只启动一套动力学、控制器和任务执行器；不应在任务执行中尝试抢占，但顺序
 运行 single 与 multi 没有节点名、执行器或 Topic 冲突。
 
-`obstacle_field` 使用原有 `environment.yaml` 六障碍综合地图，不修改其几何或历史结果
-来源。`narrow_passage` 使用独立 `environment_narrow_passage.yaml`：5 个 AABB 组成两道
-错位墙和 S 形强制路线，两处开口原始宽度均为 `1.8 m`；保持基础安全半径 `0.25 m`
-和规划裕量 `0.10 m` 后，有效开口宽度为 `1.1 m`。起点 `(0,0,1.5)` 至测试目标
-`(8.5,0,1.5)` 的直线被第一道墙阻挡。
-
-`assessment_navigation_sim` 解析场景后只向内部 Launch 转发一个
-`environment_config`；`interactive_goal_navigation_sim` 再把同一个 LaunchConfiguration
-传给 `static_environment_node`、`interactive_goal_editor_node` 和
-`multi_goal_static_avoidance_node`，因此显示、预检和执行不可能各自回退到不同地图。
+正式导航只使用原有 `environment.yaml` 六障碍综合地图，不修改其几何、安全半径、
+规划裕量或历史结果来源。`assessment_navigation_sim` 只转发 `yaw_mode` 和 `use_rviz`；
+`interactive_goal_navigation_sim` 将同一个固定地图路径传给
+`static_environment_node`、`interactive_goal_editor_node` 和
+`multi_goal_static_avoidance_node`，确保显示、预检和执行使用一致的环境。一般避障、
+明显绕行和地图可用区域中的通道穿越，均由人工在 RViz 选择不同目标进行验收。
 
 ### 正式入口自动闭环证据
 
@@ -298,18 +298,16 @@ assessment_disturbance_sim
 - 基础 multi：Service 接受 `P1→P2→P3→P4` 方形任务，索引严格为
   `[0,1,2,3]`，四个 yaw 原样保留；最终误差 `0.031921 m`，速度
   `0.027204 m/s`。最长连续瞬时限幅 `0.51 s`，完成后已退出限幅。
-- obstacle_field：正式 assessment wrapper 完成三目标 RViz 反馈、预览、READY、锁定
-  与执行；任务 `54.682 s`，最大跟踪误差 `0.022500 m`，最小净空
-  `0.239976 m`，最终误差 `0.000859 m`，零碰撞、零非有限值、零饱和。
-- narrow_passage：正式 wrapper 加载 11 个环境 Marker（工作空间 + 5 组原始/膨胀
-  Marker），直线被阻挡；A* 原始路径 `10.029160 m`，直线 `8.500000 m`，最大横向
-  偏离 `0.850000 m`。原始、简化和连续参考路径均通过碰撞检查，实际轨迹通过两处
-  指定通道，最小基础膨胀净空 `0.229716 m`，最终误差 `0.006103 m`，零碰撞、零饱和。
+- 正式导航：assessment wrapper 在唯一地图上完成三目标 RViz 反馈、预览、READY、锁定
+  与执行；任务 `54.663 s`，最大跟踪误差 `0.019330 m`，最小净空
+  `0.239986 m`，最终误差 `0.000898 m`；三个目标接受时的 yaw 误差为
+  `0.005150 rad`、`0.004708 rad`、`0.004938 rad`，零碰撞、零非有限值、零饱和。
 - disturbance：正式入口默认 short_gust，确认只在该入口启用 external wrench；实际
   `+X` 外力、红色箭头、负 X 水平积分及蓝色箭头一致，撤力后最终水平误差
   `0.124823 m`、速度 `0.002655 m/s`，零持续饱和。旧 Launch 测试继续验证
   `persistent_release` 的 `10 s` profile 参数。
-- 本轮完整回归：6 packages，`364 tests, 0 errors, 0 failures, 0 skipped`。
+- 本轮完整回归：6 packages，`361 tests, 0 errors, 0 failures, 0 skipped`，总流程
+  `7 min 10 s`（`drone_bringup` CTest `427.63 s`）。
 
 ### 替代测试与删除依据状态
 
@@ -319,16 +317,17 @@ assessment_disturbance_sim
 | `test_waypoint_mission_e2e.py` | 运行时四目标、顺序、yaw、误差和持续饱和已覆盖 | `test_assessment_basic_multi_e2e.py` | 具备下一轮删除审查条件 | 四目标 Marker 的 CURRENT/DONE 视觉状态 |
 | `basic_sim` | 正式基础入口覆盖其 Pose 控制链，但仍是 `mission_sim` 内部依赖 | basic single/multi | 暂不可删除 | 先重构 Include 依赖，不得复制节点 |
 | `mission_sim` | 正式基础入口直接 Include | basic multi | 暂不可删除 | 它仍是正式入口内部实现 |
-| `static_avoidance_sim` / `test_static_avoidance_e2e.py` | 新通道单目标覆盖安全规划与执行，但执行节点不同 | narrow passage E2E | 暂不可删除 | 旧 `planned_trajectory_node` 是否仍需独立展示 |
-| `multi_goal_static_avoidance_sim` | 正式 obstacle_field 使用相同多目标执行器并覆盖完整闭环 | obstacle_field E2E | 具备下一轮删除审查条件 | 对照旧 YAML 正式三目标结果图和 RViz 展示 |
-| `test_multi_goal_static_avoidance_e2e.py` | 正式交互三目标覆盖顺序、净空、误差和安全 | obstacle_field E2E | 具备下一轮删除审查条件 | 确认旧长测量化字段是否均已迁移 |
-| `interactive_goal_editor_sim` / editor E2E | 正式导航覆盖编辑、预览和锁定，但不覆盖禁飞只读模式 | obstacle_field E2E | 暂不可删除 | 只读预览模式是否仍需答辩诊断 |
+| `static_avoidance_sim` / `test_static_avoidance_e2e.py` | 正式导航覆盖安全规划与执行，但执行节点不同 | 正式导航 E2E | 暂不可删除 | 旧 `planned_trajectory_node` 是否仍需独立展示 |
+| `multi_goal_static_avoidance_sim` | 正式导航使用相同多目标执行器并覆盖完整闭环 | 正式导航 E2E | 具备下一轮删除审查条件 | 对照旧 YAML 正式三目标结果图和 RViz 展示 |
+| `test_multi_goal_static_avoidance_e2e.py` | 正式交互三目标覆盖顺序、净空、误差和安全 | 正式导航 E2E | 具备下一轮删除审查条件 | 确认旧长测量化字段是否均已迁移 |
+| `interactive_goal_editor_sim` / editor E2E | 正式导航覆盖编辑、预览和锁定，但不覆盖禁飞只读模式 | 正式导航 E2E | 暂不可删除 | 只读预览模式是否仍需答辩诊断 |
 | `disturbance_hover_sim` | 正式抗扰入口覆盖悬停、外力启用和恢复 | disturbance E2E | 具备下一轮删除审查条件 | 手工外力注入调试入口是否仍需保留 |
 | `test_disturbance_visual_launch.py` | 正式默认 short_gust 有完整闭环；旧测试仍独立保护 persistent_release | disturbance E2E | 暂不可删除 | persistent_release 完整 RViz 长时恢复 |
 | `trajectory_sim` / trajectory E2E | 尚无正式入口对等覆盖旧无障碍连续轨迹节点 | 无 | 暂不可删除 | 无障碍连续轨迹是否仍为答辩材料 |
-| `environment_sim` / environment E2E | 正式导航覆盖地图 Marker 和碰撞，但旧测试有精确边界断言 | 两个导航 E2E | 暂不可删除 | 环境独立诊断入口必要性 |
-| `planning_sim` / A* E2E | 正式通道验证 A* 路径，但不替代独立 planner ROS 适配 | narrow passage E2E | 暂不可删除 | 独立 A* Topic 展示必要性 |
-| `planned_trajectory_sim` / planned E2E | 正式通道覆盖三类安全路径，但节点适配层不同 | narrow passage E2E | 暂不可删除 | 独立 raw/simplified/reference 展示必要性 |
+| `environment_sim` / environment E2E | 正式导航覆盖地图 Marker 和碰撞，但旧测试有精确边界断言 | 正式导航 E2E | 暂不可删除 | 环境独立诊断入口必要性 |
+| `planning_sim` / A* E2E | 正式导航验证 A* 路径，但不替代独立 planner ROS 适配 | 正式导航 E2E | 暂不可删除 | 独立 A* Topic 展示必要性 |
+| `planned_trajectory_sim` / planned E2E | 正式导航覆盖三类安全路径，但节点适配层不同 | 正式导航 E2E | 暂不可删除 | 独立 raw/simplified/reference 展示必要性 |
+| `test_assessment_navigation_narrow_passage_e2e.py` | 保护已撤销的双地图产品设计 | 不属于最终架构 | 否 | 与唯一正式导航 E2E 重叠 | 已删除：不属于最终架构 | 无；保留会固化错误产品边界 | `test_interactive_goal_navigation_e2e.py` |
 
 ### 节点与实现审计
 
@@ -339,7 +338,7 @@ assessment_disturbance_sim
 | `goal_visualizer_node` | single/multi 权威目标 Marker | 基础三项 | 是，基础入口 | 与规划多目标 Marker Topic 分离，语义不同 | 保留 | 删除会使基础展示缺目标状态 | `test_goal_visualizer_node`、基础入口 Marker E2E |
 | `astar_planner_node` | 一次性起终点 3D A* 与原始路径发布 | 算法说明/内部诊断 | 否 | 规划逻辑已内嵌于 planned 与 multi-goal 执行链 | 内部化，远期合并 | 直接删除会失去独立 A* ROS 层诊断 | `test_astar_planner`、`test_astar_planner_e2e` |
 | `planned_trajectory_node` | 单目标路径简化、连续轨迹和可选执行 | 历史单目标避障 | 否 | 与 `multi_goal_static_avoidance_node` 的逐段 builder/执行重叠 | 内部化，远期合并 | 删除会丢失单段轨迹 ROS 集成覆盖 | builder 单元测试、`test_planned_trajectory_e2e` |
-| `multi_goal_static_avoidance_node` | 起飞、逐段 A*、简化、轨迹、yaw 门控、失败保持 | 多障碍、多目标、通道 | 是，导航入口 | 覆盖旧单目标规划执行链，但支持交互任务 | 保留 | 删除会破坏正式导航执行器 | multi-goal、interactive、preflight E2E |
+| `multi_goal_static_avoidance_node` | 起飞、逐段 A*、简化、轨迹、yaw 门控、失败保持 | 多障碍、多目标、绕行/通道 | 是，导航入口 | 覆盖旧单目标规划执行链，但支持交互任务 | 保留 | 删除会破坏正式导航执行器 | multi-goal、interactive、preflight E2E |
 | `interactive_goal_editor_node` | RViz 目标编辑、预览、预检、READY 和执行请求 | 正式规划避障交互 | 是，导航入口 | 与只读 editor Launch 共用同一节点，通过参数区分 | 保留 | 删除会破坏 RViz 正式工作流 | editor、navigation、preflight E2E |
 | `static_environment_node` | 障碍 Marker 与实时碰撞状态 | 避障、距离与视觉结果 | 是，导航入口 | 被多个历史 Launch 重复组合，但节点实现唯一 | 保留 | 删除会失去地图显示与碰撞状态 | `test_static_environment_e2e` |
 | `disturbance_demo_node` | 悬停目标、扰力时序、Marker 和状态编排 | 独立抗扰加分 | 是，抗扰入口 | `disturbance_hover_sim` 只提供底层接口，不复制该节点 | 保留 | 删除会破坏两个 profile 演示 | disturbance node/visual Launch E2E |
@@ -349,7 +348,7 @@ assessment_disturbance_sim
 | 功能或文件 | 当前作用 | 对应哪项考核 | 是否被最终入口使用 | 是否与其他实现重叠 | 建议 | 删除风险 | 替代测试 |
 |---|---|---|---|---|---|---|---|
 | `assessment_basic_sim` | 正式 single/multi 统一入口，禁止 YAML 自启动 | 悬停、单目标、3～4 目标 | 是 | 薄封装，无节点复制 | 保留 | 无 | 结构 + basic single/multi 正式 E2E |
-| `assessment_navigation_sim` | 正式交互规划入口与真实场景选择 | 多障碍、绕行/通道 | 是 | 薄封装，无节点复制 | 保留 | 无 | 结构 + obstacle_field/narrow_passage 正式 E2E |
+| `assessment_navigation_sim` | 唯一正式交互规划入口；目标由 RViz 选择 | 多障碍、绕行/通道 | 是 | 薄封装，无节点复制 | 保留 | 无 | 结构 + 唯一正式地图导航 E2E |
 | `assessment_disturbance_sim` | 正式 profile 入口 | 抗扰加分 | 是 | 薄封装，无节点复制 | 保留 | 无 | 结构 + short_gust 正式 E2E + persistent 参数测试 |
 | `simulation_core` | 唯一公共动力学/控制/模型/RViz 组合 | 所有飞行 | 间接用于基础和导航 | 多个历史入口均 Include | 内部化并保留 | 删除会同时破坏多条链 | launch 结构 + 各真实 E2E |
 | `basic_sim` | Pose 目标基础仿真和 Marker | 基础控制内部链 | 间接用于基础 | 被 mission/environment/trajectory Include | 内部化 | 删除需先改依赖树 | single E2E + 基础正式 E2E |
@@ -361,7 +360,7 @@ assessment_disturbance_sim
 | `planning_sim` | environment + A* | 内部 A* 诊断 | 否 | 被 planned trajectory 包含 | 待删除 | A* ROS 层诊断入口消失 | A* 单元/E2E |
 | `planned_trajectory_sim` | planning + 单段安全轨迹 | 历史轨迹诊断 | 否 | 与 static avoidance 重叠 | 待删除 | 展示/执行边界诊断减少 | planned trajectory E2E |
 | `static_avoidance_sim` | 单目标避障闭环 | 可由正式导航单目标覆盖 | 否 | multi-goal 执行链的子集 | 待删除 | 固定基准场景和旧结果复现入口消失 | 导航单目标 E2E + 保留配置 |
-| `multi_goal_static_avoidance_sim` | YAML 正式三目标旧入口 | 可由正式导航多目标覆盖 | 否 | 正式导航复用同一执行节点 | 待删除 | 自动长任务与正式指标复现入口消失 | obstacle_field 正式 E2E 已具备，下一轮审查指标迁移 |
+| `multi_goal_static_avoidance_sim` | YAML 正式三目标旧入口 | 可由正式导航多目标覆盖 | 否 | 正式导航复用同一执行节点 | 待删除 | 自动长任务与正式指标复现入口消失 | 正式导航 E2E 已具备，下一轮审查指标迁移 |
 | `interactive_goal_editor_sim` | 禁飞的只读编辑/预览 | 内部 UI 诊断 | 否 | navigation 中 editor 的子集 | 待删除 | 隔离 UI 与执行器的诊断能力下降 | editor E2E 使用直接节点 fixture |
 | `disturbance_hover_sim` | 自动悬停、启用外力但不施扰 | 内部外力诊断 | 否 | 与正式 disturbance 链重叠 | 待删除 | 手工外力注入入口消失 | 正式 disturbance E2E 已具备，下一轮审查手工诊断需求 |
 
@@ -378,10 +377,10 @@ assessment_disturbance_sim
 | `test_astar_planner_e2e.py` | A* ROS 输出独立安全 | 避障算法 | 否 | planner 单元和更高层 E2E 重叠 | 待删除 | ROS 参数/Topic 适配缺覆盖 | 导航路径安全断言 |
 | `test_planned_trajectory_e2e.py` | 原始/简化/参考路径安全 | 轨迹安全 | 否 | static avoidance 覆盖执行 | 内部化 | 删除会失去三类路径逐项检查 | 导航预览路径断言 |
 | `test_static_avoidance_e2e.py` | 单目标闭环避障 | 多障碍 | 间接 | multi-goal/interactive 重叠 | 待删除 | 单目标固定基准丢失 | assessment navigation 单目标 E2E |
-| `test_multi_goal_static_avoidance_e2e.py` | 正式三目标、净空、顺序与无冲突节点 | 多目标避障 | 间接 | obstacle_field 正式 E2E 已覆盖相同执行器 | 删除审查候选 | 当前历史量化结果主要保护网 | 正式 obstacle_field E2E 已通过；先审查指标迁移 |
+| `test_multi_goal_static_avoidance_e2e.py` | 正式三目标、净空、顺序与无冲突节点 | 多目标避障 | 间接 | 唯一地图的正式导航 E2E 已覆盖相同执行器 | 删除审查候选 | 当前历史量化结果主要保护网 | 正式导航 E2E 已通过；先审查指标迁移 |
 | `test_interactive_goal_editor_e2e.py` | 只读编辑、预览与 RViz namespace | 导航 UI | 间接 | navigation E2E 覆盖部分行为 | 内部化 | 删除会失去编辑器隔离测试 | 将交互断言合入正式导航 E2E |
 | `test_interactive_mission_service.py` | 请求校验、等待和拒绝重复任务 | 多目标执行安全 | 间接 | navigation E2E 部分覆盖 | 保留 | 删除会弱化任务接口边界 | 正式导航 Service 边界测试 |
-| `test_interactive_goal_navigation_e2e.py` | READY 快照、锁定和完整执行 | 正式导航 | 是，现已从 assessment wrapper 启动 | 与 editor/multi-goal E2E 互补 | 保留 | 删除会失去正式交互闭环 | 本身即 obstacle_field 正式 E2E |
+| `test_interactive_goal_navigation_e2e.py` | READY 快照、锁定和完整执行 | 正式导航 | 是，现已从 assessment wrapper 启动 | 与 editor/multi-goal E2E 互补 | 保留 | 删除会失去正式交互闭环 | 本身即唯一正式地图 E2E |
 | `test_interactive_preflight_failure.py` | 无路时零 setpoint/零 RPM/不起飞 | 规划安全 | 是，内部链相同 | 独特失败路径 | 保留 | 高：可能放行不安全任务 | 无等价替代 |
 | `test_external_wrench.py` | 外力校验、应用、超时和默认关闭 | 抗扰底层安全 | 间接 | disturbance demo 覆盖正常路径 | 保留 | 删除会失去默认禁用与超时边界 | 无等价替代 |
 | `test_horizontal_integral_node.py` | 积分生命周期、禁用和安全输出 | 抗扰控制 | 间接 | 扰动 E2E 只覆盖系统结果 | 保留 | 删除会弱化 anti-windup 回归 | 无等价替代 |

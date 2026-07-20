@@ -297,6 +297,29 @@ def derivative(times, vectors, min_dt=1e-4, max_dt=0.10):
     return output
 
 
+def held_signal_derivative(times, vectors, min_dt=1e-4, max_dt=0.10,
+                           change_tolerance=1e-12):
+    """Differentiate a lower-rate signal repeated in higher-rate sample rows."""
+    output = [None] * len(times)
+    previous = None
+    for index, (time_s, vector) in enumerate(zip(times, vectors)):
+        if time_s is None or vector is None or not finite_number(time_s) or not all(
+                finite_number(value) for value in vector):
+            continue
+        current = [float(value) for value in vector]
+        if previous is not None:
+            _, old_time, old_vector = previous
+            if max(abs(current[axis] - old_vector[axis])
+                   for axis in range(len(current))) <= change_tolerance:
+                continue
+            dt = float(time_s) - old_time
+            if min_dt <= dt <= max_dt:
+                output[index] = [(current[axis] - old_vector[axis]) / dt
+                                 for axis in range(len(current))]
+        previous = (index, float(time_s), current)
+    return output
+
+
 def unwrap_angles(values):
     """Unwrap finite scalar angles while preserving missing-sample alignment."""
     output = [None] * len(values)
@@ -397,6 +420,11 @@ def local_profile_min(profile, center_arc, window):
 def max_or_none(values):
     values = [value for value in values if value is not None and finite_number(value)]
     return max(values) if values else None
+
+
+def min_or_none(values):
+    values = [value for value in values if value is not None and finite_number(value)]
+    return min(values) if values else None
 
 
 def parse_trajectory_diagnostics(path):
@@ -557,7 +585,7 @@ def analyze(run, environment, astar, trajectory, output=None, step=0.02,
                               for row in samples]
     actual_acceleration = derivative(times, actual_velocity)
     actual_jerk = derivative(times, actual_acceleration)
-    reference_jerk = derivative(times, reference_acceleration)
+    reference_jerk = held_signal_derivative(times, reference_acceleration)
     reference_points_at_time = [[finite_csv_value(row, name) for name in
                                  ("reference_x", "reference_y", "reference_z")]
                                 for row in samples]
@@ -572,7 +600,7 @@ def analyze(run, environment, astar, trajectory, output=None, step=0.02,
                        if finite_csv_value(row, "angular_speed_z") is not None else None for row in samples]
     reference_yaw = [[value] if value is not None else None for value in
                      unwrap_angles([finite_csv_value(row, "reference_yaw") for row in samples])]
-    reference_yaw_rate_vectors = derivative(times, reference_yaw)
+    reference_yaw_rate_vectors = held_signal_derivative(times, reference_yaw)
     reference_yaw_rate = [abs(value[0]) if value else None for value in reference_yaw_rate_vectors]
     yaw_accel = derivative(times, reference_yaw_rate_vectors)
     actual_yaw_accel = derivative(times, [[finite_csv_value(row, "angular_speed_z")]
@@ -599,7 +627,9 @@ def analyze(run, environment, astar, trajectory, output=None, step=0.02,
         def selected(values): return [values[index] for index in indices if index < len(values)]
         corner.update({
             "reference_max_speed_m_s": max_or_none(selected([vector_norm(value) for value in reference_velocity])),
+            "reference_min_speed_m_s": min_or_none(selected([vector_norm(value) for value in reference_velocity])),
             "actual_max_speed_m_s": max_or_none(selected([vector_norm(value) for value in actual_velocity])),
+            "actual_min_speed_m_s": min_or_none(selected([vector_norm(value) for value in actual_velocity])),
             "reference_max_acceleration_m_s2": max_or_none(selected([vector_norm(value) for value in reference_acceleration])),
             "actual_max_acceleration_m_s2": max_or_none(selected([vector_norm(value) for value in actual_acceleration])),
             "reference_max_jerk_m_s3": max_or_none(selected([vector_norm(value) for value in reference_jerk])),

@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from analyze_navigation_geometry import (  # noqa: E402
-    clearance_losses, clearance_profile, cross_track_errors, derivative,
+    clearance_losses, clearance_profile, cross_track_errors, derivative, held_signal_derivative,
     finite_points, identify_corners, identify_segment_corners, nearest_point_on_polyline,
     point_aabb_distance, project_points_on_polyline, resample_polyline, turning_angle_degrees,
     unwrap_angles)
@@ -104,6 +104,15 @@ def test_jerk_difference_filters_bad_timestamps():
     assert result[2] is None
     assert result[3] is None
     assert result[4][0] == pytest_approx(1.0)
+
+
+def test_held_reference_difference_uses_setpoint_update_interval():
+    times = [0.0, 0.005, 0.010, 0.020, 0.025]
+    values = [[0.0], [0.0], [0.0], [0.02], [0.02]]
+    result = held_signal_derivative(times, values)
+    assert result[:3] == [None, None, None]
+    assert result[3] == [1.0]
+    assert result[4] is None
 
 
 def test_yaw_unwrap_removes_pi_boundary_jump():

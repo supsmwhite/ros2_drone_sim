@@ -92,6 +92,24 @@ def nearest_corner(corners, point, tolerance=0.05):
     return corner if math.dist(corner["position"][:2], point) <= tolerance else None
 
 
+def local_clearances(path, focus_points=FOCUS_POINTS):
+    rows = []
+    with path.open(newline="") as handle:
+        for row in csv.DictReader(handle):
+            rows.append({"layer": row["layer"], "x": float(row["x"]),
+                         "y": float(row["y"]),
+                         "clearance": float(row["safety_clearance_m"])})
+    result = {}
+    for name, point in focus_points.items():
+        result[name] = {}
+        for layer in ("planned", "simplified", "reference", "actual"):
+            candidates = [row for row in rows if row["layer"] == layer]
+            nearest = min(candidates, key=lambda row: math.dist(
+                (row["x"], row["y"]), point), default=None)
+            result[name][layer] = nearest["clearance"] if nearest else None
+    return result
+
+
 def extract_run_summary(run_dir, record):
     geometry_path = run_dir / "geometry" / "geometry_summary.json"
     if not geometry_path.exists():
@@ -105,12 +123,7 @@ def extract_run_summary(run_dir, record):
     diagnostics = parse_simplifier_diagnostics(
         (run_dir / "launch.log").read_text(errors="replace"))
     corners = geometry["corners"]
-    focus = {}
-    for name, point in FOCUS_POINTS.items():
-        corner = nearest_corner(corners, point)
-        focus[name] = ({layer: corner.get(f"{layer}_clearance_m")
-                        for layer in ("planned", "simplified", "reference", "actual")}
-                       if corner else None)
+    focus = local_clearances(run_dir / "geometry" / "path_clearance.csv")
     layers = geometry["layers"]
     return {
         "candidate": record["candidate"], "route": record["route"],

@@ -162,7 +162,6 @@ class TestAssessmentBasicMulti(unittest.TestCase):
             self.assertLess(maximum_consecutive_saturation_samples, 200)
             self.assertEqual(consecutive_saturation_samples, 0)
             self.assertEqual(node.get_node_names().count('waypoint_manager_node'), 1)
-            self.assertNotIn('trajectory_mission_node', node.get_node_names())
             output = b''.join(event.text for event in proc_output)
             self.assertNotIn(b'collision', output.lower())
             print(

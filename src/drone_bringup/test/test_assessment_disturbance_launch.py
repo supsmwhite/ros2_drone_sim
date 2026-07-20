@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
+import importlib.util
 import math
 import os
+from pathlib import Path
 import time
 import unittest
 
@@ -11,7 +13,8 @@ from ament_index_python.packages import get_package_share_directory
 from drone_msgs.msg import ControllerDiagnostics, MotorRPM
 from geometry_msgs.msg import WrenchStamped
 import launch
-from launch.actions import IncludeLaunchDescription
+from launch import LaunchContext
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 import launch_testing
 import launch_testing.actions
@@ -40,6 +43,25 @@ def generate_test_description():
 
 
 class TestAssessmentDisturbanceLaunch(unittest.TestCase):
+
+    def test_persistent_release_defaults_to_ten_seconds(self):
+        launch_path = (
+            Path(get_package_share_directory('drone_bringup')) / 'launch' /
+            'disturbance_visual_demo.launch.py')
+        spec = importlib.util.spec_from_file_location(
+            'disturbance_visual_demo_launch', launch_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        description = module.generate_launch_description()
+        duration = next(
+            action for action in description.entities
+            if isinstance(action, DeclareLaunchArgument) and
+            action.name == 'disturbance_duration')
+        context = LaunchContext()
+        context.launch_configurations['profile'] = 'persistent_release'
+        resolved = ''.join(
+            substitution.perform(context) for substitution in duration.default_value)
+        self.assertEqual(resolved, '10.0')
 
     def test_default_short_gust_is_explicit_external_wrench_opt_in(self):
         rclpy.init()
@@ -184,4 +206,10 @@ class TestAssessmentDisturbanceLaunch(unittest.TestCase):
 class TestAssessmentDisturbanceShutdown(unittest.TestCase):
 
     def test_processes_exit_cleanly(self, proc_info):
+        process_names = proc_info.process_names()
+        for expected in (
+                'quadrotor_dynamics_node', 'position_controller_node',
+                'robot_state_publisher', 'disturbance_demo_node'):
+            self.assertTrue(any(expected in name for name in process_names))
+        self.assertFalse(any('rviz2' in name for name in process_names))
         launch_testing.asserts.assertExitCodes(proc_info)

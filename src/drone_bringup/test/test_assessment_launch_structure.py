@@ -15,6 +15,16 @@ ASSESSMENT_LAUNCHES = {
     'assessment_navigation_sim.launch.py': 'interactive_goal_navigation_sim.launch.py',
     'assessment_disturbance_sim.launch.py': 'disturbance_visual_demo.launch.py',
 }
+INTERNAL_LAUNCH_DEPENDENCIES = {
+    'basic_sim.launch.py': 'simulation_core.launch.py',
+    'mission_sim.launch.py': 'basic_sim.launch.py',
+    'interactive_goal_navigation_sim.launch.py': 'simulation_core.launch.py',
+}
+RETAINED_INTERNAL_LAUNCHES = {
+    'simulation_core.launch.py', 'basic_sim.launch.py', 'mission_sim.launch.py',
+    'interactive_goal_navigation_sim.launch.py',
+    'disturbance_visual_demo.launch.py',
+}
 
 
 def _load_launch(name):
@@ -54,6 +64,16 @@ def test_assessment_launches_are_thin_includes():
         }
         assert forbidden_node_symbols.isdisjoint(called_names), name
         assert reused_launch in source, name
+
+
+def test_retained_internal_launch_dependencies_exist_and_reuse_core():
+    for name in RETAINED_INTERNAL_LAUNCHES:
+        path = LAUNCH / name
+        assert path.is_file(), name
+        ast.parse(path.read_text(encoding='utf-8'), filename=name)
+    for name, dependency in INTERNAL_LAUNCH_DEPENDENCIES.items():
+        source = (LAUNCH / name).read_text(encoding='utf-8')
+        assert dependency in source, name
 
 
 def test_basic_waits_for_runtime_single_or_multi_input():
@@ -109,6 +129,14 @@ def test_disturbance_public_default_and_profiles():
     source = (LAUNCH / 'disturbance_visual_demo.launch.py').read_text(encoding='utf-8')
     assert "'short_gust'" in source
     assert "'persistent_release'" in source
+
+
+def test_only_disturbance_internal_launch_enables_external_wrench():
+    enabled = []
+    for path in LAUNCH.glob('*.launch.py'):
+        if "'enable_external_wrench': True" in path.read_text(encoding='utf-8'):
+            enabled.append(path.name)
+    assert enabled == ['disturbance_visual_demo.launch.py']
 
 
 def test_assessment_entrypoints_do_not_duplicate_runtime_nodes_or_topics():

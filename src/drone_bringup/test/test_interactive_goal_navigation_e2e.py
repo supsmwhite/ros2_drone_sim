@@ -21,7 +21,7 @@ import pytest
 import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, String, UInt32
-from visualization_msgs.msg import InteractiveMarkerFeedback
+from visualization_msgs.msg import InteractiveMarkerFeedback, Marker, MarkerArray
 
 
 TARGETS = ((3.5, 1.0, 2.5), (5.5, 1.0, 4.0), (7.0, 5.0, 4.0))
@@ -115,6 +115,24 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
         goal_angular_speeds = []
         goal_yaw_reference_errors = [math.inf, math.inf, math.inf]
         non_finite_count = 0
+        path_counts = {'planned': 0, 'simplified': 0, 'reference': 0}
+
+        def on_planning_path(name, message):
+            latest[name] = message
+            if not message.poses:
+                return
+            path_counts[name] += 1
+            points = [
+                (pose.pose.position.x, pose.pose.position.y, pose.pose.position.z)
+                for pose in message.poses]
+            if not all(math.isfinite(value) for point in points for value in point):
+                health_errors.append(f'non-finite {name} path')
+                return
+            for start, end in zip(points, points[1:]):
+                if any(segment_intersects_box(start, end, lower, upper)
+                       for lower, upper in BASE_INFLATED_OBSTACLES):
+                    health_errors.append(f'{name} path intersects an inflated obstacle')
+                    return
 
         def on_odom(message):
             nonlocal previous_position, maximum_tracking_error, minimum_clearance
@@ -260,13 +278,16 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
             node.create_subscription(Path, '/drone/interactive_goals/preview_path',
                                      lambda msg: latest.__setitem__('preview', msg), latched),
             node.create_subscription(Path, '/drone/planned_path',
-                                     lambda msg: latest.__setitem__('planned', msg), latched),
+                                     lambda msg: on_planning_path('planned', msg), latched),
             node.create_subscription(Path, '/drone/simplified_path',
-                                     lambda msg: latest.__setitem__('simplified', msg), latched),
+                                     lambda msg: on_planning_path('simplified', msg), latched),
             node.create_subscription(Path, '/drone/reference_path',
-                                     lambda msg: latest.__setitem__('reference', msg), latched),
+                                     lambda msg: on_planning_path('reference', msg), latched),
             node.create_subscription(Path, '/drone/path',
                                      lambda msg: latest.__setitem__('actual_path', msg), 10),
+            node.create_subscription(
+                MarkerArray, '/drone/environment/markers',
+                lambda msg: latest.__setitem__('environment_markers', msg), latched),
         ]
         feedback_publisher = node.create_publisher(
             InteractiveMarkerFeedback,
@@ -317,8 +338,43 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
                 lambda: feedback_publisher.get_subscription_count() > 0 and
                 latest.get('mission_status') == 'WAITING FOR VALIDATED MISSION' and
                 latest.get('active') is False and latest.get('count') == 0 and
-                'position' in latest,
+                'position' in latest and 'environment_markers' in latest,
                 10.0, 'idle editor and executor')
+            environment_markers = latest['environment_markers'].markers
+            self.assertEqual(len(environment_markers), 13)
+            self.assertTrue(all(
+                marker.header.frame_id == 'map' for marker in environment_markers))
+            self.assertEqual(
+                sum(marker.ns == 'workspace' and marker.type == Marker.LINE_LIST
+                    for marker in environment_markers), 1)
+            self.assertEqual(
+                sum(marker.ns == 'obstacles' and marker.type == Marker.CUBE
+                    for marker in environment_markers), 6)
+            self.assertEqual(
+                sum(marker.ns == 'inflated_obstacles' and marker.type == Marker.CUBE
+                    for marker in environment_markers), 6)
+            required_nodes = {
+                'quadrotor_dynamics_node', 'position_controller_node',
+                'robot_state_publisher', 'static_environment_node',
+                'interactive_goal_editor_node',
+                'multi_goal_static_avoidance_node',
+            }
+            publisher_topics = (
+                '/drone/planned_path', '/drone/simplified_path',
+                '/drone/reference_path', '/drone/trajectory_setpoint',
+                '/drone/environment/markers')
+            spin_until(
+                lambda: required_nodes.issubset(set(node.get_node_names())) and
+                all(node.count_publishers(topic) == 1
+                    for topic in publisher_topics),
+                5.0, 'unique navigation nodes and publishers')
+            discovered_node_names = node.get_node_names()
+            node_names = set(discovered_node_names)
+            self.assertTrue(required_nodes.issubset(node_names), sorted(node_names))
+            for required_node in required_nodes:
+                self.assertEqual(discovered_node_names.count(required_node), 1)
+            for topic in publisher_topics:
+                self.assertEqual(node.count_publishers(topic), 1, topic)
             idle_deadline = time.monotonic() + 2.0
             while time.monotonic() < idle_deadline:
                 rclpy.spin_once(node, timeout_sec=0.02)
@@ -392,6 +448,8 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
             self.assertEqual(len(latest.get('planned', Path()).poses), 0)
             self.assertEqual(len(latest.get('simplified', Path()).poses), 0)
             self.assertEqual(len(latest.get('reference', Path()).poses), 0)
+            self.assertEqual(path_counts, {
+                'planned': 3, 'simplified': 3, 'reference': 3})
             self.assertFalse(health_errors, health_errors)
             self.assertLess(maximum_tracking_error, 0.05)
             self.assertGreaterEqual(minimum_clearance, 0.085)

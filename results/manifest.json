@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
-  "repository_commit": "6e8a37b607c3193027e77cbf27456f33760843c3",
-  "generated_at": "2026-07-20T08:58:35.038362+00:00",
+  "schema_version": 3,
+  "repository_commit": "e1d61a614b21499542922d934afe6c6f584456e8",
+  "generated_at": "2026-07-20T09:40:55.822399+00:00",
   "experiments": [
     {
       "experiment": "hover",

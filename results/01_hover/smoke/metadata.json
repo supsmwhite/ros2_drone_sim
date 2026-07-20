@@ -1,10 +1,11 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "experiment": "hover",
   "status": "smoke",
-  "repository_commit": "6e8a37b607c3193027e77cbf27456f33760843c3",
+  "repository_commit": "e1d61a614b21499542922d934afe6c6f584456e8",
   "git_dirty": false,
-  "generated_at": "2026-07-20T08:58:35.038362+00:00",
+  "generated_at": "2026-07-20T09:40:55.822399+00:00",
+  "target_config": null,
   "mission_time_source": "goal_received",
   "stop_reason": "arrival_and_steady_window_complete",
   "final_state": "STEADY_WINDOW",
@@ -14,14 +15,12 @@
     1.5
   ],
   "goals": [],
-  "goal_order": [
-    0
-  ],
+  "goal_order": [],
   "safety_radius_m": 0.25,
   "failure_reason": null,
   "safety_observations": {
-    "maximum_altitude_m": 1.499663406753383,
-    "maximum_speed_m_s": 1.0141181172890845,
+    "maximum_altitude_m": 1.4996661354081755,
+    "maximum_speed_m_s": 1.0141091403324056,
     "nonzero_rpm_observed": true
   },
   "thresholds": {
@@ -37,13 +36,13 @@
     "timeout_s": 60.0
   },
   "topic_message_counts": {
-    "/drone/odom": 2502,
-    "/drone/imu": 2501,
-    "/drone/motor_rpm_cmd": 1251,
-    "/drone/controller/diagnostics": 705,
+    "/drone/odom": 2259,
+    "/drone/imu": 2258,
+    "/drone/motor_rpm_cmd": 1130,
+    "/drone/controller/diagnostics": 706,
     "/drone/goal": 1,
     "/drone/trajectory_setpoint": 0,
-    "/drone/path": 125,
+    "/drone/path": 112,
     "/drone/planned_path": 0,
     "/drone/simplified_path": 0,
     "/drone/reference_path": 0,

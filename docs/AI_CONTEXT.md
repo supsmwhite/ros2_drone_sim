@@ -292,3 +292,74 @@ C 的局部净空附加损失均小于 `0.01 m`，但 A2 明确增大 tracking/c
 waypoint 保留；第二优先级才是 T 层的曲率感知局部 duration scale，直线段保留 A2。
 当前证据不支持统一增大障碍膨胀、修改安全半径、调控制增益或继续提高全局速度。本轮未
 修改 A*、simplifier、quintic、控制器、动力学、地图、安全参数或正式 YAML，也未采用 A2。
+
+## 连续轨迹局部时间分配实验（2026-07-20）
+
+`experiment/trajectory-curvature-timing` 从
+`experiment/navigation-clearance-smoothing@a774283` 创建，未携带失败的
+`shortcut_preferred_clearance`、additional-clearance 或 preferred/fallback shortcut
+产品逻辑。核心实现提交为 `57b1cf6`，实验工具提交为 `651b812`；正式快速筛选从干净的
+`651b812` 运行，原始 CSV/JSON/PNG 只位于
+`/tmp/ros2_drone_trajectory_curvature_timing/`。
+
+时间链路审计确认：每段距离基础时长为
+`max(segment_length / nominal_speed, min_segment_duration)`；quintic 接收独立的每段
+duration。首尾 waypoint velocity 为零，内部 velocity 是相邻两段
+`displacement / duration` 的平均再乘现有 velocity scale，因此共享 waypoint 导数同时受
+左右 duration 影响。局部时间倍率先作用于距离基础时长，现有 global duration candidate
+再统一相乘；搜索顺序仍为 global duration 外层、velocity scale 内层。动态限制失败继续
+尝试候选，首次碰撞失败会停止继续增大全局时长并按原逻辑插入 raw path 点重新 refinement。
+所以只修改 duration 虽不改 waypoint 坐标，仍可能通过共享导数改变 quintic 段内空间曲线；
+本轮保留原碰撞采样和 refinement 正是为此。
+
+新增参数默认值为 `corner_timing_enabled=false`、start/full angle
+`25/70 deg`、max duration scale `1.0`，预览、预检和执行均由两个正式 Launch 入口透传。
+默认关闭时每个 segment multiplier 严格为 `1.0`，旧 duration 逐项不变。内部点转角使用
+world-space 3D 向量的 `acos(clamp(dot(normalize(Pi-Pi-1),
+normalize(Pi+1-Pi)),-1,1))`，短段和非有限点拒绝。区间内使用
+`u²(3-2u)` smoothstep；每段取左右端点 corner scale 的 `max`，不相乘。
+
+固定 A2 (`0.50/0.90/0.60`) 完整地图快速筛选结果如下。任务时间相对稳定 baseline
+`67.42 s` 的改善分别为 `13.884% / 9.701% / 21.982%`：
+
+| 候选 | mission / reference duration (s) | global / local max | ref jerk max / 三个最严重角点平均 | tracking max/RMS (m) | cross-track max/RMS (m) | ref/actual clearance (m) |
+|---|---:|---:|---:|---:|---:|---:|
+| T0 | 58.059 / 53.385 | 1.10 / 1.000 | 6.665 / 5.386 | 0.0280 / 0.0117 | 0.0183 / 0.00581 | 0.1500 / 0.1502 |
+| T10 | 60.880 / 56.221 | 1.10 / 1.0995 | 6.994 / 4.656 | 0.0257 / 0.0109 | 0.0190 / 0.00526 | 0.1500 / 0.1502 |
+| T20 | 52.600 / 47.941 | 1.00 / 1.2000 | 7.484 / 4.963 | 0.0364 / 0.0141 | 0.0151 / 0.00527 | 0.1025 / 0.1097 |
+
+T0/T10 的 planned 和 simplified 几何一致；T10 reference Hausdorff 为 `0.0050 m`。
+T10 的最严重三个角点 jerk 平均下降 `13.6%`，tracking RMS 和 cross-track RMS 分别改善
+`6.8%/9.6%`，但全局 reference jerk 增加 `4.9%`、cross-track max 增加 `4.2%`，且
+`60.880 s > 60.68 s`，失去相对稳定 baseline 至少 10% 的时间优势。
+
+T20 使 global scale 从 `1.10` 降到 `1.00`，但同时把 velocity scale 从 `1.00` 改选为
+`0.25`，初始 9 点 simplified trajectory 不再触发 T0 的三轮 collision refinement，最终
+simplified 点数由 18 变为 9。它相对 T0 的 reference Hausdorff 为 `0.2966 m`，reference/
+actual clearance 分别下降约 `0.0475/0.0404 m`，tracking max 增加 `30.2%`，全局
+reference jerk 增加 `12.3%`；因此它的时间和 cross-track max 改善不能作为有效收益。
+三候选全局 actual jerk max 为 `10.520/10.247/26.734 m/s³`，仅作辅助。
+
+五个重点区域的 reference jerk max（T0/T10/T20）依次为：`(3.60,1.85)`
+`6.516/4.966/7.484`，`(7.60,-1.15)` `3.474/3.356/6.059`，`(9.10,0.35)`
+`3.917/3.694/0.559`，`(9.85,0.60)` `4.770/4.352/0.540`，`(10.60,1.35)`
+`4.871/4.649/1.344 m/s³`。T20 后三处的大幅下降来自 simplified 几何改变，不能归因于
+同一路径的局部时间优化。每处的速度、加速度、actual jerk、tracking、cross-track 和
+reference/actual clearance 明细保存在 `timing_sweep.json` 的 `local_corners`。
+
+T0/T10/T20 均 navigation success、collision=false、saturation=0、nonfinite=0；最大绝对
+roll 为 `0.0362/0.0286/0.0383 rad`，pitch 为 `0.0624/0.0638/0.0591 rad`，yaw rate 为
+`0.7644/0.7654/0.7360 rad/s`，实际水平加速度为 `0.6475/0.6700/0.6258 m/s²`。
+T20 已满足几何改变和净空退化停止条件，因此按协议未运行 T30、三目标、候选三次重复或
+人工 RViz 候选对比；没有合格候选可供人工比较。
+
+最终分类为 **C：局部 duration scale 无效，保留 T0**。T10 只是变慢且未达到动态改善
+门槛，T20 的 global-scale 跳变、velocity-scale 改选和 collision refinement 差异使实验
+不再保持相同 simplified 几何。当前证据说明仅修改相邻段 duration 不足；若继续研究拐角
+速度谷值和恢复突变，应单独进入 waypoint velocity 边界条件研究，但不得把本轮任何候选
+设为正式默认值。
+
+本轮 `colcon build --symlink-install` 通过；角度/smoothstep/segment 映射/builder 共 18 个
+定向 GTest 全通过；`tools/tests` 为 `81 passed`；`test_fast.sh` 为 322 个内部用例、
+0 errors/failures；`test_assessment.sh` 为 16 个内部用例、0 errors/failures。本轮按约定未运行
+full，也未修改 A*、simplifier、控制器、地图、正式 YAML、正式 `results/` 或 main。

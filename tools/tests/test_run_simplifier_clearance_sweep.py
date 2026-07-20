@@ -54,13 +54,14 @@ def test_segment_lengths_and_nearest_corner():
 def test_local_clearance_uses_nearest_sample_for_each_layer(tmp_path):
     path = tmp_path / "path_clearance.csv"
     path.write_text(
-        "layer,x,y,safety_clearance_m\n"
-        "planned,3.6,1.8,0.30\nplanned,9.0,9.0,0.10\n"
-        "simplified,3.7,1.85,0.25\nreference,3.5,1.85,0.20\n"
-        "actual,3.6,1.9,0.19\n")
+        "layer,arc_length_m,x,y,safety_clearance_m\n"
+        "planned,1.0,3.6,1.8,0.30\nplanned,1.5,3.8,2.0,0.28\n"
+        "planned,9.0,9.0,9.0,0.10\n"
+        "simplified,1.0,3.7,1.85,0.25\nreference,1.0,3.5,1.85,0.20\n"
+        "actual,1.0,3.6,1.9,0.19\n")
     result = sweep.local_clearances(path, {"target": (3.6, 1.85)})
     assert result["target"] == {
-        "planned": 0.30, "simplified": 0.25,
+        "planned": 0.28, "simplified": 0.25,
         "reference": 0.20, "actual": 0.19,
     }
 

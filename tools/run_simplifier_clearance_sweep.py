@@ -92,12 +92,13 @@ def nearest_corner(corners, point, tolerance=0.05):
     return corner if math.dist(corner["position"][:2], point) <= tolerance else None
 
 
-def local_clearances(path, focus_points=FOCUS_POINTS):
+def local_clearances(path, focus_points=FOCUS_POINTS, window=0.60):
     rows = []
     with path.open(newline="") as handle:
         for row in csv.DictReader(handle):
             rows.append({"layer": row["layer"], "x": float(row["x"]),
                          "y": float(row["y"]),
+                         "arc": float(row["arc_length_m"]),
                          "clearance": float(row["safety_clearance_m"])})
     result = {}
     for name, point in focus_points.items():
@@ -106,7 +107,10 @@ def local_clearances(path, focus_points=FOCUS_POINTS):
             candidates = [row for row in rows if row["layer"] == layer]
             nearest = min(candidates, key=lambda row: math.dist(
                 (row["x"], row["y"]), point), default=None)
-            result[name][layer] = nearest["clearance"] if nearest else None
+            result[name][layer] = (min(
+                row["clearance"] for row in candidates
+                if abs(row["arc"] - nearest["arc"]) <= window)
+                if nearest else None)
     return result
 
 

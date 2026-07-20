@@ -138,38 +138,42 @@ RViz 人工视觉验收。
 
 完整参数、Topic、节点关系、结构审计和结果来源见 `docs/AI_CONTEXT.md`。
 
-## 历史里程碑与内部调试入口
+## 正式入口的内部依赖
 
-以下入口为回归、模块诊断和历史结果复现保留，不再与三个正式考核入口并列：
+以下 Launch 只作为三个正式入口的实现组件或内部诊断入口，不与公开入口并列：
 
 | Launch | 内部用途 |
 |---|---|
 | `simulation_core.launch.py` | 公共动力学、控制器、模型和 RViz 组件 |
 | `basic_sim.launch.py` | 仅等待 Pose 目标的基础仿真 |
 | `mission_sim.launch.py` | 离散 waypoint/YAML/Service 任务 |
-| `trajectory_sim.launch.py` | 无障碍分段五次轨迹 |
-| `environment_sim.launch.py` | 静态环境显示和碰撞监测 |
-| `planning_sim.launch.py` | 一次性 A* 原始路径 |
-| `planned_trajectory_sim.launch.py` | 路径简化与连续轨迹 |
-| `static_avoidance_sim.launch.py` | 单目标静态避障 |
-| `multi_goal_static_avoidance_sim.launch.py` | 配置驱动多目标静态避障 |
-| `interactive_goal_editor_sim.launch.py` | 只读交互预览 |
 | `interactive_goal_navigation_sim.launch.py` | 正式导航入口复用的内部完整链 |
-| `disturbance_hover_sim.launch.py` | 自动悬停与外力接口诊断 |
 | `disturbance_visual_demo.launch.py` | 正式抗扰入口复用的内部演示链 |
 
 ## 测试
 
+普通代码修改运行快速档：
+
 ```bash
-source /opt/ros/humble/setup.bash
-colcon build --symlink-install
-source install/setup.bash
-colcon test --event-handlers console_direct+
-colcon test-result --verbose
+bash scripts/test_fast.sh
 ```
 
-通过标准为 `failures=0`、`errors=0`。人工视觉验收与自动回归分开记录，不能用测试
-结果替代 RViz 操作、Marker、明显绕行和扰动箭头的人工确认。
+正式入口修改还需运行考核档：
+
+```bash
+bash scripts/test_assessment.sh
+```
+
+阶段收尾或合并 `main` 前运行完整档：
+
+```bash
+bash scripts/test_full.sh
+```
+
+执行纪律为“普通修改 → fast”“正式入口修改 → fast + assessment”“阶段收尾或合并
+`main` 前 → full”；仅修改文档不重跑完整仿真。通过标准为 `failures=0`、
+`errors=0`。人工视觉验收与自动回归分开记录，不能用测试结果替代 RViz 操作、
+Marker、明显绕行和扰动箭头的人工确认。
 
 ## References and acknowledgments
 

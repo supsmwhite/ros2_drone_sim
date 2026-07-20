@@ -523,7 +523,8 @@ def plot_results(output, layer_points, profiles, boxes, safety_radius, corners,
     fig.savefig(output / "corner_dynamics.png", dpi=160); plt.close(fig)
 
     ranked = sorted(corners, key=lambda item: (
-        item.get("minimum_four_layer_clearance_m", math.inf),
+        (item.get("actual_clearance_m") if item.get("actual_clearance_m") is not None
+         else math.inf),
         -(item.get("spatial_cross_track_max_m") or 0.0)))[:3]
     for corner in ranked:
         fig, axis = plt.subplots(figsize=(7, 7))

@@ -200,3 +200,25 @@ disturbance/release 均通过；单目标 Marker 已确认能够从 `GOAL CURREN
 | `test_fast.sh` | 30 / 313 | `0 errors, 0 failures, 0 skipped` | `24.39 s` |
 | `test_assessment.sh` | 5 / 16 | `0 errors, 0 failures, 0 skipped` | `120.90 s` |
 | `test_full.sh`（本轮唯一一次） | 34 / 326 | `0 errors, 0 failures, 0 skipped` | `136.20 s` |
+
+## 导航速度实验结论（2026-07-20）
+
+`experiment/navigation-performance` 从 `08aa10e`（与 `origin/main`、
+`assessment-stable-v1` 相同代码树）开始。实验基础设施提交 `f87fee1` 增加候选参数透传和
+`tools/run_navigation_speed_sweep.py`；后续两个小修复分别处理任务前空事件时间和区分
+navigation/full-mission 速度峰值。默认 YAML、控制器、A*、地图、安全半径和路径算法均
+未修改。所有原始扫描数据只位于 `/tmp/ros2_drone_navigation_performance/`。
+
+baseline 完整地图 `(0,0,1.5) → (13.2,5.5,1.5)` 三次均成功，任务本体时间为
+`67.440 / 67.421 / 67.401 s`，平均 `67.421 s`、总体标准差 `0.016 s`。平均 navigation
+tracking max/RMS 为 `0.0242 / 0.0081 m`，实际导航峰值 `0.5575 m/s`，最小安全净空
+`0.1502 m`。稳定三目标路线 baseline 也成功，任务时间 `54.680 s`。
+
+S1～S4 完整地图快速筛选全部成功且无碰撞、非有限值或饱和；任务时间依次为
+`67.001 / 64.625 / 62.904 / 61.808 s`，selected duration scale 依次为
+`1.10 / 1.15 / 1.20 / 1.25`，velocity scale 均为 `1.00`。最快 S4 的实际/参考峰值为
+`0.706 / 0.695 m/s`，tracking max/RMS 为 `0.0265 / 0.0096 m`，净空 `0.1500 m`，但
+相对 baseline 只缩短 `5.612 s`（`8.324%`），没有达到 `10%` 或 `10 s` 收益门槛。
+因此未进入候选三次重复，也不修改正式默认参数；最终结论为 **C：放弃本轮提速，保留
+稳定 baseline**。自动 duration scaling 是收益被压缩的主要环节，不进入控制器或路径
+净空调参阶段。

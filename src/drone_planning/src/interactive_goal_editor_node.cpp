@@ -140,6 +140,14 @@ public:
       declare_parameter<double>("max_reference_speed", 0.70);
     trajectory_parameters_.max_reference_acceleration =
       declare_parameter<double>("max_reference_acceleration", 0.35);
+    trajectory_parameters_.corner_timing_enabled =
+      declare_parameter<bool>("corner_timing_enabled", false);
+    trajectory_parameters_.corner_timing_start_angle_deg =
+      declare_parameter<double>("corner_timing_start_angle_deg", 25.0);
+    trajectory_parameters_.corner_timing_full_angle_deg =
+      declare_parameter<double>("corner_timing_full_angle_deg", 70.0);
+    trajectory_parameters_.corner_timing_max_duration_scale =
+      declare_parameter<double>("corner_timing_max_duration_scale", 1.0);
     trajectory_parameters_.velocity_scale_candidates =
       declare_parameter<std::vector<double>>(
       "velocity_scale_candidates", {1.0, 0.75, 0.5, 0.25, 0.0});

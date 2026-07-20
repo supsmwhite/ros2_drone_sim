@@ -17,6 +17,9 @@ bool finite_positive(double value)
   return std::isfinite(value) && value > 0.0;
 }
 
+constexpr double kRadiansToDegrees = 180.0 / 3.14159265358979323846;
+constexpr double kMinimumDirectionNorm = 1.0e-12;
+
 void validate_parameters(const PlannedTrajectoryParameters & parameters)
 {
   if (!finite_positive(parameters.nominal_speed) ||
@@ -24,9 +27,19 @@ void validate_parameters(const PlannedTrajectoryParameters & parameters)
     !finite_positive(parameters.validation_sample_period) ||
     !finite_positive(parameters.max_reference_speed) ||
     !finite_positive(parameters.max_reference_acceleration) ||
+    !std::isfinite(parameters.corner_timing_start_angle_deg) ||
+    !std::isfinite(parameters.corner_timing_full_angle_deg) ||
+    !std::isfinite(parameters.corner_timing_max_duration_scale) ||
     !std::isfinite(parameters.fixed_yaw))
   {
     throw std::invalid_argument("planned trajectory scalar parameters are invalid");
+  }
+  if (parameters.corner_timing_start_angle_deg < 0.0 ||
+    parameters.corner_timing_start_angle_deg >= parameters.corner_timing_full_angle_deg ||
+    parameters.corner_timing_full_angle_deg > 180.0 ||
+    parameters.corner_timing_max_duration_scale < 1.0)
+  {
+    throw std::invalid_argument("corner timing parameters are invalid");
   }
   if (parameters.velocity_scale_candidates.empty()) {
     throw std::invalid_argument("velocity scale candidates must not be empty");
@@ -175,6 +188,44 @@ std::vector<double> base_segment_durations(
   return durations;
 }
 
+struct TimingAllocation
+{
+  std::vector<double> angles_deg;
+  std::vector<double> corner_scales;
+  std::vector<double> segment_corner_scales;
+  std::vector<double> distance_durations;
+  std::vector<double> corner_adjusted_durations;
+};
+
+TimingAllocation allocate_timing(
+  const std::vector<Eigen::Vector3d> & points,
+  const PlannedTrajectoryParameters & parameters)
+{
+  TimingAllocation allocation;
+  allocation.angles_deg = turning_angles_deg(points);
+  allocation.corner_scales = corner_duration_scales(allocation.angles_deg, parameters);
+  allocation.segment_corner_scales =
+    segment_corner_duration_scales(allocation.corner_scales);
+  allocation.distance_durations = base_segment_durations(points, parameters);
+  allocation.corner_adjusted_durations = allocation.distance_durations;
+  for (std::size_t index = 0U;
+    index < allocation.corner_adjusted_durations.size(); ++index)
+  {
+    allocation.corner_adjusted_durations[index] *= allocation.segment_corner_scales[index];
+  }
+  return allocation;
+}
+
+void store_timing_diagnostics(
+  PlannedTrajectoryResult & result, const TimingAllocation & allocation)
+{
+  result.turning_angles_deg = allocation.angles_deg;
+  result.corner_duration_scales = allocation.corner_scales;
+  result.segment_corner_duration_scales = allocation.segment_corner_scales;
+  result.distance_based_segment_durations = allocation.distance_durations;
+  result.corner_adjusted_segment_durations = allocation.corner_adjusted_durations;
+}
+
 std::vector<Eigen::Vector3d> points_from_indices(
   const std::vector<Eigen::Vector3d> & raw_path,
   const std::vector<std::size_t> & indices)
@@ -226,6 +277,99 @@ bool refine_near_collision(
 
 }  // namespace
 
+double turning_angle_deg(
+  const Eigen::Vector3d & previous, const Eigen::Vector3d & current,
+  const Eigen::Vector3d & next)
+{
+  if (!previous.allFinite() || !current.allFinite() || !next.allFinite()) {
+    throw std::invalid_argument("turning angle points must be finite");
+  }
+  const Eigen::Vector3d incoming = current - previous;
+  const Eigen::Vector3d outgoing = next - current;
+  const double incoming_norm = incoming.norm();
+  const double outgoing_norm = outgoing.norm();
+  if (!std::isfinite(incoming_norm) || !std::isfinite(outgoing_norm) ||
+    incoming_norm <= kMinimumDirectionNorm || outgoing_norm <= kMinimumDirectionNorm)
+  {
+    throw std::invalid_argument("turning angle segments must have nonzero length");
+  }
+  const double dot = std::clamp(
+    incoming.dot(outgoing) / (incoming_norm * outgoing_norm), -1.0, 1.0);
+  return std::acos(dot) * kRadiansToDegrees;
+}
+
+double corner_duration_scale(
+  double angle_deg, bool enabled, double start_angle_deg,
+  double full_angle_deg, double max_duration_scale)
+{
+  if (!std::isfinite(angle_deg) || angle_deg < 0.0 || angle_deg > 180.0 ||
+    !std::isfinite(start_angle_deg) || !std::isfinite(full_angle_deg) ||
+    !std::isfinite(max_duration_scale) || start_angle_deg < 0.0 ||
+    start_angle_deg >= full_angle_deg || full_angle_deg > 180.0 ||
+    max_duration_scale < 1.0)
+  {
+    throw std::invalid_argument("corner duration scale parameters are invalid");
+  }
+  if (!enabled) {
+    return 1.0;
+  }
+  const double u = std::clamp(
+    (angle_deg - start_angle_deg) / (full_angle_deg - start_angle_deg), 0.0, 1.0);
+  const double smooth = u * u * (3.0 - 2.0 * u);
+  return 1.0 + (max_duration_scale - 1.0) * smooth;
+}
+
+std::vector<double> turning_angles_deg(const std::vector<Eigen::Vector3d> & points)
+{
+  if (points.size() < 2U) {
+    throw std::invalid_argument("turning angles require at least two points");
+  }
+  for (const auto & point : points) {
+    if (!point.allFinite()) {
+      throw std::invalid_argument("turning angle points must be finite");
+    }
+  }
+  std::vector<double> angles(points.size(), 0.0);
+  for (std::size_t index = 1U; index + 1U < points.size(); ++index) {
+    angles[index] = turning_angle_deg(points[index - 1U], points[index], points[index + 1U]);
+  }
+  return angles;
+}
+
+std::vector<double> corner_duration_scales(
+  const std::vector<double> & angles_deg, const PlannedTrajectoryParameters & parameters)
+{
+  std::vector<double> scales;
+  scales.reserve(angles_deg.size());
+  for (const double angle : angles_deg) {
+    scales.push_back(corner_duration_scale(
+        angle, parameters.corner_timing_enabled,
+        parameters.corner_timing_start_angle_deg,
+        parameters.corner_timing_full_angle_deg,
+        parameters.corner_timing_max_duration_scale));
+  }
+  return scales;
+}
+
+std::vector<double> segment_corner_duration_scales(
+  const std::vector<double> & waypoint_corner_scales)
+{
+  if (waypoint_corner_scales.size() < 2U) {
+    throw std::invalid_argument("segment corner scales require at least two waypoints");
+  }
+  std::vector<double> scales;
+  scales.reserve(waypoint_corner_scales.size() - 1U);
+  for (std::size_t index = 0U; index + 1U < waypoint_corner_scales.size(); ++index) {
+    const double left = waypoint_corner_scales[index];
+    const double right = waypoint_corner_scales[index + 1U];
+    if (!std::isfinite(left) || !std::isfinite(right) || left < 1.0 || right < 1.0) {
+      throw std::invalid_argument("waypoint corner scales must be finite and at least 1.0");
+    }
+    scales.push_back(std::max(left, right));
+  }
+  return scales;
+}
+
 PlannedTrajectoryBuilder::PlannedTrajectoryBuilder(
   CollisionChecker collision_checker, PlannedTrajectoryParameters parameters)
 : collision_checker_(std::move(collision_checker)), parameters_(std::move(parameters))
@@ -245,7 +389,7 @@ PlannedTrajectoryResult PlannedTrajectoryBuilder::build(
     refinement <= parameters_.max_refinement_iterations; ++refinement)
   {
     const auto points = points_from_indices(raw_path_world, path_indices);
-    const auto base_durations = base_segment_durations(points, parameters_);
+    const auto timing = allocate_timing(points, parameters_);
     std::vector<drone_mission::TrajectoryWaypoint> waypoints;
     waypoints.reserve(points.size());
     for (const auto & point : points) {
@@ -262,7 +406,12 @@ PlannedTrajectoryResult PlannedTrajectoryBuilder::build(
         break;
       }
       const double duration_scale = parameters_.duration_scale_candidates[duration_index];
-      std::vector<double> scaled_durations = base_durations;
+      // PiecewiseQuinticTrajectory derives each shared internal waypoint velocity from
+      // both adjacent displacement/duration pairs. Local duration changes therefore
+      // intentionally alter only timing inputs and shared derivatives, but can also
+      // alter the polynomial's segment-interior spatial curve; collision validation
+      // and refinement below must consequently remain unchanged.
+      std::vector<double> scaled_durations = timing.corner_adjusted_durations;
       for (double & duration : scaled_durations) {
         duration *= duration_scale;
       }
@@ -282,9 +431,12 @@ PlannedTrajectoryResult PlannedTrajectoryBuilder::build(
           result.success = true;
           result.simplified_path_world = points;
           result.simplified_path_raw_indices = path_indices;
+          store_timing_diagnostics(result, timing);
+          result.final_segment_durations = scaled_durations;
           result.segment_durations = std::move(scaled_durations);
           result.refinement_iterations = refinement;
           result.selected_velocity_scale = velocity_scale;
+          result.selected_global_duration_scale = duration_scale;
           result.selected_duration_scale = duration_scale;
           result.total_duration = trajectory.total_duration();
           result.failure_reason = TrajectoryFailureReason::none;
@@ -299,7 +451,9 @@ PlannedTrajectoryResult PlannedTrajectoryBuilder::build(
 
     result.simplified_path_world = points;
     result.simplified_path_raw_indices = path_indices;
-    result.segment_durations = base_durations;
+    store_timing_diagnostics(result, timing);
+    result.final_segment_durations = timing.corner_adjusted_durations;
+    result.segment_durations = timing.corner_adjusted_durations;
     result.refinement_iterations = refinement;
     if (!first_collision || refinement == parameters_.max_refinement_iterations ||
       !refine_near_collision(

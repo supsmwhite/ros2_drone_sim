@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -306,6 +307,135 @@ TEST(PlannedTrajectoryBuilder, InvalidParametersAreRejected)
   EXPECT_THROW(PlannedTrajectoryBuilder(default_checker(), parameters), std::invalid_argument);
   parameters = PlannedTrajectoryParameters{};
   parameters.max_insertions_per_refinement = 0U;
+  EXPECT_THROW(PlannedTrajectoryBuilder(default_checker(), parameters), std::invalid_argument);
+}
+
+TEST(CornerTiming, TurningAngleUsesWorldSpaceThreeDimensionalDirections)
+{
+  const Eigen::Vector3d origin = Eigen::Vector3d::Zero();
+  EXPECT_DOUBLE_EQ(turning_angle_deg({-1.0, 0.0, 0.0}, origin, {1.0, 0.0, 0.0}), 0.0);
+  EXPECT_DOUBLE_EQ(turning_angle_deg({-1.0, 0.0, 0.0}, origin, {0.0, 1.0, 0.0}), 90.0);
+  EXPECT_NEAR(
+    turning_angle_deg({-1.0, 0.0, 0.0}, origin, {1.0, 1.0, 0.0}), 45.0, 1.0e-12);
+  EXPECT_NEAR(
+    turning_angle_deg({-1.0, 0.0, 0.0}, origin, {1.0, 1.0e-9, 0.0}), 0.0, 1.0e-6);
+  EXPECT_NEAR(
+    turning_angle_deg({-1.0, 0.0, 0.0}, origin, {-1.0, 1.0e-9, 0.0}), 180.0,
+    1.0e-6);
+  EXPECT_DOUBLE_EQ(
+    turning_angle_deg({0.0, 0.0, -1.0}, origin, {0.0, 1.0, 0.0}), 90.0);
+}
+
+TEST(CornerTiming, TurningAngleRejectsDegenerateAndNonfiniteInputs)
+{
+  const Eigen::Vector3d origin = Eigen::Vector3d::Zero();
+  EXPECT_THROW(turning_angle_deg(origin, origin, {1.0, 0.0, 0.0}), std::invalid_argument);
+  EXPECT_THROW(
+    turning_angle_deg({-1.0e-14, 0.0, 0.0}, origin, {1.0, 0.0, 0.0}),
+    std::invalid_argument);
+  EXPECT_THROW(
+    turning_angle_deg(
+      {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0}, origin,
+      {1.0, 0.0, 0.0}),
+    std::invalid_argument);
+}
+
+TEST(CornerTiming, SmoothstepScaleIsContinuousBoundedAndMonotonic)
+{
+  EXPECT_DOUBLE_EQ(corner_duration_scale(10.0, true, 25.0, 70.0, 1.2), 1.0);
+  EXPECT_DOUBLE_EQ(corner_duration_scale(25.0, true, 25.0, 70.0, 1.2), 1.0);
+  EXPECT_DOUBLE_EQ(corner_duration_scale(47.5, true, 25.0, 70.0, 1.2), 1.1);
+  EXPECT_DOUBLE_EQ(corner_duration_scale(70.0, true, 25.0, 70.0, 1.2), 1.2);
+  EXPECT_DOUBLE_EQ(corner_duration_scale(100.0, true, 25.0, 70.0, 1.2), 1.2);
+  EXPECT_DOUBLE_EQ(corner_duration_scale(90.0, false, 25.0, 70.0, 1.3), 1.0);
+  double previous = 1.0;
+  for (double angle = 0.0; angle <= 180.0; angle += 0.25) {
+    const double scale = corner_duration_scale(angle, true, 25.0, 70.0, 1.3);
+    EXPECT_GE(scale, previous);
+    previous = scale;
+  }
+}
+
+TEST(CornerTiming, SmoothstepScaleRejectsInvalidConfiguration)
+{
+  EXPECT_THROW(corner_duration_scale(45.0, true, 70.0, 25.0, 1.2), std::invalid_argument);
+  EXPECT_THROW(corner_duration_scale(45.0, true, 25.0, 25.0, 1.2), std::invalid_argument);
+  EXPECT_THROW(corner_duration_scale(45.0, true, -1.0, 70.0, 1.2), std::invalid_argument);
+  EXPECT_THROW(corner_duration_scale(45.0, true, 25.0, 181.0, 1.2), std::invalid_argument);
+  EXPECT_THROW(corner_duration_scale(45.0, true, 25.0, 70.0, 0.9), std::invalid_argument);
+}
+
+TEST(CornerTiming, SegmentMappingUsesMaximumEndpointScale)
+{
+  EXPECT_EQ(segment_corner_duration_scales({1.0, 1.0, 1.0}),
+    (std::vector<double>{1.0, 1.0}));
+  EXPECT_EQ(segment_corner_duration_scales({1.0, 1.2, 1.0}),
+    (std::vector<double>{1.2, 1.2}));
+  EXPECT_EQ(segment_corner_duration_scales({1.0, 1.1, 1.3, 1.0}),
+    (std::vector<double>{1.1, 1.3, 1.3}));
+  const auto shared = segment_corner_duration_scales({1.0, 1.3, 1.3, 1.0});
+  ASSERT_EQ(shared.size(), 3U);
+  EXPECT_DOUBLE_EQ(shared[1], 1.3);
+  EXPECT_NE(shared[1], 1.3 * 1.3);
+}
+
+TEST(CornerTiming, DisabledBuilderPreservesDistanceDurationsExactly)
+{
+  const auto checker = default_checker();
+  PlannedTrajectoryParameters parameters;
+  const auto result = PlannedTrajectoryBuilder(checker, parameters).build(
+    historical_compatibility_raw_path());
+  ASSERT_TRUE(result.success);
+  ASSERT_EQ(result.distance_based_segment_durations.size(), result.segment_durations.size());
+  EXPECT_EQ(result.corner_adjusted_segment_durations, result.distance_based_segment_durations);
+  EXPECT_EQ(result.final_segment_durations, result.segment_durations);
+  EXPECT_TRUE(std::all_of(
+    result.segment_corner_duration_scales.begin(),
+    result.segment_corner_duration_scales.end(),
+    [](double scale) {return scale == 1.0;}));
+}
+
+TEST(CornerTiming, EnabledBuilderChangesOnlyTimingInputsAndKeepsValidEndpoints)
+{
+  const auto checker = default_checker();
+  const auto raw_path = historical_compatibility_raw_path();
+  PlannedTrajectoryParameters disabled;
+  disabled.max_reference_speed = 5.0;
+  disabled.max_reference_acceleration = 5.0;
+  disabled.velocity_scale_candidates = {0.0};
+  disabled.duration_scale_candidates = {1.0};
+  auto enabled = disabled;
+  enabled.corner_timing_enabled = true;
+  enabled.corner_timing_start_angle_deg = 0.0;
+  enabled.corner_timing_full_angle_deg = 1.0;
+  enabled.corner_timing_max_duration_scale = 1.2;
+  const auto before = PlannedTrajectoryBuilder(checker, disabled).build(raw_path);
+  const auto after = PlannedTrajectoryBuilder(checker, enabled).build(raw_path);
+  ASSERT_TRUE(before.success);
+  ASSERT_TRUE(after.success);
+  EXPECT_EQ(before.simplified_path_raw_indices, after.simplified_path_raw_indices);
+  ASSERT_EQ(before.simplified_path_world.size(), after.simplified_path_world.size());
+  for (std::size_t index = 0U; index < before.simplified_path_world.size(); ++index) {
+    EXPECT_TRUE(before.simplified_path_world[index].isApprox(
+      after.simplified_path_world[index], 0.0));
+  }
+  EXPECT_EQ(before.distance_based_segment_durations, after.distance_based_segment_durations);
+  EXPECT_NE(before.final_segment_durations, after.final_segment_durations);
+  EXPECT_DOUBLE_EQ(after.selected_global_duration_scale, 1.0);
+  EXPECT_TRUE(after.trajectory->sample(0.0).position_world.isApprox(raw_path.front(), 0.0));
+  EXPECT_TRUE(after.trajectory->sample(after.total_duration).position_world.isApprox(
+    raw_path.back(), 0.0));
+  expect_valid_result(checker, enabled, raw_path, after);
+}
+
+TEST(CornerTiming, BuilderRejectsInvalidCornerParameters)
+{
+  PlannedTrajectoryParameters parameters;
+  parameters.corner_timing_start_angle_deg = 70.0;
+  parameters.corner_timing_full_angle_deg = 70.0;
+  EXPECT_THROW(PlannedTrajectoryBuilder(default_checker(), parameters), std::invalid_argument);
+  parameters = PlannedTrajectoryParameters{};
+  parameters.corner_timing_max_duration_scale = 0.99;
   EXPECT_THROW(PlannedTrajectoryBuilder(default_checker(), parameters), std::invalid_argument);
 }
 

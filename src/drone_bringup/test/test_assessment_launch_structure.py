@@ -97,6 +97,10 @@ def test_navigation_public_defaults_and_forwarded_arguments():
         'nominal_speed': '0.35',
         'max_reference_speed': '0.70',
         'max_reference_acceleration': '0.35',
+        'corner_timing_enabled': 'false',
+        'corner_timing_start_angle_deg': '25.0',
+        'corner_timing_full_angle_deg': '70.0',
+        'corner_timing_max_duration_scale': '1.0',
     }
     includes = [
         action for action in description.entities
@@ -126,6 +130,24 @@ def test_internal_navigation_uses_one_environment_yaml_for_all_consumers():
     assert len(environment_consumers) == 3
     assert len(set(environment_consumers)) == 1
     assert Path(environment_consumers[0]).is_file()
+
+
+def test_internal_navigation_forwards_corner_timing_to_preview_and_execution():
+    _, description = _load_launch('interactive_goal_navigation_sim.launch.py')
+    expected = {
+        'corner_timing_enabled', 'corner_timing_start_angle_deg',
+        'corner_timing_full_angle_deg', 'corner_timing_max_duration_scale',
+    }
+    consumers = []
+    context = LaunchContext()
+    for action in description.entities:
+        if not isinstance(action, Node) or action._Node__node_name not in {
+                'interactive_goal_editor_node', 'multi_goal_static_avoidance_node'}:
+            continue
+        overrides = action._Node__parameters[-1]
+        consumers.append({perform_substitutions(context, name) for name in overrides})
+    assert len(consumers) == 2
+    assert all(expected <= parameters for parameters in consumers)
 
 
 def test_disturbance_public_default_and_profiles():

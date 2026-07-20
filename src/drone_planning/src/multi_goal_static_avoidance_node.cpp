@@ -202,6 +202,14 @@ public:
       declare_parameter<double>("max_reference_speed", 0.70);
     trajectory_parameters_.max_reference_acceleration =
       declare_parameter<double>("max_reference_acceleration", 0.35);
+    trajectory_parameters_.corner_timing_enabled =
+      declare_parameter<bool>("corner_timing_enabled", false);
+    trajectory_parameters_.corner_timing_start_angle_deg =
+      declare_parameter<double>("corner_timing_start_angle_deg", 25.0);
+    trajectory_parameters_.corner_timing_full_angle_deg =
+      declare_parameter<double>("corner_timing_full_angle_deg", 70.0);
+    trajectory_parameters_.corner_timing_max_duration_scale =
+      declare_parameter<double>("corner_timing_max_duration_scale", 1.0);
     trajectory_parameters_.velocity_scale_candidates =
       declare_parameter<std::vector<double>>(
       "velocity_scale_candidates", {1.0, 0.75, 0.5, 0.25, 0.0});
@@ -816,7 +824,9 @@ private:
       "initial_simplified_points=%zu refinements=%zu duration=%.3f s "
       "velocity_scale=%.2f duration_scale=%.2f max_speed=%.6f m/s "
       "max_acceleration=%.6f m/s^2 raw_length=%.6f m simplified_length=%.6f m "
-      "expanded_nodes=%zu",
+      "expanded_nodes=%zu corner_timing_enabled=%s maximum_turn_angle_deg=%.6f "
+      "maximum_corner_duration_scale=%.6f corner_adjusted_segment_count=%zu "
+      "maximum_segment_corner_scale=%.6f global_duration_scale=%.2f",
       current_goal_index_, plan.astar_result.path_world.size(),
       plan.trajectory_result.simplified_path_world.size(),
       plan.trajectory_result.initial_simplified_point_count,
@@ -827,7 +837,40 @@ private:
       plan.trajectory_result.max_reference_acceleration,
       path_length(plan.astar_result.path_world),
       path_length(plan.trajectory_result.simplified_path_world),
-      plan.astar_result.expanded_nodes);
+      plan.astar_result.expanded_nodes,
+      trajectory_parameters_.corner_timing_enabled ? "true" : "false",
+      *std::max_element(
+        plan.trajectory_result.turning_angles_deg.begin(),
+        plan.trajectory_result.turning_angles_deg.end()),
+      *std::max_element(
+        plan.trajectory_result.corner_duration_scales.begin(),
+        plan.trajectory_result.corner_duration_scales.end()),
+      static_cast<std::size_t>(std::count_if(
+        plan.trajectory_result.segment_corner_duration_scales.begin(),
+        plan.trajectory_result.segment_corner_duration_scales.end(),
+        [](double scale) {return scale > 1.0;})),
+      *std::max_element(
+        plan.trajectory_result.segment_corner_duration_scales.begin(),
+        plan.trajectory_result.segment_corner_duration_scales.end()),
+      plan.trajectory_result.selected_global_duration_scale);
+
+    for (std::size_t segment = 0U;
+      segment < plan.trajectory_result.final_segment_durations.size(); ++segment)
+    {
+      const auto & points = plan.trajectory_result.simplified_path_world;
+      RCLCPP_INFO(
+        get_logger(),
+        "trajectory timing segment: goal=%zu segment_index=%zu segment_length=%.6f "
+        "start_corner_angle=%.6f end_corner_angle=%.6f corner_scale=%.6f "
+        "base_duration=%.6f corner_adjusted_duration=%.6f final_duration=%.6f",
+        current_goal_index_, segment, (points[segment + 1U] - points[segment]).norm(),
+        plan.trajectory_result.turning_angles_deg[segment],
+        plan.trajectory_result.turning_angles_deg[segment + 1U],
+        plan.trajectory_result.segment_corner_duration_scales[segment],
+        plan.trajectory_result.distance_based_segment_durations[segment],
+        plan.trajectory_result.corner_adjusted_segment_durations[segment],
+        plan.trajectory_result.final_segment_durations[segment]);
+    }
   }
 
   void update()

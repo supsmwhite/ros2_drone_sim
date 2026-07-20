@@ -43,6 +43,16 @@ if(BUILD_TESTING)
   )
 
   add_launch_test(
+    test/test_assessment_basic_single_e2e.py
+    TIMEOUT 90
+  )
+
+  add_launch_test(
+    test/test_assessment_basic_multi_e2e.py
+    TIMEOUT 110
+  )
+
+  add_launch_test(
     test/test_waypoint_mission_e2e.py
     TIMEOUT 120
   )
@@ -93,6 +103,11 @@ if(BUILD_TESTING)
   )
 
   add_launch_test(
+    test/test_assessment_navigation_narrow_passage_e2e.py
+    TIMEOUT 110
+  )
+
+  add_launch_test(
     test/test_interactive_preflight_failure.py
     TIMEOUT 40
   )
@@ -115,6 +130,11 @@ if(BUILD_TESTING)
   add_launch_test(
     test/test_disturbance_visual_launch.py
     TIMEOUT 30
+  )
+
+  add_launch_test(
+    test/test_assessment_disturbance_launch.py
+    TIMEOUT 40
   )
 endif()
 

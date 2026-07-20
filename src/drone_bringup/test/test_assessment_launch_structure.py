@@ -4,6 +4,8 @@ from pathlib import Path
 
 from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
 
 
 LAUNCH = Path(__file__).resolve().parents[1] / 'launch'
@@ -72,6 +74,58 @@ def test_navigation_public_defaults_and_supported_scenarios():
     assert defaults['yaw_mode'] == 'path_tangent'
     assert module.SUPPORTED_SCENARIOS == ('obstacle_field', 'narrow_passage')
     assert sum(isinstance(action, OpaqueFunction) for action in description.entities) == 1
+
+
+def test_navigation_scenarios_resolve_to_distinct_existing_configs():
+    module, _ = _load_launch('assessment_navigation_sim.launch.py')
+    obstacle_field = Path(module.resolve_scenario_config(
+        'obstacle_field', str(LAUNCH.parent)))
+    narrow_passage = Path(module.resolve_scenario_config(
+        'narrow_passage', str(LAUNCH.parent)))
+    assert obstacle_field.name == 'environment.yaml'
+    assert narrow_passage.name == 'environment_narrow_passage.yaml'
+    assert obstacle_field != narrow_passage
+    assert obstacle_field.is_file()
+    assert narrow_passage.is_file()
+    try:
+        module.resolve_scenario_config('unknown', str(LAUNCH.parent))
+    except ValueError as error:
+        assert 'Unsupported assessment scenario' in str(error)
+    else:
+        raise AssertionError('unknown assessment scenario was accepted')
+
+
+def test_navigation_forwards_resolved_environment_config_to_internal_launch():
+    module, _ = _load_launch('assessment_navigation_sim.launch.py')
+    context = LaunchContext()
+    context.launch_configurations.update({
+        'scenario': 'narrow_passage',
+        'yaw_mode': 'path_tangent',
+        'use_rviz': 'false',
+    })
+    include = module._include_navigation(context)[0]
+    arguments = dict(include.launch_arguments)
+    assert Path(arguments['environment_config']).name == (
+        'environment_narrow_passage.yaml')
+    assert isinstance(arguments['yaw_mode'], LaunchConfiguration)
+
+
+def test_internal_navigation_uses_one_environment_config_for_all_consumers():
+    _, description = _load_launch('interactive_goal_navigation_sim.launch.py')
+    context = LaunchContext()
+    context.launch_configurations['environment_config'] = '/tmp/shared_environment.yaml'
+    environment_consumers = []
+    for action in description.entities:
+        if not isinstance(action, Node):
+            continue
+        parameters = action._Node__parameters
+        if parameters:
+            parameter_path = parameters[0]._ParameterFile__param_file
+            if parameter_path and isinstance(parameter_path[0], LaunchConfiguration):
+                environment_consumers.append(parameter_path[0].perform(context))
+    assert environment_consumers == [
+        '/tmp/shared_environment.yaml', '/tmp/shared_environment.yaml',
+        '/tmp/shared_environment.yaml']
 
 
 def test_disturbance_public_default_and_profiles():

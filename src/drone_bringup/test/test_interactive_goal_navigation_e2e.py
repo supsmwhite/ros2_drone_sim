@@ -46,8 +46,10 @@ def generate_test_description():
     bringup = get_package_share_directory('drone_bringup')
     simulation = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
-            bringup, 'launch', 'interactive_goal_navigation_sim.launch.py')),
-        launch_arguments={'use_rviz': 'false', 'yaw_mode': 'path_tangent'}.items(),
+            bringup, 'launch', 'assessment_navigation_sim.launch.py')),
+        launch_arguments={
+            'use_rviz': 'false', 'scenario': 'obstacle_field',
+            'yaw_mode': 'path_tangent'}.items(),
     )
     return launch.LaunchDescription([
         simulation,

@@ -69,6 +69,12 @@ def parse_simplifier_diagnostics(text):
             for match in DIAGNOSTIC_RE.finditer(text)]
 
 
+def service_accepted(text, returncode):
+    normalized = text.replace(" ", "").lower()
+    return returncode == 0 and (
+        "accepted:true" in normalized or "accepted=true" in normalized)
+
+
 def combined_segment_lengths(paths):
     lengths = []
     for segment in sorted(paths.get("simplified_segments", []),
@@ -220,8 +226,7 @@ def run_once(args):
             speed_sweep.request_yaml(args.route),
         ]), cwd=ROOT, env=env, text=True, capture_output=True, timeout=45)
         (run_dir / "service.log").write_text(service.stdout + service.stderr)
-        accepted = service.returncode == 0 and "accepted:true" in (
-            service.stdout.replace(" ", "").lower())
+        accepted = service_accepted(service.stdout, service.returncode)
         if not accepted:
             speed_sweep.terminate(recorder)
         else:
@@ -274,7 +279,8 @@ def summarize(output):
     output.mkdir(parents=True, exist_ok=True)
     rows = read_summaries(output)
     baseline = next((row for row in rows if row["candidate"] == "s0" and
-                     row["route"] == "full_map" and row["run"] == 1), None)
+                     row["route"] == "full_map" and row["run"] == 1 and
+                     row.get("simplified_points") is not None), None)
     for row in rows:
         row["selection"] = ""
         if baseline and row["route"] == "full_map":

@@ -34,6 +34,12 @@ def test_parse_simplifier_diagnostics_is_backward_compatible():
     }]
 
 
+@pytest.mark.parametrize("response", ["accepted: true", "accepted=True"])
+def test_service_acceptance_handles_ros_output_variants(response):
+    assert sweep.service_accepted(response, 0)
+    assert not sweep.service_accepted(response, 1)
+
+
 def test_segment_lengths_and_nearest_corner():
     paths = {"simplified_segments": [
         {"sequence": 1, "points": [[1, 1, 0], [1, 4, 0]]},

@@ -149,8 +149,49 @@ def nearest_point_on_polyline(point, polyline):
 
 
 def cross_track_errors(actual_points, reference_points):
-    return [nearest_point_on_polyline(point, reference_points)[0]
-            for point in finite_points(actual_points)]
+    return [item[0] for item in project_points_on_polyline(
+        finite_points(actual_points), reference_points)]
+
+
+def project_points_on_polyline(points, polyline, chunk_size=256):
+    """Project many points exactly, using bounded NumPy chunks when available."""
+    points = finite_points(points)
+    polyline = finite_points(polyline)
+    if not points:
+        return []
+    if len(polyline) < 2:
+        return [nearest_point_on_polyline(point, polyline) for point in points]
+    try:
+        import numpy as np
+    except ImportError:
+        return [nearest_point_on_polyline(point, polyline) for point in points]
+    reference = np.asarray(polyline, dtype=float)
+    starts = reference[:-1]
+    deltas = reference[1:] - starts
+    length_squared = np.einsum("ij,ij->i", deltas, deltas)
+    lengths = np.sqrt(length_squared)
+    segment_arcs = np.concatenate(([0.0], np.cumsum(lengths[:-1])))
+    safe_length_squared = np.where(length_squared > 1e-24, length_squared, 1.0)
+    output = []
+    for offset in range(0, len(points), chunk_size):
+        batch = np.asarray(points[offset:offset + chunk_size], dtype=float)
+        differences = batch[:, None, :] - starts[None, :, :]
+        ratios = np.clip(np.einsum("bsi,si->bs", differences, deltas) /
+                         safe_length_squared[None, :], 0.0, 1.0)
+        ratios[:, length_squared <= 1e-24] = 0.0
+        nearest = starts[None, :, :] + ratios[:, :, None] * deltas[None, :, :]
+        residual = batch[:, None, :] - nearest
+        distance_squared = np.einsum("bsi,bsi->bs", residual, residual)
+        best_segments = np.argmin(distance_squared, axis=1)
+        for row, segment in enumerate(best_segments):
+            segment = int(segment)
+            ratio = float(ratios[row, segment])
+            nearest_point = nearest[row, segment].tolist()
+            output.append((math.sqrt(float(distance_squared[row, segment])),
+                           nearest_point,
+                           float(segment_arcs[segment] + ratio * lengths[segment]),
+                           segment))
+    return output
 
 
 def clearance_profile(points, boxes, safety_radius, step=0.02):
@@ -496,15 +537,12 @@ def analyze(run, environment, astar, trajectory, output=None, step=0.02,
     reference_points_at_time = [[finite_csv_value(row, name) for name in
                                  ("reference_x", "reference_y", "reference_z")]
                                 for row in samples]
-    cross_track = [None] * len(samples)
-    for sample_index, point in zip(valid_sample_indices, layer_points["actual"]):
-        cross_track[sample_index] = nearest_point_on_polyline(
-            point, layer_points["reference"])[0]
-    actual_arcs = [nearest_point_on_polyline(point, layer_points["reference"])[2]
-                   if point is not None else None
-                   for point in [([float(value) for value in row] if
-                                  all(value is not None for value in row) else None)
-                                 for row in actual_rows]]
+    cross_track = [None] * len(samples); actual_arcs = [None] * len(samples)
+    projections = project_points_on_polyline(
+        layer_points["actual"], layer_points["reference"])
+    for sample_index, projection in zip(valid_sample_indices, projections):
+        cross_track[sample_index] = projection[0]
+        actual_arcs[sample_index] = projection[2]
     temporal = [finite_csv_value(row, "tracking_error") for row in samples]
     actual_yaw_rate = [abs(finite_csv_value(row, "angular_speed_z"))
                        if finite_csv_value(row, "angular_speed_z") is not None else None for row in samples]
@@ -529,9 +567,11 @@ def analyze(run, environment, astar, trajectory, output=None, step=0.02,
             _, _, center_arc, _ = nearest_point_on_polyline(corner["position"], layer_points[layer])
             value = local_profile_min(profiles[layer], center_arc, corner_window)
             corner[layer + "_clearance_m"] = value; layer_clearances.append(value)
+        reference_corner_arc = nearest_point_on_polyline(
+            corner["position"], layer_points["reference"])[2]
         indices = [index for index, arc in enumerate(actual_arcs)
-                   if finite_number(arc) and abs(arc - nearest_point_on_polyline(
-                       corner["position"], layer_points["reference"])[2]) <= corner_window]
+                   if finite_number(arc) and
+                   abs(arc - reference_corner_arc) <= corner_window]
         def selected(values): return [values[index] for index in indices if index < len(values)]
         corner.update({
             "reference_max_speed_m_s": max_or_none(selected([vector_norm(value) for value in reference_velocity])),

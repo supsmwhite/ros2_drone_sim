@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from analyze_navigation_geometry import (  # noqa: E402
     clearance_losses, clearance_profile, cross_track_errors, derivative,
     finite_points, identify_corners, nearest_point_on_polyline,
-    point_aabb_distance, resample_polyline, turning_angle_degrees,
+    point_aabb_distance, project_points_on_polyline, resample_polyline, turning_angle_degrees,
     unwrap_angles)
 
 
@@ -50,6 +50,10 @@ def test_polyline_nearest_point_and_cross_track_error():
     assert point == [1.0, 0.0, 0.0]
     assert arc == 1.0 and segment == 0
     assert cross_track_errors([[1, 1, 0]], [[0, 0, 0], [2, 0, 0]]) == [1.0]
+    projection = project_points_on_polyline(
+        [[1, 1, 0], [3, 0, 0]], [[0, 0, 0], [2, 0, 0]])
+    assert projection[0] == (1.0, [1.0, 0.0, 0.0], 1.0, 0)
+    assert projection[1] == (1.0, [2.0, 0.0, 0.0], 2.0, 0)
 
 
 def test_planned_to_simplified_clearance_loss():

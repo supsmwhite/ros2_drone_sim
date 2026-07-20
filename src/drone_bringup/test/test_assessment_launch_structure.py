@@ -2,6 +2,7 @@ import ast
 import importlib.util
 from pathlib import Path
 
+import yaml
 from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.substitutions import LaunchConfiguration
@@ -42,6 +43,23 @@ def _declared_defaults(description):
         action.name: ''.join(value.perform(context) for value in action.default_value)
         for action in description.entities
         if isinstance(action, DeclareLaunchArgument)
+    }
+
+
+def _node_launch_configuration_overrides(description, node_name):
+    context = LaunchContext()
+    nodes = [
+        action for action in description.entities
+        if isinstance(action, Node) and action._Node__node_name == node_name
+    ]
+    assert len(nodes) == 1
+    overrides = nodes[0]._Node__parameters[-1]
+    return {
+        perform_substitutions(context, key): perform_substitutions(
+            context, value[0].variable_name)
+        for key, value in overrides.items()
+        if isinstance(value, tuple) and len(value) == 1 and
+        isinstance(value[0], LaunchConfiguration)
     }
 
 
@@ -91,7 +109,13 @@ def test_basic_waits_for_runtime_single_or_multi_input():
 def test_navigation_public_defaults_and_forwarded_arguments():
     _, description = _load_launch('assessment_navigation_sim.launch.py')
     defaults = _declared_defaults(description)
-    assert defaults == {'yaw_mode': 'path_tangent', 'use_rviz': 'true'}
+    assert defaults == {
+        'yaw_mode': 'path_tangent',
+        'use_rviz': 'true',
+        'nominal_speed': '0.50',
+        'max_reference_speed': '0.90',
+        'max_reference_acceleration': '0.60',
+    }
     includes = [
         action for action in description.entities
         if isinstance(action, IncludeLaunchDescription)
@@ -99,9 +123,47 @@ def test_navigation_public_defaults_and_forwarded_arguments():
     assert len(includes) == 1
     include = includes[0]
     arguments = dict(include.launch_arguments)
-    assert set(arguments) == {'use_rviz', 'yaw_mode'}
-    assert isinstance(arguments['use_rviz'], LaunchConfiguration)
-    assert isinstance(arguments['yaw_mode'], LaunchConfiguration)
+    assert set(arguments) == set(defaults)
+    for name, argument in arguments.items():
+        assert isinstance(argument, LaunchConfiguration)
+        assert perform_substitutions(LaunchContext(), argument.variable_name) == name
+
+
+def test_internal_navigation_speed_defaults_and_node_overrides_match():
+    _, description = _load_launch('interactive_goal_navigation_sim.launch.py')
+    defaults = _declared_defaults(description)
+    expected_defaults = {
+        'nominal_speed': '0.50',
+        'max_reference_speed': '0.90',
+        'max_reference_acceleration': '0.60',
+    }
+    assert {key: defaults[key] for key in expected_defaults} == expected_defaults
+
+    expected_overrides = {key: key for key in expected_defaults}
+    assert _node_launch_configuration_overrides(
+        description, 'interactive_goal_editor_node') == expected_overrides
+    executor_overrides = _node_launch_configuration_overrides(
+        description, 'multi_goal_static_avoidance_node')
+    assert {
+        key: executor_overrides[key] for key in expected_overrides
+    } == expected_overrides
+
+
+def test_formal_navigation_yaml_and_snapshot_use_a2_defaults():
+    expected = {
+        'nominal_speed': 0.50,
+        'max_reference_speed': 0.90,
+        'max_reference_acceleration': 0.60,
+    }
+    repository = LAUNCH.parents[2]
+    paths = [
+        LAUNCH.parent / 'config' / 'planned_trajectory.yaml',
+        repository / 'results' / 'parameters' / 'planned_trajectory.yaml',
+    ]
+    for path in paths:
+        data = yaml.safe_load(path.read_text(encoding='utf-8'))
+        parameters = next(iter(data.values()))['ros__parameters']
+        assert {key: parameters[key] for key in expected} == expected
 
 
 def test_internal_navigation_uses_one_environment_yaml_for_all_consumers():

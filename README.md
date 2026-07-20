@@ -74,6 +74,24 @@ RViz 目标位置与 yaw
 `yaw_mode:=path_tangent|fixed`（默认 `path_tangent`）和 `use_rviz:=true|false`
 （默认 `true`）。
 
+正式导航默认采用经过完整地图三次重复验证的 A2 参数：
+
+```yaml
+nominal_speed: 0.50
+max_reference_speed: 0.90
+max_reference_acceleration: 0.60
+```
+
+三次任务均成功，平均任务时间约 `58.04 s`，相比旧保守参数约提升 `13.9%`；未发生
+碰撞、控制饱和或非有限值，最小安全净空基本不变。需要临时恢复旧保守参数时可使用：
+
+```bash
+ros2 launch drone_bringup assessment_navigation_sim.launch.py \
+  nominal_speed:=0.35 \
+  max_reference_speed:=0.70 \
+  max_reference_acceleration:=0.35
+```
+
 ### 3. 抗扰加分演示
 
 ```bash

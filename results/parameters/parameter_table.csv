@@ -26,9 +26,9 @@ controller,max_tilt_angle,0.15,rad,controller.yaml,Maximum requested tilt angle
 environment,safety_radius,0.25,m,environment.yaml,Vehicle collision safety radius
 planning,planning_margin,0.10,m,astar.yaml,Additional planning inflation margin
 planning,resolution,0.25,m,src/drone_planning/src/multi_goal_static_avoidance_node.cpp,A-star grid resolution default used by the formal navigation node
-trajectory,nominal_speed,0.35,m/s,planned_trajectory.yaml,Nominal reference speed
-trajectory,max_reference_speed,0.70,m/s,planned_trajectory.yaml,Reference speed limit
-trajectory,max_reference_acceleration,0.35,m/s^2,planned_trajectory.yaml,Reference acceleration limit
+trajectory,nominal_speed,0.50,m/s,planned_trajectory.yaml,Nominal reference speed
+trajectory,max_reference_speed,0.90,m/s,planned_trajectory.yaml,Reference speed limit
+trajectory,max_reference_acceleration,0.60,m/s^2,planned_trajectory.yaml,Reference acceleration limit
 trajectory,max_yaw_rate,0.80,rad/s,planned_trajectory.yaml,Yaw reference rate limit
 basic_mission_gate,position_tolerance,0.20,m,mission.yaml,ROS basic mission completion position threshold
 basic_mission_gate,linear_speed_tolerance,0.15,m/s,mission.yaml,ROS basic mission completion speed threshold

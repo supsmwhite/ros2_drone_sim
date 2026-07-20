@@ -24,6 +24,9 @@ def generate_launch_description():
         DeclareLaunchArgument('terminal_blend_distance', default_value='0.80'),
         DeclareLaunchArgument('yaw_filter_time_constant', default_value='0.30'),
         DeclareLaunchArgument('max_yaw_rate', default_value='0.80'),
+        DeclareLaunchArgument('nominal_speed', default_value='0.50'),
+        DeclareLaunchArgument('max_reference_speed', default_value='0.90'),
+        DeclareLaunchArgument('max_reference_acceleration', default_value='0.60'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(core), launch_arguments={
                 'use_rviz': LaunchConfiguration('use_rviz'),
@@ -32,7 +35,12 @@ def generate_launch_description():
              name='static_environment_node', output='screen', parameters=[environment]),
         Node(package='drone_planning', executable='interactive_goal_editor_node',
              name='interactive_goal_editor_node', output='screen', parameters=[
-                 environment, astar, trajectory, editor, {'execution_enabled': True}]),
+                 environment, astar, trajectory, editor,
+                 {'execution_enabled': True,
+                  'nominal_speed': LaunchConfiguration('nominal_speed'),
+                  'max_reference_speed': LaunchConfiguration('max_reference_speed'),
+                  'max_reference_acceleration': LaunchConfiguration(
+                      'max_reference_acceleration')}]),
         Node(package='drone_planning', executable='multi_goal_static_avoidance_node',
              name='multi_goal_static_avoidance_node', output='screen',
              parameters=[environment, astar, trajectory, executor,
@@ -44,5 +52,10 @@ def generate_launch_description():
                               'terminal_blend_distance'),
                           'yaw_filter_time_constant': LaunchConfiguration(
                               'yaw_filter_time_constant'),
-                          'max_yaw_rate': LaunchConfiguration('max_yaw_rate')}]),
+                          'max_yaw_rate': LaunchConfiguration('max_yaw_rate'),
+                          'nominal_speed': LaunchConfiguration('nominal_speed'),
+                          'max_reference_speed': LaunchConfiguration(
+                              'max_reference_speed'),
+                          'max_reference_acceleration': LaunchConfiguration(
+                              'max_reference_acceleration')}]),
     ])

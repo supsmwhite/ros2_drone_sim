@@ -193,6 +193,21 @@ disturbance/release 均通过；单目标 Marker 已确认能够从 `GOAL CURREN
 `GOAL DONE`。导航速度与路径净空属于后续 `experiment/navigation-performance` 分支的
 性能探索，不是当前稳定基线的阻塞问题。
 
+## 正式采用 A2 导航参数
+
+本次 `perf/adopt-navigation-a2` 从 `experiment/navigation-performance` 的验证结论中
+只迁移正式产品所需的三个速度默认值和 Launch 透传，不合并实验工具或诊断字段，也不
+修改轨迹算法。正式参数为 `nominal_speed=0.50`、`max_reference_speed=0.90`、
+`max_reference_acceleration=0.60`；预览、预检和正式执行共用这组参数，并保留命令行
+恢复旧保守参数 `0.35/0.70/0.35` 的能力。
+
+旧保守 baseline 完整地图平均任务时间约 `67.421 s`；A2 实验为
+`58.021 / 58.041 / 58.061 s`，平均约 `58.041 s`，3/3 成功，相对缩短约
+`9.360 s`（`13.887%`）。三次均无碰撞、控制饱和或非有限值，最小安全净空基本不变
+（约 `0.1502 m`），tracking max/RMS 均在安全范围；略增的拐角 tracking、cross-track
+和姿态响应已通过人工验收。A3 虽更快，但控制反馈余量更小，未采用；simplifier
+clearance preference（S）和 corner timing（T）实验也未进入正式主线。
+
 本轮分级回归记录：
 
 | 档位 | CTest / 内部用例 | 结果 | 总耗时 |

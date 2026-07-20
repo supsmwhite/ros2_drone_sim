@@ -39,6 +39,19 @@ def longest_true_duration(times, flags):
     return longest
 
 
+def held_condition_start(times, flags, hold_time):
+    """Return the first condition start that remains true for the hold duration."""
+    start = None
+    for time_s, flag in zip(times, flags):
+        if flag:
+            start = time_s if start is None else start
+            if time_s - start >= hold_time:
+                return start
+        else:
+            start = None
+    return None
+
+
 class PathHistory:
     """Retain unique planning segments and the latest full actual trajectory."""
 

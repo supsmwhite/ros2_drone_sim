@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 from assessment_metrics import (longest_true_duration, path_length,
-    point_box_distance, projection_overshoot)
+    point_box_distance, projection_overshoot, held_condition_start)
 
 
 def test_path_length_3d():
@@ -56,6 +56,10 @@ def test_sustained_attitude_divergence_duration():
 
 def test_force_release_recovery_time():
     assert 6.5 - 4.0 == 2.5
+
+
+def test_arrival_time_is_start_of_held_interval():
+    assert held_condition_start([0, .5, 1, 1.5, 2], [False, True, True, True, True], 1) == .5
 
 
 def test_json_rejects_nan_and_infinity():

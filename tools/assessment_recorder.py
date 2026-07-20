@@ -56,12 +56,20 @@ def environment(path):
         x,y,z,sx,sy,sz=map(float,values[i:i+6]); boxes.append(((x-sx/2,y-sy/2,z-sz/2),(x+sx/2,y+sy/2,z+sz/2)))
     return boxes,float(p["safety_radius"])
 
+def configured_target(path):
+    if not path:return None
+    data=yaml.safe_load(Path(path).read_text())
+    data=data.get("target",data) if isinstance(data,dict) else data
+    if isinstance(data,dict):return [float(data[k]) for k in ("x","y","z")]
+    if isinstance(data,(list,tuple)) and len(data)>=3:return list(map(float,data[:3]))
+    raise ValueError("target config must contain x/y/z or a three-value list")
+
 
 class Recorder:
     def __init__(self,node,args):
         self.node,self.args=node,args; self.output=Path(args.output); self.output.mkdir(parents=True,exist_ok=True)
         self.wall_start=time.monotonic(); self.record_start=None; self.mission_start=None; self.mission_time_source=None
-        self.last_ros=None; self.current_goal=None; self.final_goal=None; self.reference=None; self.goals=[]
+        self.last_ros=None; self.current_goal=configured_target(args.target_config); self.final_goal=self.current_goal; self.reference=None; self.goals=[]
         self.rpm=self.diag=self.imu=None; self.force=[0.,0.,0.]; self.force_active=None
         self.mission_index=self.navigation_index=self.visited=None
         self.mission_complete=self.mission_success=None; self.nav_complete=self.nav_success=None
@@ -156,7 +164,7 @@ class Recorder:
         if kind=="editor": self.editor_status=value; self.changed("editor_status_changed",value)
         else: self.mission_status=value; self.changed("mission_status_changed",value)
         upper=value.upper()
-        if "REJECTED" in upper or "MISSION FAILED" in upper:
+        if any(token in upper for token in ("REJECTED", "FAILED", "INVALID", "INSIDE ", "OUTSIDE ")):
             self.failure_reason=value; self.start_mission("failure_status_observed")
     def on_bool(self,kind,value):
         topic="/drone/environment/in_collision" if kind=="collision" else "/drone/external_wrench/active"; self.tick(topic)
@@ -205,9 +213,9 @@ class Recorder:
         if not self.controller.stopped: self.controller.timeout()
         self.event("recording_stopped",{"reason":self.controller.stop_reason}); self.handle.close(); commit,dirty=git_state()
         metadata={"schema_version":2,"experiment":self.args.experiment,"status":self.args.run_status,"repository_commit":commit,"git_dirty":dirty,
-          "generated_at":datetime.now(timezone.utc).isoformat(),"mission_time_source":self.mission_time_source,"stop_reason":self.controller.stop_reason,"final_state":self.controller.state,
+          "generated_at":datetime.now(timezone.utc).isoformat(),"target_config":self.args.target_config,"mission_time_source":self.mission_time_source,"stop_reason":self.controller.stop_reason,"final_state":self.controller.state,
           "target_position":self.final_goal,"goals":self.goals,"goal_order":self.goal_order,"safety_radius_m":self.safety_radius,"failure_reason":self.controller.failure_reason or self.failure_reason,
-          "safety_observations":{"maximum_altitude_m":self.maximum_altitude,"maximum_speed_m_s":self.maximum_speed,"nonzero_rpm_observed":self.nonzero_rpm},
+          "safety_observations":{"maximum_altitude_m":self.maximum_altitude if math.isfinite(self.maximum_altitude) else None,"maximum_speed_m_s":self.maximum_speed,"nonzero_rpm_observed":self.nonzero_rpm},
           "thresholds":{"steady_window_s":self.args.steady_window,"arrival_position_threshold_m":self.args.arrival_position_threshold,"arrival_speed_threshold_m_s":self.args.arrival_speed_threshold,"arrival_hold_time_s":self.args.arrival_hold_time,
            "recovery_position_threshold_m":self.args.recovery_position_threshold,"recovery_speed_threshold_m_s":self.args.recovery_speed_threshold,"recovery_hold_time_s":self.args.recovery_hold_time,"failure_observation_window_s":self.args.failure_observation_window,"ground_motion_threshold_m":self.args.ground_motion_threshold,"timeout_s":self.args.timeout},"topic_message_counts":self.counts}
         (self.output/"metadata.json").write_text(json.dumps(metadata,indent=2,allow_nan=False)+"\n")

@@ -5,7 +5,7 @@ from pathlib import Path
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import yaml
-from assessment_metrics import path_length,projection_overshoot,longest_true_duration
+from assessment_metrics import path_length,projection_overshoot,longest_true_duration,held_condition_start
 
 def num(v):
     try:return float(v)
@@ -73,27 +73,32 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument("run",type=Path);p.add_argument("--parameters",type=Path,default=Path("results/parameters"));a=p.parse_args()
     meta=json.loads((a.run/"metadata.json").read_text());rows_all=read_csv(a.run/"samples.csv");events=event_rows(a.run/"events.csv");paths=json.loads((a.run/"paths.json").read_text())
     if any(b["recording_time_s"]<=x["recording_time_s"] for x,b in zip(rows_all,rows_all[1:])):raise SystemExit("recording timestamps are not strictly increasing")
-    rows=[r for r in rows_all if math.isfinite(r["mission_time_s"]) and math.isfinite(r["goal_position_error"])]
-    if len(rows)<2:raise SystemExit("fewer than two mission samples with goal error")
+    mission_rows=[r for r in rows_all if math.isfinite(r["mission_time_s"])]
+    rows=[r for r in mission_rows if math.isfinite(r["goal_position_error"])]
+    if meta["experiment"]=="failure_case" and len(rows)<2: rows=mission_rows
+    if len(rows)<2:raise SystemExit("fewer than two mission samples")
+    has_goal=math.isfinite(rows[-1]["goal_position_error"])
     environment=yaml.safe_load((a.parameters/"environment.yaml").read_text());ep=next(iter(environment.values()))["ros__parameters"]
     controller=yaml.safe_load((a.parameters/"controller.yaml").read_text());cp=next(iter(controller.values()))["ros__parameters"]
     steady=last_window(rows,min(3.,rows[-1]["mission_time_s"]-rows[0]["mission_time_s"]));final=last_window(rows,1.)
-    sample_pairs=[([r[f"actual_{x}"] for x in "xyz"],[r[f"goal_{x}"] for x in "xyz"]) for r in rows]
-    over,overpct=projection_overshoot(sample_pairs,meta["experiment"]=="hover")
+    sample_pairs=[([r[f"actual_{x}"] for x in "xyz"],[r[f"goal_{x}"] for x in "xyz"]) for r in rows] if has_goal else []
+    over,overpct=projection_overshoot(sample_pairs,meta["experiment"]=="hover") if sample_pairs else (None,None)
     rpm=[r[f"m{i}_rpm"] for r in rows for i in range(1,5)];sat=[any(r[x]==1 for x in ("horizontal_saturated","altitude_saturated","attitude_saturated","mixer_saturated")) for r in rows]
     times=[r["mission_time_s"] for r in rows];att_bad=[abs(r["roll"])>max(.5,2*cp["max_tilt_angle"]) or abs(r["pitch"])>max(.5,2*cp["max_tilt_angle"]) for r in rows]
-    actual=[[r[f"actual_{x}"] for x in "xyz"] for r in rows];goal=[rows[-1][f"goal_{x}"] for x in "xyz"]
+    actual=[[r[f"actual_{x}"] for x in "xyz"] for r in rows];goal=[rows[-1][f"goal_{x}"] for x in "xyz"] if has_goal else None
     plan={name:segments(paths,name) for name in ("planned","simplified","reference")}; lengths={name:segments_length(plan[name]) for name in plan}
     tracking=vals([r["tracking_error"] for r in rows]);raw=minimum([r["raw_obstacle_distance"] for r in rows]);safety=float(ep["safety_radius"])
-    metrics={"final_position_error_m":rows[-1]["goal_position_error"],"final_window_mean_error_m":avg([r["goal_position_error"] for r in final]),
-      "arrival_time_s":event_times(events,"arrival_confirmed")[0] if event_times(events,"arrival_confirmed") else None,
+    arrival=held_condition_start(times,[r["goal_position_error"]<meta["thresholds"]["arrival_position_threshold_m"] and r["speed"]<meta["thresholds"]["arrival_speed_threshold_m_s"] for r in rows],meta["thresholds"]["arrival_hold_time_s"]) if has_goal else None
+    straight=math.dist(actual[0],goal) if goal else None
+    metrics={"final_position_error_m":rows[-1]["goal_position_error"] if has_goal else None,"final_window_mean_error_m":avg([r["goal_position_error"] for r in final]),
+      "arrival_time_s":arrival,
       "maximum_overshoot_m":over,"maximum_overshoot_percent":overpct,"steady_state_mean_error_m":avg([r["goal_position_error"] for r in steady]),"steady_state_rms_error_m":rms([r["goal_position_error"] for r in steady]),"steady_state_max_error_m":maximum([r["goal_position_error"] for r in steady]),
       "maximum_goal_position_error_m":maximum([r["goal_position_error"] for r in rows]),"maximum_tracking_error_m":maximum(tracking),"tracking_error_rms_m":rms(tracking),"final_tracking_error_m":tracking[-1] if tracking else None,
       "minimum_raw_obstacle_distance_m":raw,"safety_radius_m":safety,"minimum_safety_clearance_m":None if raw is None else raw-safety,
-      "straight_line_distance_m":math.dist(actual[0],goal),"actual_path_length_m":path_length(actual),"flight_time_s":times[-1]-times[0],
+      "straight_line_distance_m":straight,"actual_path_length_m":path_length(actual),"flight_time_s":times[-1]-times[0],
       "planned_segment_count":len(plan["planned"]),"simplified_segment_count":len(plan["simplified"]),"reference_segment_count":len(plan["reference"]),
       "planned_path_length_m":lengths["planned"],"simplified_path_length_m":lengths["simplified"],"reference_path_length_m":lengths["reference"],
-      "path_efficiency":None if not lengths["reference"] else path_length(actual)/lengths["reference"],"planned_vs_straight_ratio":None if not lengths["planned"] else lengths["planned"]/math.dist(actual[0],goal),"actual_vs_reference_ratio":None if not lengths["reference"] else path_length(actual)/lengths["reference"],
+      "path_efficiency":None if not lengths["reference"] else path_length(actual)/lengths["reference"],"planned_vs_straight_ratio":None if not lengths["planned"] or not straight else lengths["planned"]/straight,"actual_vs_reference_ratio":None if not lengths["reference"] else path_length(actual)/lengths["reference"],
       "maximum_absolute_roll_rad":maximum([abs(r["roll"]) for r in rows]),"maximum_absolute_pitch_rad":maximum([abs(r["pitch"]) for r in rows]),"maximum_angular_speed_rad_s":maximum([math.sqrt(sum(r[f"angular_speed_{x}"]**2 for x in "xyz")) for r in rows]),
       "non_finite_attitude_count":sum(not all(math.isfinite(r[x]) for x in ("roll","pitch","yaw")) for r in rows),"attitude_divergence_detected":longest_true_duration(times,att_bad)>=1.,
       "minimum_motor_rpm":minimum(rpm),"maximum_motor_rpm":maximum(rpm),"saturation_sample_count":sum(sat),"longest_saturation_duration_s":longest_true_duration(times,sat),"saturated_at_end":sat[-1],"non_finite_rpm_count":sum(not math.isfinite(x) for x in rpm)}
@@ -102,22 +107,30 @@ def main():
         index="mission_waypoint_index" if experiment=="multi_goal" else "navigation_goal_index"; unique=[]
         for r in rows:
             if math.isfinite(r[index]) and int(r[index]) not in unique:unique.append(int(r[index]))
-        per_errors=[]
+        per_errors=[];segment_overshoots=[]
         for i in unique:
-            group=[r for r in rows if math.isfinite(r[index]) and int(r[index])==i];per_errors.append(minimum([r["goal_position_error"] for r in group]))
+            group=[r for r in rows if math.isfinite(r[index]) and int(r[index])==i];per_errors.append(group[-1]["goal_position_error"])
+            pairs=[([r[f"actual_{x}"] for x in "xyz"],[r[f"goal_{x}"] for x in "xyz"]) for r in group]
+            value,percent=projection_overshoot(pairs);segment_overshoots.append({"goal_index":i,"maximum_overshoot_m":value,"maximum_overshoot_percent":percent})
         accepts=event_times(events,"waypoint_index_changed" if experiment=="multi_goal" else "navigation_goal_index_changed")
-        metrics.update({"goal_count":len(meta.get("goals") or unique),"visited_goal_count":int(maximum([r["navigation_visited_goals"] for r in rows]) or len(unique)) if experiment=="navigation" else len(unique),"goal_order":unique,"goal_acceptance_times_s":accepts,"per_goal_arrival_times_s":accepts,"per_goal_final_errors_m":per_errors,
+        transitions=accepts[-(len(unique)-1):] if len(unique)>1 else []
+        accepts=[0.0]+transitions
+        completed=event_times(events,"mission_complete_changed" if experiment=="multi_goal" else "navigation_complete_changed")
+        arrivals=accepts[1:]+([completed[-1]] if completed else [])
+        metrics.update({"goal_count":len(meta.get("goals") or unique),"visited_goal_count":int(maximum([r["navigation_visited_goals"] for r in rows]) or len(unique)) if experiment=="navigation" else len(unique),"goal_order":unique,"goal_acceptance_times_s":accepts,"per_goal_arrival_times_s":arrivals,"per_goal_final_errors_m":per_errors,"segment_overshoots":segment_overshoots,
           "mission_complete":observed(rows,"mission_complete") if experiment=="multi_goal" else observed(rows,"navigation_complete"),"mission_success":None if experiment=="multi_goal" else observed(rows,"navigation_success"),"total_mission_time_s":times[-1]})
     if experiment=="navigation":metrics.update({"collision_observed":observed(rows,"collision_state"),"navigation_complete":observed(rows,"navigation_complete"),"navigation_success":observed(rows,"navigation_success"),"preflight_ready_observed":observed(rows,"interactive_ready"),"execution_active_observed":observed(rows,"interactive_active")})
     if experiment=="disturbance":
         start=event_times(events,"external_force_started");release=event_times(events,"external_force_released");recovery=event_times(events,"recovery_confirmed");start=start[0] if start else None;release=release[0] if release else None
         force_rows=[r for r in rows if start is not None and release is not None and start<=r["mission_time_s"]<=release];tail=force_rows[-max(1,int(len(force_rows)*.2)):] if force_rows else []
         horizontal=[math.hypot(r["goal_error_x"],r["goal_error_y"]) for r in rows]
-        metrics.update({"force_start_time_s":start,"force_release_time_s":release,"force_duration_s":None if start is None or release is None else release-start,"peak_horizontal_deviation_m":maximum(horizontal),"disturbance_steady_state_error_m":avg([math.hypot(r["goal_error_x"],r["goal_error_y"]) for r in tail]),"recovery_time_s":None if not recovery or release is None else recovery[0]-release,"reverse_overshoot_m":None if release is None else maximum([math.hypot(r["goal_error_x"],r["goal_error_y"]) for r in rows if r["mission_time_s"]>=release])})
+        after=[r for r in rows if release is not None and r["mission_time_s"]>=release]
+        recovery_start=held_condition_start([r["mission_time_s"] for r in after],[math.hypot(r["goal_error_x"],r["goal_error_y"])<meta["thresholds"]["recovery_position_threshold_m"] and r["speed"]<meta["thresholds"]["recovery_speed_threshold_m_s"] for r in after],meta["thresholds"]["recovery_hold_time_s"]) if after else None
+        metrics.update({"force_start_time_s":start,"force_release_time_s":release,"force_duration_s":None if start is None or release is None else release-start,"peak_horizontal_deviation_m":maximum(horizontal),"disturbance_steady_state_error_m":avg([math.hypot(r["goal_error_x"],r["goal_error_y"]) for r in tail]),"recovery_time_s":None if recovery_start is None or release is None else recovery_start-release,"reverse_overshoot_m":None if release is None else maximum([math.hypot(r["goal_error_x"],r["goal_error_y"]) for r in after])})
     if experiment=="failure_case":
         request=event_times(events,"mission_started");after=[r for r in rows if not request or r["mission_time_s"]>=0];maxalt=maximum([r["actual_z"] for r in after]);maxspeed=maximum([r["speed"] for r in after]);ground=meta["thresholds"]["ground_motion_threshold_m"]
         metrics.update({"failure_detected":bool(meta.get("failure_reason")),"failure_reason":meta.get("failure_reason"),"ready_ever_true":observed(rows,"interactive_ready"),"active_ever_true":observed(rows,"interactive_active"),"maximum_altitude_after_request_m":maxalt,"maximum_speed_after_request_m_s":maxspeed,"unsafe_motion_detected":bool((maxalt or 0)>ground or (maxspeed or 0)>ground),"collision_observed":observed(rows,"collision_state")})
-    checks={"assignment_hover_error_pass":metrics["final_position_error_m"]<.3,"project_final_error_pass":metrics["final_position_error_m"]<.1,"finite_attitude_pass":metrics["non_finite_attitude_count"]==0,"finite_rpm_pass":metrics["non_finite_rpm_count"]==0,"attitude_stability_pass":not metrics["attitude_divergence_detected"],"rpm_end_saturation_pass":not metrics["saturated_at_end"]}
+    checks={"assignment_hover_error_pass":None if metrics["final_position_error_m"] is None else metrics["final_position_error_m"]<.3,"project_final_error_pass":None if metrics["final_position_error_m"] is None else metrics["final_position_error_m"]<.1,"finite_attitude_pass":metrics["non_finite_attitude_count"]==0,"finite_rpm_pass":metrics["non_finite_rpm_count"]==0,"attitude_stability_pass":not metrics["attitude_divergence_detected"],"rpm_end_saturation_pass":not metrics["saturated_at_end"]}
     if experiment=="navigation":checks["navigation_pass"]=metrics["navigation_complete"] and metrics["navigation_success"] and not metrics["collision_observed"] and metrics["minimum_safety_clearance_m"]>0
     if experiment=="failure_case":checks["failure_safety_pass"]=metrics["failure_detected"] and not metrics["active_ever_true"] and not metrics["unsafe_motion_detected"] and not metrics["collision_observed"]
     summary={"schema_version":2,"experiment":experiment,"status":meta["status"],"repository_commit":meta["repository_commit"],"sample_count":len(rows_all),"mission_sample_count":len(rows),"metrics":metrics,"assignment_thresholds":{"hover_final_position_error_max_m":.3},"project_thresholds":{"final_position_error_max_m":.1,"minimum_safety_clearance_strictly_greater_than_m":0.,"non_finite_value_count":0,"attitude_divergence_detected":False,"saturated_at_end":False},"checks":checks}

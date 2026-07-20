@@ -131,6 +131,13 @@ def hausdorff(first, second):
                max(point_path_distance(point, first) for point in second))
 
 
+def paths_match(first, second, start_tolerance=0.01):
+    if len(first) != len(second):
+        return False
+    return all(math.dist(left, right) <= (start_tolerance if index == 0 else 1.0e-9)
+               for index, (left, right) in enumerate(zip(first, second)))
+
+
 def parse_timing_log(text):
     goals = [{"goal_index": int(match.group("goal")),
               "enabled": match.group("enabled") == "true",
@@ -398,13 +405,22 @@ def analyze_run(run_dir, candidate, route, run, params, commit, dirty, domain):
     return row
 
 
-def safety_pass(row):
+def safety_pass(row, baseline=None):
     return bool(row.get("success") and not row.get("collision") and
                 row.get("nonfinite") == 0 and row.get("saturation") == 0 and
                 finite(row.get("tracking_max")) and row["tracking_max"] < 0.10 and
                 finite(row.get("actual_minimum_clearance")) and
                 row["actual_minimum_clearance"] > 0 and
-                finite(row.get("mission_time_s")) and row["mission_time_s"] <= 60.68)
+                finite(row.get("mission_time_s")) and row["mission_time_s"] <= 60.68 and
+                row.get("planned_matches_t0") is True and
+                row.get("simplified_matches_t0") is True and
+                (baseline is None or (
+                    row["actual_minimum_clearance"] >=
+                    baseline["actual_minimum_clearance"] - 0.01 and
+                    row["reference_minimum_clearance"] >=
+                    baseline["reference_minimum_clearance"] - 0.02 and
+                    row["reference_jerk_max"] <= baseline["reference_jerk_max"] * 1.20 and
+                    row["cross_track_max"] <= baseline["cross_track_max"] * 1.20)))
 
 
 def add_comparisons(rows):
@@ -417,10 +433,10 @@ def add_comparisons(rows):
         row["reference_hausdorff_to_t0"] = (hausdorff(
             row.get("reference_path", []), baseline.get("reference_path", []))
             if baseline else None)
-        row["planned_matches_t0"] = bool(baseline and
-            row.get("planned_path") == baseline.get("planned_path"))
-        row["simplified_matches_t0"] = bool(baseline and
-            row.get("simplified_path") == baseline.get("simplified_path"))
+        row["planned_matches_t0"] = bool(baseline and paths_match(
+            row.get("planned_path", []), baseline.get("planned_path", [])))
+        row["simplified_matches_t0"] = bool(baseline and paths_match(
+            row.get("simplified_path", []), baseline.get("simplified_path", [])))
 
 
 def aggregate(rows):
@@ -454,7 +470,7 @@ def choose(rows):
     for candidate in ("t10", "t20", "t30"):
         row = next((item for item in rows if item["candidate"] == candidate and
                    item["route"] == "full_map"), None)
-        if not row or not safety_pass(row):
+        if not row or not safety_pass(row, baseline):
             continue
         improvements = 0
         for field, threshold in (("reference_jerk_max", 0.15),

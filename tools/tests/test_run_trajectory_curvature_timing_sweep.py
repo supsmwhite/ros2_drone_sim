@@ -9,6 +9,7 @@ from run_trajectory_curvature_timing_sweep import (  # noqa: E402
     hausdorff,
     parameters,
     parse_timing_log,
+    paths_match,
     point_path_distance,
 )
 
@@ -53,3 +54,12 @@ def test_cross_track_and_hausdorff_use_continuous_polyline_distance():
     shifted = [[0.0, 1.0, 0.0], [2.0, 1.0, 0.0]]
     assert math.isclose(point_path_distance([1.0, 0.5, 0.0], horizontal), 0.5)
     assert math.isclose(hausdorff(horizontal, shifted), 1.0)
+
+
+def test_geometry_match_allows_only_millimetric_start_difference():
+    baseline = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]
+    assert paths_match([[0.005, 0.0, 0.0], *baseline[1:]], baseline)
+    assert not paths_match([[0.02, 0.0, 0.0], *baseline[1:]], baseline)
+    assert not paths_match(baseline[:-1], baseline)
+    changed_middle = [baseline[0], [1.0, 0.001, 0.0], baseline[-1]]
+    assert not paths_match(changed_middle, baseline)

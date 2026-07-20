@@ -21,7 +21,8 @@ EXPERIMENTS = ("hover", "single_goal", "multi_goal", "navigation", "disturbance"
 FIELDS = ("recording_time_s mission_time_s goal_x goal_y goal_z reference_x reference_y reference_z "
           "actual_x actual_y actual_z goal_error_x goal_error_y goal_error_z goal_position_error "
           "tracking_error_x tracking_error_y tracking_error_z tracking_error reference_acceleration_x "
-          "reference_acceleration_y reference_acceleration_z velocity_x velocity_y "
+          "reference_acceleration_y reference_acceleration_z reference_velocity_x "
+          "reference_velocity_y reference_velocity_z reference_yaw velocity_x velocity_y "
           "velocity_z speed roll pitch yaw angular_speed_x angular_speed_y angular_speed_z m1_rpm "
           "m2_rpm m3_rpm m4_rpm horizontal_saturated altitude_saturated attitude_saturated "
           "mixer_saturated raw_obstacle_distance safety_clearance mission_waypoint_index "
@@ -71,7 +72,7 @@ class Recorder:
     def __init__(self,node,args):
         self.node,self.args=node,args; self.output=Path(args.output); self.output.mkdir(parents=True,exist_ok=True)
         self.wall_start=time.monotonic(); self.record_start=None; self.mission_start=None; self.mission_time_source=None
-        self.last_ros=None; self.current_goal=configured_target(args.target_config); self.final_goal=self.current_goal; self.reference=None; self.reference_acceleration=None; self.goals=[]
+        self.last_ros=None; self.current_goal=configured_target(args.target_config); self.final_goal=self.current_goal; self.reference=None; self.reference_velocity=None; self.reference_acceleration=None; self.reference_yaw=None; self.goals=[]
         self.rpm=self.diag=self.imu=None; self.force=[0.,0.,0.]; self.force_active=None
         self.mission_index=self.navigation_index=self.navigation_segment=self.visited=None
         self.mission_complete=self.mission_success=None; self.nav_complete=self.nav_success=None
@@ -146,7 +147,9 @@ class Recorder:
         self.start_mission("goal_received",goal_time); self.event("goal_received",{"position":self.current_goal},goal_time)
     def on_reference(self,m):
         self.tick("/drone/trajectory_setpoint"); self.reference=[m.position.x,m.position.y,m.position.z]
+        self.reference_velocity=[m.velocity.x,m.velocity.y,m.velocity.z]
         self.reference_acceleration=[m.acceleration.x,m.acceleration.y,m.acceleration.z]
+        self.reference_yaw=m.yaw
         if self.args.experiment=="disturbance": self.current_goal=self.current_goal or self.reference; self.final_goal=self.current_goal; self.start_mission("trajectory_started",self.last_ros)
         self.changed("trajectory_started",True)
     def on_goals(self,m,kind):
@@ -221,6 +224,12 @@ class Recorder:
             row.update(dict(zip(
                 ("reference_acceleration_x", "reference_acceleration_y", "reference_acceleration_z"),
                 self.reference_acceleration)))
+        if self.reference_velocity is not None:
+            row.update(dict(zip(
+                ("reference_velocity_x", "reference_velocity_y", "reference_velocity_z"),
+                self.reference_velocity)))
+        if self.reference_yaw is not None:
+            row["reference_yaw"] = self.reference_yaw
         state={"mission_waypoint_index":self.mission_index,"mission_complete":self.mission_complete,"mission_success":self.mission_success,
           "navigation_goal_index":self.navigation_index,"navigation_segment_index":self.navigation_segment,"navigation_visited_goals":self.visited,"navigation_complete":self.nav_complete,"navigation_success":self.nav_success,
           "interactive_ready":self.ready,"interactive_active":self.active,"interactive_goal_count":self.goal_count,"collision_state":self.collision,"external_wrench_active":self.force_active}

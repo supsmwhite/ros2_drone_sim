@@ -157,12 +157,10 @@ def extract_run_summary(run_dir, record):
         "minimum_actual_clearance_m": layers["actual"][
             "minimum_safety_clearance_m"],
         "focus_clearances": focus,
-        "reference_jerk_max_m_s3": max(
-            (corner.get("reference_max_jerk_m_s3") or 0.0 for corner in corners),
-            default=None),
-        "actual_jerk_max_m_s3": max(
-            (corner.get("actual_max_jerk_m_s3") or 0.0 for corner in corners),
-            default=None),
+        "reference_jerk_max_m_s3": geometry["global_dynamics"].get(
+            "reference_jerk", {}).get("max"),
+        "actual_jerk_max_m_s3": geometry["global_dynamics"].get(
+            "actual_jerk", {}).get("max"),
         "cross_track_max_m": geometry["global_dynamics"]["spatial_cross_track"]["max"],
         "cross_track_rms_m": geometry["global_dynamics"]["spatial_cross_track"]["rms"],
         "tracking_max_m": geometry["global_dynamics"]["temporal_tracking"]["max"],

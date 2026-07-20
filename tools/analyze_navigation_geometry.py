@@ -696,6 +696,8 @@ def analyze(run, environment, astar, trajectory, output=None, step=0.02,
                "global_dynamics": {
                    "temporal_tracking": stats(temporal),
                    "spatial_cross_track": stats(cross_track),
+                   "reference_jerk": stats(dynamics["reference_jerk"]),
+                   "actual_jerk": stats(dynamics["actual_jerk"]),
                    "maximum_absolute_roll_rad": max_or_none([abs(finite_csv_value(row, "roll")) if finite_csv_value(row, "roll") is not None else None for row in samples]),
                    "maximum_absolute_pitch_rad": max_or_none([abs(finite_csv_value(row, "pitch")) if finite_csv_value(row, "pitch") is not None else None for row in samples]),
                    "maximum_actual_yaw_rate_rad_s": max_or_none(actual_yaw_rate),

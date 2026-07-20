@@ -121,11 +121,15 @@ def event_data(path):
     with path.open(newline="") as handle:
         for row in csv.DictReader(handle):
             try:
+                mission_time = float(row["mission_time_s"])
+            except (TypeError, ValueError):
+                continue
+            try:
                 details = json.loads(row["details"])
             except (json.JSONDecodeError, TypeError):
                 details = {}
             result.append({"event": row["event"],
-                           "time": float(row["mission_time_s"]),
+                           "time": mission_time,
                            "details": details})
     return result
 

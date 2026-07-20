@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from run_navigation_speed_sweep import (  # noqa: E402
-    aggregate, candidate_parameters, failed_record, select_candidates,
+    aggregate, candidate_parameters, event_data, failed_record, select_candidates,
     write_table)
 
 
@@ -34,6 +34,18 @@ def test_failed_run_is_structured():
     assert row["success"] is False
     assert row["stop_reason"] == "timeout"
     assert row["repository_commit"] == "abc"
+
+
+def test_events_before_mission_are_ignored(tmp_path):
+    path = tmp_path / "events.csv"
+    path.write_text(
+        "recording_time_s,mission_time_s,event,details\n"
+        '0.0,,recording_started,"{}"\n'
+        '1.0,0.5,navigation_complete_changed,"{\"\"value\"\":true}"\n')
+    assert event_data(path) == [{
+        "event": "navigation_complete_changed", "time": 0.5,
+        "details": {"value": True},
+    }]
 
 
 def test_csv_and_three_run_statistics(tmp_path):

@@ -72,8 +72,8 @@ RViz 目标位置与 yaw
 公开参数：
 
 - `scenario:=obstacle_field`：完整六障碍物交错绕行场景；
-- `scenario:=narrow_passage`：使用同一已验证地图，重点验收其中有效宽度约
-  `1.2 m` 的挑战通道；
+- `scenario:=narrow_passage`：加载独立五障碍物 S 形地图，两道通道原始宽度
+  `1.8 m`、按 `0.35 m` 有效规划半径膨胀后宽度 `1.1 m`；
 - `yaw_mode:=path_tangent|fixed`：默认 `path_tangent`。
 
 ### 3. 抗扰加分演示
@@ -95,7 +95,7 @@ ros2 launch drone_bringup assessment_disturbance_sim.launch.py \
 | 单目标 `(2,1,1.5)` | 基础入口 + `goal_cli single 2 1 1.5 yaw=0` | 到达并稳定保持，轨迹与目标 Marker 正确 |
 | 3～4 目标顺序飞行 | 基础入口 + `goal_cli multi ...` | 严格按序访问，每点停稳后切换并最终完成 |
 | 多障碍物静态避障 | 导航入口 `scenario:=obstacle_field` | 预检成功、无碰撞、障碍物净空为正、任务完成 |
-| 明显绕行或狭窄通道 | 导航入口 `scenario:=narrow_passage` | 路径明显偏离直线并安全通过约 `1.2 m` 有效通道 |
+| 明显绕行或狭窄通道 | 导航入口 `scenario:=narrow_passage` | 直线被阻挡，路径明显偏离并安全通过 `1.1 m` 有效通道 |
 | 位置误差、RPM、轨迹和障碍距离 | RViz、控制诊断、`results/` 正式图表/指标 | 无非有限值；误差、RPM、轨迹、最小净空可追溯 |
 | 独立抗扰加分 | 抗扰入口，两个 `profile` | 扰动阶段正确、补偿方向正确、撤力后稳定恢复 |
 
@@ -124,6 +124,12 @@ ros2 launch drone_bringup assessment_disturbance_sim.launch.py \
 当前水平 `PD+I+FF` 基线为 `0.081989 m`。三次独立撤力实验恢复时间为
 `4.600580–4.601050 s`，均无控制器饱和。正式图表和原始数据位于
 `results/horizontal_integral_upgrade/selected/`。
+
+三个正式入口已有真实自动闭环验证。独立通道场景从 `(0,0,1.5)` 飞往
+`(8.5,0,1.5)`，直线被阻挡；本轮 A* 路径约 `10.029 m`，直线距离 `8.500 m`，
+最大横向偏离 `0.850 m`，实际最小障碍净空约 `0.230 m`，最终误差约 `0.006 m`，
+无碰撞或持续饱和。本轮完整回归为
+`364 tests, 0 errors, 0 failures, 0 skipped`。这些自动结果不替代 RViz 视觉验收。
 
 ## 系统边界
 

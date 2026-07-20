@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from run_navigation_speed_sweep import (  # noqa: E402
     aggregate, candidate_parameters, event_data, failed_record, select_candidates,
-    write_table)
+    sample_metrics, write_table)
 
 
 def safe_run(candidate, run, mission_time=100.0, clearance=0.20):
@@ -46,6 +46,15 @@ def test_events_before_mission_are_ignored(tmp_path):
         "event": "navigation_complete_changed", "time": 0.5,
         "details": {"value": True},
     }]
+
+
+def test_actual_speed_statistics_only_use_navigation_phase(tmp_path):
+    path = tmp_path / "samples.csv"
+    path.write_text("mission_time_s,speed\n1.0,1.2\n2.0,0.4\n3.0,0.6\n")
+    metrics, nonfinite = sample_metrics(path, 2.0)
+    assert metrics["actual_max_speed_m_s"] == 0.6
+    assert metrics["actual_mean_speed_m_s"] == 0.5
+    assert nonfinite == 0
 
 
 def test_csv_and_three_run_statistics(tmp_path):

@@ -38,7 +38,8 @@ CSV_FIELDS = (
     "candidate route run nominal_speed max_reference_speed "
     "max_reference_acceleration success stop_reason total_mission_time_s "
     "navigation_phase_time_s takeoff_time_s recorder_steady_window_s "
-    "actual_max_speed_m_s actual_speed_rms_m_s actual_mean_speed_m_s "
+    "actual_max_speed_m_s full_mission_actual_max_speed_m_s actual_speed_rms_m_s "
+    "actual_mean_speed_m_s "
     "reference_max_speed_m_s reference_max_acceleration_m_s2 "
     "reference_total_duration_s actual_path_length_m reference_path_length_m "
     "navigation_tracking_max_error_m navigation_tracking_rms_error_m "
@@ -183,6 +184,7 @@ def sample_metrics(path, navigation_start):
                 except (KeyError, ValueError):
                     nonfinite += 1
     return {
+        "actual_max_speed_m_s": max(speeds) if speeds else None,
         "actual_speed_rms_m_s": (
             math.sqrt(sum(value * value for value in speeds) / len(speeds))
             if speeds else None),
@@ -233,7 +235,7 @@ def build_record(run_dir, candidate, route, run, parameters, commit, dirty, doma
         "recorder_steady_window_s": (stopped - complete
                                       if stopped is not None and
                                       complete is not None else None),
-        "actual_max_speed_m_s": metadata.get("safety_observations", {}).get(
+        "full_mission_actual_max_speed_m_s": metadata.get("safety_observations", {}).get(
             "maximum_speed_m_s"),
         **speed_metrics,
         "reference_max_speed_m_s": max(

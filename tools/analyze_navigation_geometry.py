@@ -118,6 +118,29 @@ def identify_corners(points, angle_threshold=25.0, merge_distance=0.30):
     return merged
 
 
+def identify_segment_corners(paths, layer="simplified", angle_threshold=25.0,
+                             merge_distance=0.30):
+    """Identify corners inside plans, excluding stop-and-replan joins."""
+    corners = []
+    global_offset = 0
+    previous_endpoint = None
+    for segment in sorted(paths.get(layer + "_segments", []),
+                          key=lambda item: item["sequence"]):
+        points = finite_points(segment.get("points", []))
+        drop_first = bool(previous_endpoint is not None and points and
+                          math.dist(previous_endpoint, points[0]) <= 1e-9)
+        for corner in identify_corners(points, angle_threshold, merge_distance):
+            corner["vertex_index"] += global_offset - int(drop_first)
+            corner["goal_index"] = segment.get("goal_index")
+            corner["source_path_sequence"] = segment.get("sequence")
+            corner["corner_index"] = len(corners) + 1
+            corners.append(corner)
+        if points:
+            global_offset += len(points) - int(drop_first)
+            previous_endpoint = points[-1]
+    return corners
+
+
 def point_aabb_distance(point, box):
     lower, upper = box
     return math.sqrt(sum(max(lower[index] - point[index], 0.0,
@@ -313,7 +336,8 @@ def concatenate_segments(paths, layer):
             segment_points = segment_points[1:]
         points.extend(segment_points)
         locations.extend({"goal_index": segment.get("goal_index"),
-                          "path_segment_index": point_index}
+                          "path_segment_index": point_index,
+                          "source_path_sequence": segment.get("sequence")}
                          for point_index in range(len(segment_points)))
     return points, locations
 
@@ -554,12 +578,12 @@ def analyze(run, environment, astar, trajectory, output=None, step=0.02,
     actual_yaw_accel = derivative(times, [[finite_csv_value(row, "angular_speed_z")]
                                           for row in samples])
     diagnostics = parse_trajectory_diagnostics(run / "launch.log")
-    corners = identify_corners(layer_points["simplified"], corner_angle, merge_distance)
+    corners = identify_segment_corners(
+        paths, "simplified", corner_angle, merge_distance)
     simplified_arcs = cumulative_lengths(layer_points["simplified"])
     for corner in corners:
         vertex = corner["vertex_index"]
-        goal = (layer_locations["simplified"][vertex]["goal_index"]
-                if vertex < len(layer_locations["simplified"]) else None)
+        goal = corner.get("goal_index")
         corner["goal_index"] = goal
         corner["segment_index"] = max(0, vertex - 1)
         layer_clearances = []

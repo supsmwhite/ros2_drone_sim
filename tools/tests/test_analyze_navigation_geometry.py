@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from analyze_navigation_geometry import (  # noqa: E402
     clearance_losses, clearance_profile, cross_track_errors, derivative,
-    finite_points, identify_corners, nearest_point_on_polyline,
+    finite_points, identify_corners, identify_segment_corners, nearest_point_on_polyline,
     point_aabb_distance, project_points_on_polyline, resample_polyline, turning_angle_degrees,
     unwrap_angles)
 
@@ -28,6 +28,16 @@ def test_polyline_corner_is_identified():
 
 def test_straight_polyline_has_no_false_corner():
     assert identify_corners([[0, 0, 0], [1, 0, 0], [2, 0, 0]]) == []
+
+
+def test_stop_and_replan_join_is_not_a_geometric_corner():
+    paths = {"simplified_segments": [
+        {"sequence": 0, "goal_index": 0,
+         "points": [[0, 0, 0], [1, 0, 0]]},
+        {"sequence": 1, "goal_index": 1,
+         "points": [[0.99, 0, 0], [1, 1, 0]]},
+    ]}
+    assert identify_segment_corners(paths) == []
 
 
 def test_point_to_aabb_distance_and_clearance():

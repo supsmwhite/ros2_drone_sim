@@ -161,6 +161,18 @@ bash scripts/test_full.sh
 `05_disturbance`、`06_failure_case` 顺序生成。正式交互导航目标点与路线必须由用户最终
 选择，工具和文档不得代为决定或预填结果。
 
+统一评测工具对六类实验使用独立停止状态机。基础 multi 等待真实 mission complete，
+导航等待 interactive active 与 navigation complete/success，扰动等待外力开始、撤销和
+恢复，失败案例等待明确拒绝并完成地面安全观察。`goal_position_error` 表示实际位置到
+当前任务目标的距离；`tracking_error` 表示实际位置到 trajectory setpoint 的距离。
+`paths.json` 保存各目标的 planned/simplified/reference 唯一路径段，空 Path 只记录清除
+事件，不能覆盖历史。
+
+唯一允许提交的 smoke 是 `results/01_hover/smoke`。single、multi、navigation、
+disturbance 和 failure_case 的工具验证写入 `/tmp/ros2_drone_assessment_smoke/`，不作为
+报告数据。参数表将 ROS 基础/导航完成门控与评测分析阈值分开记录；正式结果仍必须等待
+用户批准目标、路线、阈值和报告图表。
+
 自动回归证明执行链和安全条件，但不能替代以下人工检查：RViz 目标位置/yaw 编辑、
 原始与膨胀障碍 Marker、轨迹 Marker、明显绕行或通道视觉效果，以及抗扰箭头和撤力
 恢复过程。

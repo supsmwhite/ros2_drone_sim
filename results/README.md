@@ -9,8 +9,9 @@ not be committed here. Each experiment class keeps one final approved run; a run
 
 The numbered experiment classes are `01_hover`, `02_single_goal`, `03_multi_goal`,
 `04_navigation`, `05_disturbance`, and `06_failure_case`; `regression` is reserved for final
-workflow regression evidence. Only `parameters/` and an actually executed hover smoke run
-are populated during the initial rebuild. Empty or fabricated metrics are never added.
+workflow regression evidence. Only `parameters/` and the single committed hover smoke are
+populated. The other five smoke runs belong under `/tmp/ros2_drone_assessment_smoke/` and are
+never report evidence or Git data. Empty or fabricated metrics are never added.
 
 Each run is self-contained:
 
@@ -19,6 +20,22 @@ Each run is self-contained:
 2. `analyze_assessment_run.py` reads those files plus the parameter snapshots and writes
    `summary.json` and PNG figures. It never needs a running ROS graph.
 3. `manifest.json` lists a run only after it exists.
+
+The six experiment types have separate stop contracts: hover and single-goal use continuous
+arrival plus a steady window; basic multi-goal waits for `/drone/mission/complete`; navigation
+waits for interactive execution and navigation complete/success; disturbance observes force
+start, release, recovery hold, and a final steady window; failure-case waits for an explicit
+rejection, inactive execution, and a safety observation window. `--run-status` explicitly marks
+every run as `smoke`, `candidate`, or `final`.
+
+`goal_position_error` is actual position to the current task goal and drives arrival, final,
+and steady metrics. `tracking_error` is actual position to `/drone/trajectory_setpoint`; it is
+null for basic hover/single runs. These meanings are never interchanged.
+
+`paths.json` schema 2 stores the latest complete `actual` trajectory plus
+`planned_segments`, `simplified_segments`, and `reference_segments`. Each unique non-empty
+path is appended with sequence, goal index, and receive time. Exact transient-local repeats are
+ignored; empty paths append to `clear_events` and never erase prior segments.
 
 Regenerate plots without rerunning simulation:
 
@@ -61,6 +78,11 @@ the goals, route, thresholds, and report figures before that experiment is recor
 Every summary records both assignment thresholds (hover error below 0.30 m) and stricter
 project thresholds (final error 0.10 m, positive safety clearance, no non-finite values, no
 sustained attitude divergence, and no RPM saturation at task end).
+
+`parameter_table.csv` deliberately distinguishes `basic_mission_gate` and
+`navigation_mission_gate` values used by ROS nodes from stricter `assessment_analysis`
+thresholds used by the recorder. The default 0.10 m analysis arrival threshold is not the
+nodes' 0.20 m completion gate.
 
 ## History
 

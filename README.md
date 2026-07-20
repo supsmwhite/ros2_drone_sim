@@ -4,8 +4,8 @@
 RPM 驱动刚体动力学，提供位置控制、多目标任务、三维静态避障、RViz 交互导航、
 轨迹/误差/RPM/障碍物距离结果，以及独立抗扰演示。
 
-当前 `main` 是功能完整冻结基线；考核入口收束在独立分支完成，不删除历史实现，
-也不增加与考核无关的功能。
+`main` 与 `assessment-feature-complete-v1` 保存功能完整历史基线；当前收束分支移除被
+正式入口替代的历史实现，并重建最终考核工作流，不增加与考核无关的功能。
 
 ## 构建
 
@@ -107,7 +107,8 @@ ros2 launch drone_bringup assessment_disturbance_sim.launch.py \
 统一原始数据记录工具：
 
 ```bash
-python3 tools/assessment_recorder.py --experiment hover --output results/01_hover/smoke
+python3 tools/assessment_recorder.py --experiment hover --run-status smoke \
+  --output results/01_hover/smoke
 ```
 
 统一离线指标与图表工具：
@@ -117,9 +118,11 @@ python3 tools/analyze_assessment_run.py results/01_hover/smoke \
   --parameters results/parameters
 ```
 
-数据结构、固定指标公式、障碍距离定义、参数快照和历史恢复方式详见
-`results/README.md`。正式交互导航目标和路线必须由项目负责人最终确认，README 不预写
-尚未正式运行的结果。
+六类实验各使用独立停止状态机。CSV 将任务目标误差和连续轨迹参考跟踪误差分开，
+规划路径按目标段保留历史并忽略完全重复重发；空 Path 只记 clear event。除唯一提交的
+hover smoke 外，其余临时验证默认写入 `/tmp/ros2_drone_assessment_smoke/`。数据结构、
+固定指标公式、参数快照和历史恢复方式详见 `results/README.md`。正式交互导航目标和路线
+必须由项目负责人最终确认。
 
 ## 系统边界
 

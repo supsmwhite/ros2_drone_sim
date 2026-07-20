@@ -457,6 +457,11 @@ def plot_results(output, layer_points, profiles, boxes, safety_radius, corners,
     except ImportError:
         return []
     output.mkdir(parents=True, exist_ok=True)
+    for name in ("layered_paths_xy.png", "layered_paths_3d.png",
+                 "clearance_by_arc_length.png", "corner_dynamics.png"):
+        (output / name).unlink(missing_ok=True)
+    for path in output.glob("corner_*_zoom.png"):
+        path.unlink()
     colors = dict(planned="tab:blue", simplified="tab:orange",
                   reference="tab:green", actual="tab:red")
     fig, axis = plt.subplots(figsize=(13, 7))

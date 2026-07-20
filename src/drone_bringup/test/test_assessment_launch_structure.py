@@ -91,7 +91,13 @@ def test_basic_waits_for_runtime_single_or_multi_input():
 def test_navigation_public_defaults_and_forwarded_arguments():
     _, description = _load_launch('assessment_navigation_sim.launch.py')
     defaults = _declared_defaults(description)
-    assert defaults == {'yaw_mode': 'path_tangent', 'use_rviz': 'true'}
+    assert defaults == {
+        'yaw_mode': 'path_tangent',
+        'use_rviz': 'true',
+        'nominal_speed': '0.35',
+        'max_reference_speed': '0.70',
+        'max_reference_acceleration': '0.35',
+    }
     includes = [
         action for action in description.entities
         if isinstance(action, IncludeLaunchDescription)
@@ -99,9 +105,9 @@ def test_navigation_public_defaults_and_forwarded_arguments():
     assert len(includes) == 1
     include = includes[0]
     arguments = dict(include.launch_arguments)
-    assert set(arguments) == {'use_rviz', 'yaw_mode'}
-    assert isinstance(arguments['use_rviz'], LaunchConfiguration)
-    assert isinstance(arguments['yaw_mode'], LaunchConfiguration)
+    assert set(arguments) == set(defaults)
+    for argument in arguments.values():
+        assert isinstance(argument, LaunchConfiguration)
 
 
 def test_internal_navigation_uses_one_environment_yaml_for_all_consumers():

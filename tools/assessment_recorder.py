@@ -20,11 +20,12 @@ from assessment_metrics import (ExperimentStopController, PathHistory,
 EXPERIMENTS = ("hover", "single_goal", "multi_goal", "navigation", "disturbance", "failure_case")
 FIELDS = ("recording_time_s mission_time_s goal_x goal_y goal_z reference_x reference_y reference_z "
           "actual_x actual_y actual_z goal_error_x goal_error_y goal_error_z goal_position_error "
-          "tracking_error_x tracking_error_y tracking_error_z tracking_error velocity_x velocity_y "
+          "tracking_error_x tracking_error_y tracking_error_z tracking_error reference_acceleration_x "
+          "reference_acceleration_y reference_acceleration_z velocity_x velocity_y "
           "velocity_z speed roll pitch yaw angular_speed_x angular_speed_y angular_speed_z m1_rpm "
           "m2_rpm m3_rpm m4_rpm horizontal_saturated altitude_saturated attitude_saturated "
           "mixer_saturated raw_obstacle_distance safety_clearance mission_waypoint_index "
-          "mission_complete mission_success navigation_goal_index navigation_visited_goals "
+          "mission_complete mission_success navigation_goal_index navigation_segment_index navigation_visited_goals "
           "navigation_complete navigation_success interactive_ready interactive_active "
           "interactive_goal_count collision_state external_wrench_active external_force_x "
           "external_force_y external_force_z integral_compensation_x integral_compensation_y").split()
@@ -70,9 +71,9 @@ class Recorder:
     def __init__(self,node,args):
         self.node,self.args=node,args; self.output=Path(args.output); self.output.mkdir(parents=True,exist_ok=True)
         self.wall_start=time.monotonic(); self.record_start=None; self.mission_start=None; self.mission_time_source=None
-        self.last_ros=None; self.current_goal=configured_target(args.target_config); self.final_goal=self.current_goal; self.reference=None; self.goals=[]
+        self.last_ros=None; self.current_goal=configured_target(args.target_config); self.final_goal=self.current_goal; self.reference=None; self.reference_acceleration=None; self.goals=[]
         self.rpm=self.diag=self.imu=None; self.force=[0.,0.,0.]; self.force_active=None
-        self.mission_index=self.navigation_index=self.visited=None
+        self.mission_index=self.navigation_index=self.navigation_segment=self.visited=None
         self.mission_complete=self.mission_success=None; self.nav_complete=self.nav_success=None
         self.ready=self.active=self.goal_count=self.collision=None; self.editor_status=self.mission_status=""
         self.maximum_altitude=-math.inf; self.maximum_speed=0.; self.nonzero_rpm=False
@@ -123,6 +124,7 @@ class Recorder:
         self.sub(PoseArray,"/drone/interactive_goals/selected_goals",lambda m:self.on_goals(m,"navigation"),latched)
         self.sub(PoseStamped,"/drone/multi_goal/current_goal_pose",self.on_navigation_goal,latched)
         self.sub(UInt32,"/drone/multi_goal/current_goal_index",self.on_nav_index)
+        self.sub(UInt32,"/drone/multi_goal/current_segment",self.on_nav_segment)
         self.sub(UInt32,"/drone/multi_goal/visited_goals",self.on_visited)
         self.sub(Bool,"/drone/multi_goal/complete",self.on_nav_complete); self.sub(Bool,"/drone/multi_goal/success",self.on_nav_success)
         self.sub(String,"/drone/interactive_goals/status",lambda m:self.on_status("editor",m.data),latched)
@@ -144,6 +146,7 @@ class Recorder:
         self.start_mission("goal_received",goal_time); self.event("goal_received",{"position":self.current_goal},goal_time)
     def on_reference(self,m):
         self.tick("/drone/trajectory_setpoint"); self.reference=[m.position.x,m.position.y,m.position.z]
+        self.reference_acceleration=[m.acceleration.x,m.acceleration.y,m.acceleration.z]
         if self.args.experiment=="disturbance": self.current_goal=self.current_goal or self.reference; self.final_goal=self.current_goal; self.start_mission("trajectory_started",self.last_ros)
         self.changed("trajectory_started",True)
     def on_goals(self,m,kind):
@@ -163,6 +166,8 @@ class Recorder:
     def on_nav_index(self,m):
         self.tick("/drone/multi_goal/current_goal_index"); self.navigation_index=int(m.data); self.changed("navigation_goal_index_changed",self.navigation_index)
         self.activate_goal(self.navigation_index,"navigation_goal_index")
+    def on_nav_segment(self,m):
+        self.tick("/drone/multi_goal/current_segment"); self.navigation_segment=int(m.data)
     def on_visited(self,m): self.tick("/drone/multi_goal/visited_goals"); self.visited=int(m.data); self.changed("navigation_visited_goals_changed",self.visited)
     def on_nav_complete(self,m): self.tick("/drone/multi_goal/complete"); self.nav_complete=bool(m.data); self.changed("navigation_complete_changed",self.nav_complete)
     def on_nav_success(self,m): self.tick("/drone/multi_goal/success"); self.nav_success=bool(m.data); self.changed("navigation_success_changed",self.nav_success)
@@ -212,8 +217,12 @@ class Recorder:
                 row.update({f"{prefix}_x":target[0],f"{prefix}_y":target[1],f"{prefix}_z":target[2]})
             if prefix=="goal" and value is not None: row.update({"goal_error_x":error[0],"goal_error_y":error[1],"goal_error_z":error[2],"goal_position_error":value})
             if prefix=="reference" and value is not None: row.update({"tracking_error_x":error[0],"tracking_error_y":error[1],"tracking_error_z":error[2],"tracking_error":value})
+        if self.reference_acceleration is not None:
+            row.update(dict(zip(
+                ("reference_acceleration_x", "reference_acceleration_y", "reference_acceleration_z"),
+                self.reference_acceleration)))
         state={"mission_waypoint_index":self.mission_index,"mission_complete":self.mission_complete,"mission_success":self.mission_success,
-          "navigation_goal_index":self.navigation_index,"navigation_visited_goals":self.visited,"navigation_complete":self.nav_complete,"navigation_success":self.nav_success,
+          "navigation_goal_index":self.navigation_index,"navigation_segment_index":self.navigation_segment,"navigation_visited_goals":self.visited,"navigation_complete":self.nav_complete,"navigation_success":self.nav_success,
           "interactive_ready":self.ready,"interactive_active":self.active,"interactive_goal_count":self.goal_count,"collision_state":self.collision,"external_wrench_active":self.force_active}
         row.update({k:"" if val is None else int(val) if isinstance(val,bool) else val for k,val in state.items()})
         if self.rpm: row.update(dict(zip(("m1_rpm","m2_rpm","m3_rpm","m4_rpm"),(self.rpm.m1_front_left_ccw_rpm,self.rpm.m2_rear_left_cw_rpm,self.rpm.m3_rear_right_ccw_rpm,self.rpm.m4_front_right_cw_rpm))))

@@ -1,0 +1,4 @@
+time_s,mission_time_s,event,details
+0.0,,recording_started,{}
+4.425154685974121,0.0,goal_received,"{""position"":[0.0,0.0,1.5]}"
+8.48020052909851,4.05504584312439,arrival_confirmed,"{""arrival_time_s"":3.05006742477417}"

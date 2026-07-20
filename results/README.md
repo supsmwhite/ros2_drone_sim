@@ -32,10 +32,11 @@ every run as `smoke`, `candidate`, or `final`.
 and steady metrics. `tracking_error` is actual position to `/drone/trajectory_setpoint`; it is
 null for basic hover/single runs. These meanings are never interchanged.
 
-`paths.json` schema 2 stores the latest complete `actual` trajectory plus
+`paths.json` schema 3 stores the latest complete `actual` trajectory plus
 `planned_segments`, `simplified_segments`, and `reference_segments`. Each unique non-empty
-path is appended with sequence, goal index, and receive time. Exact transient-local repeats are
-ignored; empty paths append to `clear_events` and never erase prior segments.
+path is appended with sequence, goal index, `recording_time_s`, and `mission_time_s`.
+Pre-mission transient-local paths retain a null mission time and cannot start the navigation
+phase. Exact repeats are ignored; empty paths append to `clear_events` and never erase history.
 
 Regenerate plots without rerunning simulation:
 
@@ -74,6 +75,22 @@ the goals, route, thresholds, and report figures before that experiment is recor
 - Disturbance runs additionally report peak horizontal deviation, disturbance steady-state
   error, recovery time, and reverse overshoot. Failure runs retain the rejection/safety event
   timeline.
+
+For navigation, full-mission tracking includes ground-to-takeoff motion. Formal navigation
+tracking begins at the first valid reference segment associated with a navigation goal, falling
+back to planned, simplified, then goal activation. Reports should use
+`navigation_tracking_max_error_m` and `navigation_tracking_rms_error_m`; full-mission and
+takeoff metrics remain available as context.
+
+Multi-goal `goal_activation_times_s` means each goal became the active execution target.
+Non-final arrival equals the next activation; final arrival equals task completion, and
+`per_goal_duration_s = arrival - activation`. No activation time is inserted without a recorded
+`goal_activated` event.
+
+Disturbance direction is the mean horizontal force while active. Signed displacement projects
+`actual_xy-goal_xy` on that direction. `peak_force_direction_displacement_m` is its positive
+peak; `reverse_overshoot_m` is the maximum post-release crossing distance in the opposite
+direction, distinct from unsigned `peak_horizontal_deviation_m`.
 
 Every summary records both assignment thresholds (hover error below 0.30 m) and stricter
 project thresholds (final error 0.10 m, positive safety clearance, no non-finite values, no

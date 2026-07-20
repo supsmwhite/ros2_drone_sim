@@ -168,6 +168,16 @@ bash scripts/test_full.sh
 `paths.json` 保存各目标的 planned/simplified/reference 唯一路径段，空 Path 只记录清除
 事件，不能覆盖历史。
 
+最终指标语义冻结在 schema 3。full-mission tracking 包含起飞；navigation tracking 从
+第一条带有效 goal index 的 reference 路径段开始，缺失时依次回退 planned、simplified
+和 navigation goal activation，报告优先采用 navigation max/RMS。路径段同时记录
+recording 和 mission 时间，任务前 transient-local 路径的 mission 时间为 null。
+
+多目标 activation 是目标正式成为当前目标的时间，非最终 arrival 等于下一目标
+activation，最终 arrival 等于 complete，duration 为 arrival 减 activation。扰动反向
+超调使用有效阶段平均水平外力方向的有符号位移，仅统计撤力后穿越目标到反方向的距离；
+它与无方向峰值水平偏差、沿力方向正向峰值是三个独立指标。
+
 唯一允许提交的 smoke 是 `results/01_hover/smoke`。single、multi、navigation、
 disturbance 和 failure_case 的工具验证写入 `/tmp/ros2_drone_assessment_smoke/`，不作为
 报告数据。参数表将 ROS 基础/导航完成门控与评测分析阈值分开记录；正式结果仍必须等待

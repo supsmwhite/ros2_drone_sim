@@ -124,6 +124,11 @@ hover smoke 外，其余临时验证默认写入 `/tmp/ros2_drone_assessment_smo
 固定指标公式、参数快照和历史恢复方式详见 `results/README.md`。正式交互导航目标和路线
 必须由项目负责人最终确认。
 
+导航 tracking 同时保留包含起飞的 full-mission 指标和第一条有效正式路径段之后的
+navigation 指标；报告优先使用后者。多目标 activation 表示目标开始执行，arrival 表示
+完成门控，duration 为两者之差。扰动反向超调按有效外力平均方向投影，只统计撤力后
+越过目标至反方向的最大距离。
+
 ## 系统边界
 
 水平位置控制为 `P + D + 受限 I + 期望加速度前馈`，高度和姿态环为 PD，不能把

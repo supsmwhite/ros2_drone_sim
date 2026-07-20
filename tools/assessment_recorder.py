@@ -14,7 +14,8 @@ from sensor_msgs.msg import Imu
 from std_msgs.msg import Bool, String, UInt32
 from visualization_msgs.msg import MarkerArray
 
-from assessment_metrics import ExperimentStopController, PathHistory, point_box_distance
+from assessment_metrics import (ExperimentStopController, PathHistory,
+    mission_relative_time, point_box_distance)
 
 EXPERIMENTS = ("hover", "single_goal", "multi_goal", "navigation", "disturbance", "failure_case")
 FIELDS = ("recording_time_s mission_time_s goal_x goal_y goal_z reference_x reference_y reference_z "
@@ -76,7 +77,7 @@ class Recorder:
         self.ready=self.active=self.goal_count=self.collision=None; self.editor_status=self.mission_status=""
         self.maximum_altitude=-math.inf; self.maximum_speed=0.; self.nonzero_rpm=False
         self.boxes,self.safety_radius=environment(args.environment_config); self.history=PathHistory()
-        self.events=[]; self.counts={}; self.stop=False; self.failure_reason=None; self.goal_order=[]
+        self.events=[]; self.counts={}; self.stop=False; self.failure_reason=None; self.goal_order=[]; self.activated_goals=set()
         self.controller=ExperimentStopController(args.experiment,args.steady_window,
             args.arrival_position_threshold,args.arrival_speed_threshold,args.arrival_hold_time,
             args.recovery_position_threshold,args.recovery_speed_threshold,args.recovery_hold_time,
@@ -91,8 +92,9 @@ class Recorder:
     def tick(self,topic): self.counts[topic]=self.counts.get(topic,0)+1
     def event(self,name,value=None,at=None):
         t=self.last_ros if at is None else at
+        mission_time=mission_relative_time(t,self.mission_start)
         self.events.append({"recording_time_s":None if self.record_start is None or t is None else t-self.record_start,
-          "mission_time_s":None if self.mission_start is None or t is None else t-self.mission_start,
+          "mission_time_s":mission_time,
           "event":name,"details":value or {}})
     def changed(self,name,value):
         key="_event_"+name
@@ -101,6 +103,12 @@ class Recorder:
         if self.mission_start is None:
             self.mission_start=(self.last_ros if at is None else at); self.mission_time_source=source
             self.event("mission_started",{"source":source},self.mission_start)
+    def activate_goal(self,index,source,at=None):
+        if self.mission_start is None or index is None or index in self.activated_goals:return
+        t=self.last_ros if at is None else at
+        if t is None or t+1e-9<self.mission_start:return
+        self.activated_goals.add(index);self.goal_order.append(index)
+        self.event("goal_activated",{"goal_index":index,"source":source},t)
 
     def subscribe(self):
         latched=self.qos()
@@ -132,40 +140,46 @@ class Recorder:
     def on_diag(self,m): self.tick("/drone/controller/diagnostics"); self.diag=m
     def on_goal(self,m):
         self.tick("/drone/goal"); self.current_goal=[m.pose.position.x,m.pose.position.y,m.pose.position.z]; self.final_goal=self.current_goal
-        self.start_mission("goal_received",stamp_s(m.header.stamp) or None); self.event("goal_received",{"position":self.current_goal})
+        goal_time=stamp_s(m.header.stamp) or self.last_ros
+        self.start_mission("goal_received",goal_time); self.event("goal_received",{"position":self.current_goal},goal_time)
     def on_reference(self,m):
         self.tick("/drone/trajectory_setpoint"); self.reference=[m.position.x,m.position.y,m.position.z]
-        if self.args.experiment=="disturbance": self.current_goal=self.current_goal or self.reference; self.final_goal=self.current_goal; self.start_mission("trajectory_started")
+        if self.args.experiment=="disturbance": self.current_goal=self.current_goal or self.reference; self.final_goal=self.current_goal; self.start_mission("trajectory_started",self.last_ros)
         self.changed("trajectory_started",True)
     def on_goals(self,m,kind):
         topic="/drone/mission/goals" if kind=="basic" else "/drone/interactive_goals/selected_goals"; self.tick(topic)
         points=[[p.position.x,p.position.y,p.position.z] for p in m.poses]
         if points: self.goals=points; self.final_goal=points[-1]; self.goal_count=len(points)
-        if kind=="basic" and points and self.args.experiment=="multi_goal": self.start_mission("mission_goals_received",stamp_s(m.header.stamp) or None)
+        if kind=="basic" and points and self.args.experiment=="multi_goal":
+            mission_time=stamp_s(m.header.stamp) or self.last_ros
+            self.start_mission("mission_goals_received",mission_time);self.event("mission_goals_received",{"goal_count":len(points)},mission_time)
+            self.activate_goal(self.mission_index,"mission_waypoint_index",mission_time)
     def on_mission_index(self,m):
         self.tick("/drone/mission/current_waypoint_index"); self.mission_index=int(m.data); self.changed("waypoint_index_changed",self.mission_index)
         if self.goals and self.mission_index<len(self.goals): self.current_goal=self.goals[self.mission_index]
-        if self.mission_index not in self.goal_order: self.goal_order.append(self.mission_index)
+        self.activate_goal(self.mission_index,"mission_waypoint_index")
     def on_mission_complete(self,m): self.tick("/drone/mission/complete"); self.mission_complete=bool(m.data); self.changed("mission_complete_changed",self.mission_complete)
     def on_navigation_goal(self,m): self.tick("/drone/multi_goal/current_goal_pose"); self.current_goal=[m.pose.position.x,m.pose.position.y,m.pose.position.z]
     def on_nav_index(self,m):
         self.tick("/drone/multi_goal/current_goal_index"); self.navigation_index=int(m.data); self.changed("navigation_goal_index_changed",self.navigation_index)
-        if self.navigation_index not in self.goal_order: self.goal_order.append(self.navigation_index)
+        self.activate_goal(self.navigation_index,"navigation_goal_index")
     def on_visited(self,m): self.tick("/drone/multi_goal/visited_goals"); self.visited=int(m.data); self.changed("navigation_visited_goals_changed",self.visited)
     def on_nav_complete(self,m): self.tick("/drone/multi_goal/complete"); self.nav_complete=bool(m.data); self.changed("navigation_complete_changed",self.nav_complete)
     def on_nav_success(self,m): self.tick("/drone/multi_goal/success"); self.nav_success=bool(m.data); self.changed("navigation_success_changed",self.nav_success)
     def on_ready(self,m): self.tick("/drone/interactive_goals/ready"); self.ready=bool(m.data); self.changed("interactive_ready_changed",self.ready)
     def on_count(self,m): self.tick("/drone/interactive_goals/count"); self.goal_count=int(m.data); self.changed("interactive_goal_count_changed",self.goal_count)
     def on_active(self,m):
-        self.tick("/drone/interactive_mission/active"); self.active=bool(m.data); self.changed("interactive_active_changed",self.active)
-        if self.active: self.start_mission("interactive_mission_active")
+        self.tick("/drone/interactive_mission/active"); self.active=bool(m.data)
+        if self.active:self.start_mission("interactive_mission_active",self.last_ros)
+        self.changed("interactive_active_changed",self.active)
+        if self.active:self.activate_goal(self.navigation_index,"navigation_goal_index",self.last_ros)
     def on_status(self,kind,value):
         topic=f"/drone/interactive_{'goals' if kind=='editor' else 'mission'}/status"; self.tick(topic)
         if kind=="editor": self.editor_status=value; self.changed("editor_status_changed",value)
         else: self.mission_status=value; self.changed("mission_status_changed",value)
         upper=value.upper()
         if any(token in upper for token in ("REJECTED", "FAILED", "INVALID", "INSIDE ", "OUTSIDE ")):
-            self.failure_reason=value; self.start_mission("failure_status_observed")
+            self.failure_reason=value; self.start_mission("failure_status_observed",self.last_ros)
     def on_bool(self,kind,value):
         topic="/drone/environment/in_collision" if kind=="collision" else "/drone/external_wrench/active"; self.tick(topic)
         if kind=="collision": self.collision=bool(value); self.changed("collision_changed",self.collision)
@@ -174,8 +188,9 @@ class Recorder:
     def on_path(self,name,m):
         topic="/drone/path" if name=="actual" else f"/drone/{name}_path"; self.tick(topic)
         points=[[p.pose.position.x,p.pose.position.y,p.pose.position.z] for p in m.poses]
-        t=None if self.record_start is None or self.last_ros is None else self.last_ros-self.record_start
-        self.history.add(name,points,t,self.navigation_index if self.args.experiment=="navigation" else self.mission_index)
+        recording_time=None if self.record_start is None or self.last_ros is None else self.last_ros-self.record_start
+        mission_time=mission_relative_time(self.last_ros,self.mission_start)
+        self.history.add(name,points,recording_time,mission_time,self.navigation_index if self.args.experiment=="navigation" else self.mission_index)
 
     def on_odom(self,m):
         self.tick("/drone/odom"); now=stamp_s(m.header.stamp); self.last_ros=now
@@ -212,7 +227,7 @@ class Recorder:
     def finish(self):
         if not self.controller.stopped: self.controller.timeout()
         self.event("recording_stopped",{"reason":self.controller.stop_reason}); self.handle.close(); commit,dirty=git_state()
-        metadata={"schema_version":2,"experiment":self.args.experiment,"status":self.args.run_status,"repository_commit":commit,"git_dirty":dirty,
+        metadata={"schema_version":3,"experiment":self.args.experiment,"status":self.args.run_status,"repository_commit":commit,"git_dirty":dirty,
           "generated_at":datetime.now(timezone.utc).isoformat(),"target_config":self.args.target_config,"mission_time_source":self.mission_time_source,"stop_reason":self.controller.stop_reason,"final_state":self.controller.state,
           "target_position":self.final_goal,"goals":self.goals,"goal_order":self.goal_order,"safety_radius_m":self.safety_radius,"failure_reason":self.controller.failure_reason or self.failure_reason,
           "safety_observations":{"maximum_altitude_m":self.maximum_altitude if math.isfinite(self.maximum_altitude) else None,"maximum_speed_m_s":self.maximum_speed,"nonzero_rpm_observed":self.nonzero_rpm},

@@ -4,6 +4,20 @@
 import math
 
 
+def mission_relative_time(event_time, mission_start):
+    if event_time is None or mission_start is None:
+        return None
+    difference = event_time - mission_start
+    if difference < -1e-9:
+        return None
+    return 0.0 if abs(difference) <= 1e-9 else difference
+
+
+def require_nonnegative_mission_times(values):
+    if any(value is not None and math.isfinite(value) and value < -1e-9 for value in values):
+        raise ValueError("negative mission_time_s detected")
+
+
 def path_length(points):
     return sum(math.dist(a, b) for a, b in zip(points, points[1:])) if len(points) > 1 else 0.0
 
@@ -52,6 +66,90 @@ def held_condition_start(times, flags, hold_time):
     return None
 
 
+def navigation_phase_start(paths, activation_events=()):
+    """Return mission time/source of the first valid formal navigation artifact."""
+    for name in ("reference", "planned", "simplified"):
+        valid = [item for item in paths.get(name + "_segments", [])
+                 if item.get("mission_time_s") is not None and
+                 item.get("goal_index") is not None and item.get("goal_index") >= 0 and
+                 item.get("points")]
+        if valid:
+            first = min(valid, key=lambda item: item["mission_time_s"])
+            return float(first["mission_time_s"]), name + "_segment"
+    valid_events = [event for event in activation_events
+                    if event.get("mission_time_s") is not None and
+                    event.get("source") == "navigation_goal_index"]
+    if valid_events:
+        first = min(valid_events, key=lambda event: event["mission_time_s"])
+        return float(first["mission_time_s"]), "navigation_goal_index"
+    return None, None
+
+
+def phased_tracking_metrics(samples, phase_start):
+    """Split finite (mission_time, tracking_error) pairs at navigation phase start."""
+    full = [(time_s, error) for time_s, error in samples
+            if time_s is not None and error is not None and
+            math.isfinite(time_s) and math.isfinite(error)]
+    takeoff = [] if phase_start is None else [item for item in full if item[0] < phase_start]
+    navigation = [] if phase_start is None else [item for item in full if item[0] >= phase_start]
+
+    def stats(items, include_final=False):
+        errors = [item[1] for item in items]
+        result = {
+            "sample_count": len(errors) if errors else None,
+            "max_error_m": max(errors) if errors else None,
+            "rms_error_m": (math.sqrt(sum(value * value for value in errors) / len(errors))
+                            if errors else None),
+        }
+        if include_final:
+            result["final_error_m"] = errors[-1] if errors else None
+        return result
+    return stats(full), stats(takeoff), stats(navigation, include_final=True)
+
+
+def goal_timing(goal_count, activation_events, complete_time):
+    """Build activation, arrival, and duration arrays without inventing timestamps."""
+    activations = [None] * goal_count
+    for event in activation_events:
+        index = event.get("goal_index")
+        time_s = event.get("mission_time_s")
+        if (isinstance(index, int) and 0 <= index < goal_count and time_s is not None and
+                math.isfinite(time_s) and time_s >= 0 and activations[index] is None):
+            activations[index] = float(time_s)
+    arrivals = [None] * goal_count
+    for index in range(goal_count - 1):
+        arrivals[index] = activations[index + 1]
+    if goal_count:
+        arrivals[-1] = (float(complete_time) if complete_time is not None and
+                        math.isfinite(complete_time) and complete_time >= 0 else None)
+    durations = [None if start is None or end is None else end - start
+                 for start, end in zip(activations, arrivals)]
+    return activations, arrivals, durations
+
+
+def directional_disturbance_metrics(samples, force_threshold=1e-6):
+    """Return mean force direction, peak displacement, and post-release reverse overshoot.
+
+    Samples are dictionaries containing actual/goal/force xy and force_active.
+    """
+    active = [sample for sample in samples if sample["force_active"]]
+    if not active:
+        return None, None, None, []
+    mean_force = [sum(sample["force"][axis] for sample in active) / len(active)
+                  for axis in (0, 1)]
+    norm = math.hypot(*mean_force)
+    if norm < force_threshold:
+        return None, None, None, []
+    unit = [value / norm for value in mean_force]
+    signed = [sum((sample["actual"][axis] - sample["goal"][axis]) * unit[axis]
+                  for axis in (0, 1)) for sample in samples]
+    peak = max(signed)
+    active_indices = [index for index, sample in enumerate(samples) if sample["force_active"]]
+    after = signed[max(active_indices) + 1:]
+    reverse = max(0.0, -min(after)) if after else None
+    return mean_force, peak, reverse, signed
+
+
 class PathHistory:
     """Retain unique planning segments and the latest full actual trajectory."""
 
@@ -60,25 +158,28 @@ class PathHistory:
         self.segments = {name: [] for name in ("planned", "simplified", "reference")}
         self.clear_events = []
 
-    def add(self, name, points, received_time_s, goal_index=None):
+    def add(self, name, points, recording_time_s, mission_time_s=None, goal_index=None):
         normalized = [[float(v) for v in point] for point in points]
         if name == "actual":
             if len(normalized) >= len(self.actual):
                 self.actual = normalized
             return False
         if not normalized:
-            self.clear_events.append({"path": name, "received_time_s": received_time_s,
+            self.clear_events.append({"path": name, "recording_time_s": recording_time_s,
+                                      "mission_time_s": mission_time_s,
                                       "goal_index": goal_index})
             return False
         existing = self.segments[name]
-        if any(item["points"] == normalized for item in existing):
+        if any(item["points"] == normalized and item["goal_index"] == goal_index
+               for item in existing):
             return False
         existing.append({"sequence": len(existing), "goal_index": goal_index,
-                         "received_time_s": received_time_s, "points": normalized})
+                         "recording_time_s": recording_time_s,
+                         "mission_time_s": mission_time_s, "points": normalized})
         return True
 
     def as_dict(self):
-        return {"schema_version": 2, "actual": self.actual,
+        return {"schema_version": 3, "actual": self.actual,
                 "planned_segments": self.segments["planned"],
                 "simplified_segments": self.segments["simplified"],
                 "reference_segments": self.segments["reference"],

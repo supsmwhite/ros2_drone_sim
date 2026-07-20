@@ -3,7 +3,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from assessment_metrics import ExperimentStopController, PathHistory, path_length
+from assessment_metrics import (ExperimentStopController, PathHistory,
+    mission_relative_time, path_length)
 
 
 def update_arrival(controller):
@@ -99,12 +100,12 @@ def test_timeout_records_current_state():
 
 def test_path_segments_append_and_deduplicate():
     h = PathHistory(); points = [[0, 0, 0], [1, 0, 0]]
-    assert h.add("planned", points, 1, 0); assert not h.add("planned", points, 2, 0)
+    assert h.add("planned", points, 1, .5, 0); assert not h.add("planned", points, 2, 1.5, 0)
     assert len(h.segments["planned"]) == 1
 
 
 def test_empty_path_records_clear_without_overwrite():
-    h = PathHistory(); h.add("reference", [[0, 0, 0], [1, 0, 0]], 1, 0); h.add("reference", [], 2, 0)
+    h = PathHistory(); h.add("reference", [[0, 0, 0], [1, 0, 0]], 1, .5, 0); h.add("reference", [], 2, 1.5, 0)
     assert len(h.segments["reference"]) == 1 and len(h.clear_events) == 1
 
 
@@ -115,5 +116,24 @@ def test_actual_path_keeps_longest_snapshot():
 
 def test_three_segment_lengths_accumulate():
     h = PathHistory()
-    for i in range(3): h.add("planned", [[i, 0, 0], [i + 1, 0, 0]], i, i)
+    for i in range(3): h.add("planned", [[i, 0, 0], [i + 1, 0, 0]], i, i, i)
     assert sum(path_length(s["points"]) for s in h.segments["planned"]) == 3
+
+
+def test_path_schema_records_both_time_domains():
+    h = PathHistory(); h.add("reference", [[0, 0, 0]], 4.0, 1.5, 2)
+    item = h.as_dict()["reference_segments"][0]
+    assert h.as_dict()["schema_version"] == 3
+    assert item["recording_time_s"] == 4.0 and item["mission_time_s"] == 1.5
+
+
+def test_mission_start_event_is_exactly_zero():
+    assert mission_relative_time(12.5, 12.5) == 0.0
+
+
+def test_pre_mission_event_is_null_not_negative():
+    assert mission_relative_time(12.0, 12.5) is None
+
+
+def test_tiny_timestamp_roundoff_clamps_to_zero():
+    assert mission_relative_time(12.5 - 5e-10, 12.5) == 0.0

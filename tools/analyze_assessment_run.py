@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Compute fixed metrics and figures from a schema-v2 assessment recording."""
+"""Compute fixed metrics and figures from a schema-v3 assessment recording."""
 import argparse,csv,json,math
 from pathlib import Path
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import yaml
-from assessment_metrics import path_length,projection_overshoot,longest_true_duration,held_condition_start
+from assessment_metrics import (directional_disturbance_metrics, goal_timing,
+    held_condition_start, longest_true_duration, navigation_phase_start,
+    path_length, phased_tracking_metrics, projection_overshoot,
+    require_nonnegative_mission_times)
 
 def num(v):
     try:return float(v)
@@ -39,7 +42,7 @@ def observed(rows,key,value=True):return any(math.isfinite(r.get(key,math.nan)) 
 def plot(path,draw,xlabel="mission time (s)",ylabel=""):
     fig,ax=plt.subplots(figsize=(8,4.8));draw(ax);ax.set_xlabel(xlabel);ax.set_ylabel(ylabel);ax.grid(alpha=.3)
     if ax.get_legend_handles_labels()[1]:ax.legend();fig.tight_layout();fig.savefig(path,dpi=150);plt.close(fig)
-def figures(run,rows,paths,experiment):
+def figures(run,rows,paths,experiment,navigation_start=None,force_start=None,force_release=None):
     t=[r["mission_time_s"] for r in rows]
     plot(run/"trajectory_xy.png",lambda a:(a.plot([r["actual_x"] for r in rows],[r["actual_y"] for r in rows],label="actual"),a.scatter([rows[-1]["goal_x"]],[rows[-1]["goal_y"]],marker="x",label="goal")),"x (m)","y (m)")
     fig=plt.figure(figsize=(8,5));a=fig.add_subplot(111,projection="3d");a.plot([r["actual_x"] for r in rows],[r["actual_y"] for r in rows],[r["actual_z"] for r in rows]);a.set(xlabel="x (m)",ylabel="y (m)",zlabel="z (m)");fig.tight_layout();fig.savefig(run/"trajectory_3d.png",dpi=150);plt.close(fig)
@@ -58,13 +61,28 @@ def figures(run,rows,paths,experiment):
                 for i,s in enumerate(segments(paths,name)):a.plot([p[0] for p in s["points"]],[p[1] for p in s["points"]],color=colors[name],label=name if i==0 else None)
             a.plot([r["actual_x"] for r in rows],[r["actual_y"] for r in rows],label="actual",color="tab:blue")
         plot(run/"planned_simplified_reference_actual.png",routes,"x (m)","y (m)")
-        plot(run/"tracking_error.png",lambda a:a.plot(t,[r["tracking_error"] for r in rows]),ylabel="tracking error (m)")
+        def tracking_plot(a):
+            before=[r["tracking_error"] if navigation_start is not None and r["mission_time_s"]<navigation_start else math.nan for r in rows]
+            after=[r["tracking_error"] if navigation_start is not None and r["mission_time_s"]>=navigation_start else math.nan for r in rows]
+            a.plot(t,before,label="takeoff");a.plot(t,after,label="navigation")
+            if navigation_start is not None:a.axvline(navigation_start,color="black",ls="--",label="navigation phase start")
+        plot(run/"tracking_error.png",tracking_plot,ylabel="tracking error (m)")
+        nav_rows=[r for r in rows if navigation_start is not None and r["mission_time_s"]>=navigation_start]
+        plot(run/"navigation_tracking_error.png",lambda a:a.plot([r["mission_time_s"] for r in nav_rows],[r["tracking_error"] for r in nav_rows],label="navigation"),ylabel="tracking error (m)")
         plot(run/"obstacle_clearance.png",lambda a:(a.plot(t,[r["safety_clearance"] for r in rows]),a.axhline(0,color="red",ls="--")),ylabel="safety clearance (m)")
     if experiment=="disturbance":
         h=[math.hypot(r["goal_error_x"],r["goal_error_y"]) for r in rows];f=[math.hypot(r["external_force_x"],r["external_force_y"]) for r in rows]
         plot(run/"horizontal_error.png",lambda a:a.plot(t,h),ylabel="horizontal error (m)");plot(run/"external_force.png",lambda a:a.plot(t,f),ylabel="force (N)")
         plot(run/"integral_compensation.png",lambda a:[a.plot(t,[r["integral_compensation_"+x] for r in rows],label=x) for x in "xy"],ylabel="acceleration (m/s²)")
-        plot(run/"recovery.png",lambda a:(a.plot(t,h,label="error"),a.plot(t,f,label="force")),ylabel="m / N")
+        samples=[{"actual":[r["actual_x"],r["actual_y"]],"goal":[r["goal_x"],r["goal_y"]],"force":[r["external_force_x"],r["external_force_y"]],"force_active":r["external_wrench_active"]==1} for r in rows]
+        _,_,_,signed=directional_disturbance_metrics(samples)
+        def recovery_plot(a):
+            a.plot(t,h,label="horizontal error")
+            if signed:a.plot(t,signed,label="signed force-direction displacement")
+            a.axhline(0,color="black",ls=":",label="goal crossing")
+            if force_start is not None:a.axvline(force_start,color="tab:red",ls="--",label="force start")
+            if force_release is not None:a.axvline(force_release,color="tab:green",ls="--",label="force release")
+        plot(run/"recovery.png",recovery_plot,ylabel="displacement (m)")
     if experiment=="failure_case":
         plot(run/"failure_timeline.png",lambda a:(a.step(t,[r["interactive_ready"] for r in rows],label="ready"),a.step(t,[r["interactive_active"] for r in rows],label="active")),ylabel="state")
         plot(run/"safety_state.png",lambda a:(a.plot(t,[r["actual_z"] for r in rows],label="altitude"),a.plot(t,[r["speed"] for r in rows],label="speed")),ylabel="m / m/s")
@@ -73,6 +91,10 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument("run",type=Path);p.add_argument("--parameters",type=Path,default=Path("results/parameters"));a=p.parse_args()
     meta=json.loads((a.run/"metadata.json").read_text());rows_all=read_csv(a.run/"samples.csv");events=event_rows(a.run/"events.csv");paths=json.loads((a.run/"paths.json").read_text())
     if any(b["recording_time_s"]<=x["recording_time_s"] for x,b in zip(rows_all,rows_all[1:])):raise SystemExit("recording timestamps are not strictly increasing")
+    try:
+        require_nonnegative_mission_times([r["mission_time_s"] for r in rows_all+events])
+        require_nonnegative_mission_times([item.get("mission_time_s") for name in ("planned","simplified","reference") for item in segments(paths,name)])
+    except ValueError as error:raise SystemExit(str(error))
     mission_rows=[r for r in rows_all if math.isfinite(r["mission_time_s"])]
     rows=[r for r in mission_rows if math.isfinite(r["goal_position_error"])]
     if meta["experiment"]=="failure_case" and len(rows)<2: rows=mission_rows
@@ -87,13 +109,18 @@ def main():
     times=[r["mission_time_s"] for r in rows];att_bad=[abs(r["roll"])>max(.5,2*cp["max_tilt_angle"]) or abs(r["pitch"])>max(.5,2*cp["max_tilt_angle"]) for r in rows]
     actual=[[r[f"actual_{x}"] for x in "xyz"] for r in rows];goal=[rows[-1][f"goal_{x}"] for x in "xyz"] if has_goal else None
     plan={name:segments(paths,name) for name in ("planned","simplified","reference")}; lengths={name:segments_length(plan[name]) for name in plan}
-    tracking=vals([r["tracking_error"] for r in rows]);raw=minimum([r["raw_obstacle_distance"] for r in rows]);safety=float(ep["safety_radius"])
+    tracking_samples=[(r["mission_time_s"],r["tracking_error"]) for r in rows]
+    activation_events=[{"mission_time_s":e["mission_time_s"],**e["details"]} for e in events if e["event"]=="goal_activated"]
+    navigation_start,navigation_source=navigation_phase_start(paths,activation_events) if meta["experiment"]=="navigation" else (None,None)
+    full_tracking,takeoff_tracking,navigation_tracking=phased_tracking_metrics(tracking_samples,navigation_start)
+    raw=minimum([r["raw_obstacle_distance"] for r in rows]);safety=float(ep["safety_radius"])
     arrival=held_condition_start(times,[r["goal_position_error"]<meta["thresholds"]["arrival_position_threshold_m"] and r["speed"]<meta["thresholds"]["arrival_speed_threshold_m_s"] for r in rows],meta["thresholds"]["arrival_hold_time_s"]) if has_goal else None
     straight=math.dist(actual[0],goal) if goal else None
     metrics={"final_position_error_m":rows[-1]["goal_position_error"] if has_goal else None,"final_window_mean_error_m":avg([r["goal_position_error"] for r in final]),
       "arrival_time_s":arrival,
       "maximum_overshoot_m":over,"maximum_overshoot_percent":overpct,"steady_state_mean_error_m":avg([r["goal_position_error"] for r in steady]),"steady_state_rms_error_m":rms([r["goal_position_error"] for r in steady]),"steady_state_max_error_m":maximum([r["goal_position_error"] for r in steady]),
-      "maximum_goal_position_error_m":maximum([r["goal_position_error"] for r in rows]),"maximum_tracking_error_m":maximum(tracking),"tracking_error_rms_m":rms(tracking),"final_tracking_error_m":tracking[-1] if tracking else None,
+      "maximum_goal_position_error_m":maximum([r["goal_position_error"] for r in rows]),
+      "full_mission_tracking_max_error_m":full_tracking["max_error_m"],"full_mission_tracking_rms_error_m":full_tracking["rms_error_m"],
       "minimum_raw_obstacle_distance_m":raw,"safety_radius_m":safety,"minimum_safety_clearance_m":None if raw is None else raw-safety,
       "straight_line_distance_m":straight,"actual_path_length_m":path_length(actual),"flight_time_s":times[-1]-times[0],
       "planned_segment_count":len(plan["planned"]),"simplified_segment_count":len(plan["simplified"]),"reference_segment_count":len(plan["reference"]),
@@ -112,27 +139,28 @@ def main():
             group=[r for r in rows if math.isfinite(r[index]) and int(r[index])==i];per_errors.append(group[-1]["goal_position_error"])
             pairs=[([r[f"actual_{x}"] for x in "xyz"],[r[f"goal_{x}"] for x in "xyz"]) for r in group]
             value,percent=projection_overshoot(pairs);segment_overshoots.append({"goal_index":i,"maximum_overshoot_m":value,"maximum_overshoot_percent":percent})
-        accepts=event_times(events,"waypoint_index_changed" if experiment=="multi_goal" else "navigation_goal_index_changed")
-        transitions=accepts[-(len(unique)-1):] if len(unique)>1 else []
-        accepts=[0.0]+transitions
         completed=event_times(events,"mission_complete_changed" if experiment=="multi_goal" else "navigation_complete_changed")
-        arrivals=accepts[1:]+([completed[-1]] if completed else [])
-        metrics.update({"goal_count":len(meta.get("goals") or unique),"visited_goal_count":int(maximum([r["navigation_visited_goals"] for r in rows]) or len(unique)) if experiment=="navigation" else len(unique),"goal_order":unique,"goal_acceptance_times_s":accepts,"per_goal_arrival_times_s":arrivals,"per_goal_final_errors_m":per_errors,"segment_overshoots":segment_overshoots,
+        goal_count=len(meta.get("goals") or unique)
+        relevant=[event for event in activation_events if event.get("source")== ("mission_waypoint_index" if experiment=="multi_goal" else "navigation_goal_index")]
+        activations,arrivals,durations=goal_timing(goal_count,relevant,completed[-1] if completed else None)
+        metrics.update({"goal_count":goal_count,"visited_goal_count":int(maximum([r["navigation_visited_goals"] for r in rows]) or len(unique)) if experiment=="navigation" else len(unique),"goal_order":unique,"goal_activation_times_s":activations,"per_goal_arrival_times_s":arrivals,"per_goal_duration_s":durations,"per_goal_final_errors_m":per_errors,"segment_overshoots":segment_overshoots,
           "mission_complete":observed(rows,"mission_complete") if experiment=="multi_goal" else observed(rows,"navigation_complete"),"mission_success":None if experiment=="multi_goal" else observed(rows,"navigation_success"),"total_mission_time_s":times[-1]})
-    if experiment=="navigation":metrics.update({"collision_observed":observed(rows,"collision_state"),"navigation_complete":observed(rows,"navigation_complete"),"navigation_success":observed(rows,"navigation_success"),"preflight_ready_observed":observed(rows,"interactive_ready"),"execution_active_observed":observed(rows,"interactive_active")})
+    if experiment=="navigation":metrics.update({"takeoff_tracking_sample_count":takeoff_tracking["sample_count"],"takeoff_tracking_max_error_m":takeoff_tracking["max_error_m"],"takeoff_tracking_rms_error_m":takeoff_tracking["rms_error_m"],"navigation_tracking_sample_count":navigation_tracking["sample_count"],"navigation_tracking_max_error_m":navigation_tracking["max_error_m"],"navigation_tracking_rms_error_m":navigation_tracking["rms_error_m"],"navigation_tracking_final_error_m":navigation_tracking["final_error_m"],"collision_observed":observed(rows,"collision_state"),"navigation_complete":observed(rows,"navigation_complete"),"navigation_success":observed(rows,"navigation_success"),"preflight_ready_observed":observed(rows,"interactive_ready"),"execution_active_observed":observed(rows,"interactive_active")})
     if experiment=="disturbance":
         start=event_times(events,"external_force_started");release=event_times(events,"external_force_released");recovery=event_times(events,"recovery_confirmed");start=start[0] if start else None;release=release[0] if release else None
         force_rows=[r for r in rows if start is not None and release is not None and start<=r["mission_time_s"]<=release];tail=force_rows[-max(1,int(len(force_rows)*.2)):] if force_rows else []
         horizontal=[math.hypot(r["goal_error_x"],r["goal_error_y"]) for r in rows]
         after=[r for r in rows if release is not None and r["mission_time_s"]>=release]
         recovery_start=held_condition_start([r["mission_time_s"] for r in after],[math.hypot(r["goal_error_x"],r["goal_error_y"])<meta["thresholds"]["recovery_position_threshold_m"] and r["speed"]<meta["thresholds"]["recovery_speed_threshold_m_s"] for r in after],meta["thresholds"]["recovery_hold_time_s"]) if after else None
-        metrics.update({"force_start_time_s":start,"force_release_time_s":release,"force_duration_s":None if start is None or release is None else release-start,"peak_horizontal_deviation_m":maximum(horizontal),"disturbance_steady_state_error_m":avg([math.hypot(r["goal_error_x"],r["goal_error_y"]) for r in tail]),"recovery_time_s":None if recovery_start is None or release is None else recovery_start-release,"reverse_overshoot_m":None if release is None else maximum([math.hypot(r["goal_error_x"],r["goal_error_y"]) for r in after])})
+        disturbance_samples=[{"actual":[r["actual_x"],r["actual_y"]],"goal":[r["goal_x"],r["goal_y"]],"force":[r["external_force_x"],r["external_force_y"]],"force_active":r["external_wrench_active"]==1} for r in rows]
+        mean_force,peak_direction,reverse,_=directional_disturbance_metrics(disturbance_samples)
+        metrics.update({"force_start_time_s":start,"force_release_time_s":release,"force_duration_s":None if start is None or release is None else release-start,"mean_horizontal_force_n":mean_force,"peak_horizontal_deviation_m":maximum(horizontal),"peak_force_direction_displacement_m":peak_direction,"disturbance_steady_state_error_m":avg([math.hypot(r["goal_error_x"],r["goal_error_y"]) for r in tail]),"recovery_time_s":None if recovery_start is None or release is None else recovery_start-release,"reverse_overshoot_m":reverse})
     if experiment=="failure_case":
         request=event_times(events,"mission_started");after=[r for r in rows if not request or r["mission_time_s"]>=0];maxalt=maximum([r["actual_z"] for r in after]);maxspeed=maximum([r["speed"] for r in after]);ground=meta["thresholds"]["ground_motion_threshold_m"]
         metrics.update({"failure_detected":bool(meta.get("failure_reason")),"failure_reason":meta.get("failure_reason"),"ready_ever_true":observed(rows,"interactive_ready"),"active_ever_true":observed(rows,"interactive_active"),"maximum_altitude_after_request_m":maxalt,"maximum_speed_after_request_m_s":maxspeed,"unsafe_motion_detected":bool((maxalt or 0)>ground or (maxspeed or 0)>ground),"collision_observed":observed(rows,"collision_state")})
     checks={"assignment_hover_error_pass":None if metrics["final_position_error_m"] is None else metrics["final_position_error_m"]<.3,"project_final_error_pass":None if metrics["final_position_error_m"] is None else metrics["final_position_error_m"]<.1,"finite_attitude_pass":metrics["non_finite_attitude_count"]==0,"finite_rpm_pass":metrics["non_finite_rpm_count"]==0,"attitude_stability_pass":not metrics["attitude_divergence_detected"],"rpm_end_saturation_pass":not metrics["saturated_at_end"]}
-    if experiment=="navigation":checks["navigation_pass"]=metrics["navigation_complete"] and metrics["navigation_success"] and not metrics["collision_observed"] and metrics["minimum_safety_clearance_m"]>0
+    if experiment=="navigation":checks["navigation_pass"]=metrics["navigation_complete"] and metrics["navigation_success"] and not metrics["collision_observed"] and metrics["minimum_safety_clearance_m"]>0 and metrics["navigation_tracking_max_error_m"] is not None
     if experiment=="failure_case":checks["failure_safety_pass"]=metrics["failure_detected"] and not metrics["active_ever_true"] and not metrics["unsafe_motion_detected"] and not metrics["collision_observed"]
-    summary={"schema_version":2,"experiment":experiment,"status":meta["status"],"repository_commit":meta["repository_commit"],"sample_count":len(rows_all),"mission_sample_count":len(rows),"metrics":metrics,"assignment_thresholds":{"hover_final_position_error_max_m":.3},"project_thresholds":{"final_position_error_max_m":.1,"minimum_safety_clearance_strictly_greater_than_m":0.,"non_finite_value_count":0,"attitude_divergence_detected":False,"saturated_at_end":False},"checks":checks}
-    (a.run/"summary.json").write_text(json.dumps(summary,indent=2,allow_nan=False)+"\n");figures(a.run,rows,paths,experiment);print(json.dumps(metrics,indent=2))
+    summary={"schema_version":3,"experiment":experiment,"status":meta["status"],"repository_commit":meta["repository_commit"],"sample_count":len(rows_all),"mission_sample_count":len(rows),"navigation_phase_start_time_s":navigation_start,"navigation_phase_start_source":navigation_source,"metrics":metrics,"assignment_thresholds":{"hover_final_position_error_max_m":.3},"project_thresholds":{"final_position_error_max_m":.1,"minimum_safety_clearance_strictly_greater_than_m":0.,"non_finite_value_count":0,"attitude_divergence_detected":False,"saturated_at_end":False},"checks":checks}
+    (a.run/"summary.json").write_text(json.dumps(summary,indent=2,allow_nan=False)+"\n");figures(a.run,rows,paths,experiment,navigation_start,metrics.get("force_start_time_s"),metrics.get("force_release_time_s"));print(json.dumps(metrics,indent=2))
 if __name__=="__main__":main()

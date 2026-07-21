@@ -259,7 +259,8 @@ TEST(InteractiveGoalEditorYawTest, PoseArrayYamlAndDirectionMarkersPreserveYaw)
   EXPECT_EQ(markers.markers[2].type, visualization_msgs::msg::Marker::ARROW);
   ASSERT_TRUE(yaw_from_quaternion(markers.markers[2].pose.orientation));
   EXPECT_NEAR(*yaw_from_quaternion(markers.markers[2].pose.orientation), M_PI / 2.0, 1.0e-12);
-  EXPECT_NE(markers.markers[3].text.find("yaw=90"), std::string::npos);
+  EXPECT_EQ(markers.markers[3].text, "P1\nx=1.00  y=2.00  z=1.50\nyaw=90 deg");
+  EXPECT_EQ(markers.markers[6].text, "P2\nx=3.00  y=4.00  z=2.50\nyaw=180 deg");
   std::set<std::pair<std::string, int>> identifiers;
   for (auto iterator = markers.markers.begin() + 1; iterator != markers.markers.end(); ++iterator) {
     EXPECT_TRUE(identifiers.emplace(iterator->ns, iterator->id).second);

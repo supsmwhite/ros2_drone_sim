@@ -30,7 +30,7 @@ TARGETS = ((0.0, 0.0, 1.5), (2.0, 1.0, 1.5))
 
 def marker_labels(message):
     return {
-        marker.text for marker in message.markers
+        marker.text.splitlines()[0] for marker in message.markers
         if marker.type == Marker.TEXT_VIEW_FACING
     }
 
@@ -143,12 +143,12 @@ class TestAssessmentBasicSingle(unittest.TestCase):
             self.assertTrue(future.result().accepted, future.result().message)
             spin_until(
                 lambda: latest.get('complete') is False and
-                marker_labels(latest.get('markers', MarkerArray())) == {'GOAL CURRENT'},
-                5.0, f'GOAL CURRENT for {target}')
+                marker_labels(latest.get('markers', MarkerArray())) == {'P1 CURRENT'},
+                5.0, f'P1 CURRENT for {target}')
             spin_until(
                 lambda: latest.get('complete') is True and
-                marker_labels(latest.get('markers', MarkerArray())) == {'GOAL DONE'},
-                35.0, f'GOAL DONE for {target}')
+                marker_labels(latest.get('markers', MarkerArray())) == {'P1 DONE'},
+                35.0, f'P1 DONE for {target}')
             stable_since = None
 
             def stable():
@@ -174,7 +174,7 @@ class TestAssessmentBasicSingle(unittest.TestCase):
             self.assertTrue(client.wait_for_service(timeout_sec=8.0))
             self.assertEqual(node.get_node_names().count('waypoint_manager_node'), 1)
             results = [execute_target(target) for target in TARGETS]
-            self.assertEqual(marker_labels(latest['markers']), {'GOAL DONE'})
+            self.assertEqual(marker_labels(latest['markers']), {'P1 DONE'})
             self.assertGreater(len(latest.get('path', Path()).poses), 100)
             self.assertGreater(rpm_samples, 100)
             self.assertLess(maximum_consecutive_saturation_samples, 200)

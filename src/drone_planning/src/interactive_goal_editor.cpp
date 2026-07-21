@@ -314,8 +314,10 @@ visualization_msgs::msg::MarkerArray make_interactive_goal_markers(
     label.scale.z = 0.22;
     label.color.r = label.color.g = label.color.b = label.color.a = 1.0F;
     std::ostringstream text;
-    text << "P" << index + 1U << " yaw=" << std::fixed << std::setprecision(0) <<
-      degrees(goals[index].yaw) << " deg";
+    text << "P" << index + 1U << "\n" << std::fixed << std::setprecision(2) <<
+      "x=" << goals[index].position.x() << "  y=" << goals[index].position.y() <<
+      "  z=" << goals[index].position.z() << "\nyaw=" <<
+      std::lround(degrees(goals[index].yaw)) << " deg";
     label.text = text.str();
     result.markers.push_back(label);
   }

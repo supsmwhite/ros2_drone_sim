@@ -104,9 +104,12 @@ visualization_msgs::msg::MarkerArray make_goal_markers(
     label.scale.z = 0.30;
     label.color = body.color;
     std::ostringstream label_text;
-    label_text << "P" << index + 1U << "  " <<
-      (completed ? "DONE" : (current ? "CURRENT" : "WAITING")) << " yaw=" <<
-      std::fixed << std::setprecision(0) << goals[index].yaw * 180.0 / M_PI << " deg";
+    label_text << "P" << index + 1U << " " <<
+      (completed ? "DONE" : (current ? "CURRENT" : "WAITING")) << "\n" <<
+      std::fixed << std::setprecision(2) <<
+      "x=" << goals[index].position.x() << "  y=" << goals[index].position.y() <<
+      "  z=" << goals[index].position.z() << "\nyaw=" <<
+      std::lround(goals[index].yaw * 180.0 / M_PI) << " deg";
     label.text = label_text.str();
     result.markers.push_back(label);
   }

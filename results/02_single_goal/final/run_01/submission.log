@@ -1,0 +1,4 @@
++ ros2 run drone_mission goal_cli single 0 0 1.5 yaw=0
+Mission accepted: mission accepted and state reset to P1
++ ros2 run drone_mission goal_cli single 2 1 1.5 yaw=0
+Mission accepted: mission accepted and state reset to P1

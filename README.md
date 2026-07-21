@@ -82,6 +82,17 @@ max_reference_speed: 0.90
 max_reference_acceleration: 0.60
 ```
 
+静态避障目标也可直接通过现有执行服务提交，例如：
+
+```bash
+ros2 service call /drone/interactive_goals/execute \
+  drone_msgs/srv/ExecuteGoalSequence \
+  "{goals: {header: {frame_id: map}, poses: [{position: {x: 13.2, y: 5.5, z: 1.5}, orientation: {w: 1.0}}]}, draft_revision: 1}"
+```
+
+终端请求仍由执行节点完成安全预检；每次导航 Launch 只接受一项任务，新任务需重启
+Launch。RViz 编辑方式在同一执行链之外额外提供 `Validate & Preview` 预览。
+
 三次任务均成功，平均任务时间约 `58.04 s`，相比旧保守参数约提升 `13.9%`；未发生
 碰撞、控制饱和或非有限值，最小安全净空基本不变。需要临时恢复旧保守参数时可使用：
 

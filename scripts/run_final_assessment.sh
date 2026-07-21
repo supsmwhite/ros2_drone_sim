@@ -81,6 +81,12 @@ case "$experiment" in
   *) die "invalid --experiment: $experiment" ;;
 esac
 
+if [[ "$experiment" =~ ^(static_avoidance|narrow_corridor)$ ]]; then
+  screenshot_checklist="- [ ] At least one RViz screenshot saved and referenced"
+else
+  screenshot_checklist="- [ ] Optional screenshots reviewed if supplied"
+fi
+
 output_root="$(realpath -m -- "$output_root")"
 relative_path="${scenario_dir}/${status}/${run_id}"
 run_dir="${output_root}/${relative_path}"
@@ -304,7 +310,7 @@ Status: incomplete
 
 - [ ] RViz trajectory and target markers checked
 - [ ] No visually observed collision or attitude divergence
-- [ ] Required screenshots saved and referenced
+${screenshot_checklist}
 - [ ] Curves and summary reviewed against the protocol
 - [ ] Reviewer name and date recorded below
 

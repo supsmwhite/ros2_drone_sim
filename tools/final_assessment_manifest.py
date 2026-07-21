@@ -17,11 +17,22 @@ REQUIRED_PARAMETERS = (
     "dynamics.yaml", "controller.yaml", "environment.yaml", "astar.yaml",
     "planned_trajectory.yaml", "interactive_goal_editor.yaml",
     "interactive_goal_executor.yaml", "mission.yaml")
+SCREENSHOT_OPTIONAL_SCENARIOS = {"hover", "single_goal", "multi_goal"}
+SCREENSHOT_REQUIRED_SCENARIOS = {"static_avoidance", "narrow_corridor"}
+
+
+def screenshots_required(scenario_id):
+    if scenario_id in SCREENSHOT_OPTIONAL_SCENARIOS:
+        return False
+    if scenario_id in SCREENSHOT_REQUIRED_SCENARIOS:
+        return True
+    raise ValueError(f"unknown scenario_id for screenshot policy: {scenario_id}")
 
 
 def report_eligibility(status, stop_reason, overall_pass, commit_before,
                        commit_after, clean_before, clean_after,
-                       parameters_complete, manual_acceptance_complete):
+                       parameters_complete, manual_acceptance_complete,
+                       required_screenshots_complete=True):
     conditions = {
         "status_is_final": status == "final",
         "non_timeout_stop": bool(stop_reason) and not stop_reason.startswith("timeout"),
@@ -31,6 +42,7 @@ def report_eligibility(status, stop_reason, overall_pass, commit_before,
         "source_clean_after": clean_after is True,
         "parameter_snapshot_complete": parameters_complete is True,
         "manual_acceptance_complete": manual_acceptance_complete is True,
+        "required_screenshots_complete": required_screenshots_complete is True,
     }
     failures = [name for name, passed in conditions.items() if not passed]
     return not failures, conditions, failures
@@ -99,7 +111,7 @@ def verify_parameter_snapshot(run_dir):
     return True
 
 
-def validate_manual_acceptance(run_dir, screenshot_arguments):
+def validate_manual_acceptance(run_dir, screenshot_arguments, screenshot_required):
     manual_path = run_dir / "manual_acceptance.md"
     text = manual_path.read_text()
     if not re.search(r"^Status:\s*complete\s*$", text, re.IGNORECASE | re.MULTILINE):
@@ -109,7 +121,8 @@ def validate_manual_acceptance(run_dir, screenshot_arguments):
     for field in ("Reviewer", "Date"):
         if not re.search(rf"^{field}:\s*\S+", text, re.MULTILINE):
             raise ValueError(f"manual acceptance {field} is missing")
-    if not screenshot_arguments:
+    screenshot_arguments = screenshot_arguments or []
+    if screenshot_required and not screenshot_arguments:
         raise ValueError("at least one required RViz screenshot must be provided")
     screenshots = []
     for argument in screenshot_arguments:
@@ -138,11 +151,13 @@ def build_entry(args):
     run_dir = args.run_dir.resolve()
     metadata = json.loads((run_dir / "metadata.json").read_text())
     summary = json.loads((run_dir / "summary.json").read_text())
+    if metadata.get("scenario_id") != args.scenario_id:
+        raise ValueError("metadata.json scenario_id does not match manifest scenario_id")
     eligible, conditions, failures = report_eligibility(
         args.status, metadata.get("stop_reason"), summary.get("overall_pass"),
         args.commit_before, args.commit_after, args.clean_before,
         args.clean_after, args.parameters_complete,
-        args.manual_acceptance_complete)
+        args.manual_acceptance_complete, not screenshots_required(args.scenario_id))
     return {
         "scenario_id": args.scenario_id,
         "recorder_experiment": args.recorder_experiment,
@@ -212,6 +227,8 @@ def finalize_entry(args):
         raise ValueError("run is already finalized and report eligible")
     metadata = json.loads((run_dir / "metadata.json").read_text())
     summary = json.loads((run_dir / "summary.json").read_text())
+    if metadata.get("scenario_id") != entry.get("scenario_id"):
+        raise ValueError("metadata.json scenario_id does not match manifest scenario_id")
     if entry.get("status") != "final" or metadata.get("status") != "final" or summary.get("status") != "final":
         raise ValueError("only an existing final run may be finalized")
     if summary.get("overall_pass") is not True:
@@ -220,13 +237,14 @@ def finalize_entry(args):
     parameters_complete = verify_parameter_snapshot(run_dir)
     if not parameters_complete:
         raise ValueError("parameter snapshot or checksums are incomplete")
-    screenshots = validate_manual_acceptance(run_dir, args.screenshot)
+    screenshot_required = screenshots_required(metadata.get("scenario_id"))
+    screenshots = validate_manual_acceptance(run_dir, args.screenshot, screenshot_required)
     git = entry.get("git", {})
     eligible, conditions, failures = report_eligibility(
         entry["status"], metadata.get("stop_reason"), summary.get("overall_pass"),
         git.get("commit_before"), git.get("commit_after"),
         git.get("source_clean_before"), git.get("source_clean_after"),
-        parameters_complete, True)
+        parameters_complete, True, not screenshot_required or bool(screenshots))
     if not eligible:
         raise ValueError("run does not satisfy final eligibility: " + ", ".join(failures))
     reviewed_at = datetime.now(timezone.utc).isoformat()
@@ -280,7 +298,7 @@ def arguments():
     finalize = subparsers.add_parser("finalize", help="finalize an existing manually reviewed final run")
     finalize.add_argument("--manifest", required=True, type=Path)
     finalize.add_argument("--run-dir", required=True, type=Path)
-    finalize.add_argument("--screenshot", action="append", required=True)
+    finalize.add_argument("--screenshot", action="append", default=[])
     return parser.parse_args()
 
 

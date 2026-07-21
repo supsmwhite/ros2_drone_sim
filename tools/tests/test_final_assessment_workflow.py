@@ -153,12 +153,17 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def make_review_run(tmp_path, status="final", overall_pass=True):
+def make_review_run(tmp_path, status="final", overall_pass=True, scenario_id="hover"):
     root = tmp_path / "results"
-    relative = f"01_hover/{status}/run_01"
+    scenario_directories = {
+        "hover": "01_hover", "single_goal": "02_single_goal",
+        "multi_goal": "03_multi_goal", "static_avoidance": "04_static_avoidance",
+        "narrow_corridor": "05_narrow_corridor",
+    }
+    relative = f"{scenario_directories[scenario_id]}/{status}/run_01"
     run = root / relative; run.mkdir(parents=True)
     protected = {
-        "metadata.json": json.dumps({"status": status,
+        "metadata.json": json.dumps({"status": status, "scenario_id": scenario_id,
             "stop_reason": "arrival_and_steady_window_complete"}),
         "summary.json": json.dumps({"status": status,
             "overall_pass": overall_pass, "failure_reasons": []}),
@@ -174,7 +179,9 @@ def make_review_run(tmp_path, status="final", overall_pass=True):
         f"{sha(parameter_dir / name)}  {name}\n" for name in REQUIRED_PARAMETERS))
     (run / "manual_acceptance.md").write_text("Status: incomplete\n- [ ] review\nReviewer:\nDate:\n")
     entry = {
-        "scenario_id": "hover", "recorder_experiment": "hover",
+        "scenario_id": scenario_id,
+        "recorder_experiment": "navigation" if scenario_id in (
+            "static_avoidance", "narrow_corridor") else scenario_id,
         "status": status, "run_id": "run_01", "path": relative,
         "git": {"commit_before": "abc", "commit_after": "abc",
                 "source_clean_before": True, "source_clean_after": True},
@@ -190,18 +197,31 @@ def make_review_run(tmp_path, status="final", overall_pass=True):
     return root, run, manifest_path
 
 
-def complete_manual(run, create_screenshot=True):
+def complete_manual(run, create_screenshot=True, reference_screenshot=True):
     screenshot = run / "screenshots" / "rviz_overview.png"
     if create_screenshot:
         screenshot.parent.mkdir(); screenshot.write_bytes(b"png evidence")
+    screenshot_line = "Screenshot: screenshots/rviz_overview.png\n" if reference_screenshot else ""
     (run / "manual_acceptance.md").write_text(
         "Status: complete\n- [x] review\nReviewer: Test Reviewer\n"
-        "Date: 2026-07-21\nScreenshot: screenshots/rviz_overview.png\n")
+        f"Date: 2026-07-21\n{screenshot_line}")
     return "screenshots/rviz_overview.png"
 
 
 def finalize_args(run, manifest, screenshot):
-    return SimpleNamespace(run_dir=run, manifest=manifest, screenshot=[screenshot])
+    return SimpleNamespace(
+        run_dir=run, manifest=manifest,
+        screenshot=[] if screenshot is None else [screenshot])
+
+
+@pytest.mark.parametrize("scenario_id", ["hover", "single_goal", "multi_goal"])
+def test_basic_scenarios_finalize_without_screenshot(tmp_path, scenario_id):
+    _, run, manifest = make_review_run(tmp_path, scenario_id=scenario_id)
+    complete_manual(run, create_screenshot=False, reference_screenshot=False)
+    entry = finalize_entry(finalize_args(run, manifest, None))
+    assert entry["report_eligible"]
+    assert entry["manual_acceptance"]["screenshots"] == []
+    assert entry["eligibility_conditions"]["required_screenshots_complete"]
 
 
 def test_final_manual_review_promotes_and_synchronizes_manifest(tmp_path):
@@ -235,11 +255,23 @@ def test_incomplete_manual_review_is_rejected(tmp_path):
         finalize_entry(finalize_args(run, manifest, "screenshots/missing.png"))
 
 
-def test_missing_required_screenshot_is_rejected(tmp_path):
-    _, run, manifest = make_review_run(tmp_path)
+@pytest.mark.parametrize("scenario_id", ["static_avoidance", "narrow_corridor"])
+def test_navigation_scenarios_require_screenshot_then_finalize_after_supplement(
+        tmp_path, scenario_id):
+    _, run, manifest = make_review_run(tmp_path, scenario_id=scenario_id)
     screenshot = complete_manual(run, create_screenshot=False)
+    protected_before = {name: sha(run / name) for name in (
+        "metadata.json", "samples.csv", "diagnostics.csv", "events.csv",
+        "paths.json", "summary.json")}
     with pytest.raises(ValueError, match="screenshot is missing"):
         finalize_entry(finalize_args(run, manifest, screenshot))
+    assert {name: sha(run / name) for name in protected_before} == protected_before
+    screenshot_path = run / screenshot
+    screenshot_path.parent.mkdir()
+    screenshot_path.write_bytes(b"png evidence")
+    entry = finalize_entry(finalize_args(run, manifest, screenshot))
+    assert entry["report_eligible"]
+    assert entry["manual_acceptance"]["screenshots"] == [screenshot]
 
 
 def test_failed_summary_cannot_be_finalized(tmp_path):
@@ -271,3 +303,13 @@ def test_finalize_rejects_changed_raw_evidence(tmp_path):
     (run / "samples.csv").write_text("changed\n")
     with pytest.raises(ValueError, match="changed after recording"):
         finalize_entry(finalize_args(run, manifest, screenshot))
+
+
+def test_finalize_rejects_scenario_identity_mismatch(tmp_path):
+    _, run, manifest = make_review_run(tmp_path, scenario_id="static_avoidance")
+    entry = json.loads((run / "manifest_entry.json").read_text())
+    entry["scenario_id"] = "hover"
+    (run / "manifest_entry.json").write_text(json.dumps(entry))
+    complete_manual(run, create_screenshot=False, reference_screenshot=False)
+    with pytest.raises(ValueError, match="scenario_id does not match"):
+        finalize_entry(finalize_args(run, manifest, None))

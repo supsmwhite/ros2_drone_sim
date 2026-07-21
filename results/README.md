@@ -57,8 +57,8 @@ Each completed run contains:
 - `git_state.json`, `evidence_sha256.txt`, `manifest_entry.json`, and `manifest.log`;
 - `manual_acceptance.md`, initially marked `Status: incomplete`.
 
-RViz screenshots referenced by manual acceptance are added without replacing recorder or
-analyzer artifacts.
+RViz screenshots are added without replacing recorder or analyzer artifacts. They are optional
+for hover, single-goal, and multi-goal runs, but required for both navigation scenarios.
 
 ## Manifest schema 4
 
@@ -86,12 +86,24 @@ The historical hover smoke predates this workflow and remains explicitly marked
 5. source worktree is clean before and after, excluding only artifacts generated for that run
    and its manifest update;
 6. all required parameter snapshots and checksums are complete;
-7. manual acceptance is complete.
+7. protected raw evidence still matches its recorded checksums;
+8. manual acceptance is complete;
+9. for `static_avoidance` and `narrow_corridor`, at least one valid RViz screenshot is present
+   and referenced by manual acceptance.
 
 The orchestration script always creates the manual template as incomplete, so a new run starts
-with `report_eligible=false`. A reviewer must inspect RViz evidence, screenshots, curves, and
-logs before finalization. Mark every checklist item complete, set `Status: complete`, fill in
-reviewer/date, and reference each required screenshot inside the run directory. Then run:
+with `report_eligible=false`. A reviewer must inspect the available RViz evidence, curves, and
+logs before finalization, mark every checklist item complete, and fill in reviewer/date. Hover,
+single-goal, and multi-goal runs may then be finalized without `--screenshot`:
+
+```bash
+python3 tools/final_assessment_manifest.py finalize \
+  --manifest results/manifest.json \
+  --run-dir results/01_hover/final/run_01
+```
+
+For `static_avoidance` and `narrow_corridor`, save and reference at least one screenshot inside
+the run directory, then pass it during finalization:
 
 ```bash
 python3 tools/final_assessment_manifest.py finalize \
@@ -100,10 +112,12 @@ python3 tools/final_assessment_manifest.py finalize \
   --screenshot screenshots/rviz_overview.png
 ```
 
-Finalization verifies protected raw evidence, `overall_pass`, parameter checksums, Git
-conditions, manual fields, and screenshots; it then recalculates evidence checksums and updates
-both manifests. Repeating finalization is rejected explicitly. Smoke and trial runs can never
-become report eligible.
+Navigation screenshots may be added after the formal data run. Until they are supplied,
+finalization is rejected without altering the recorded metrics. Finalization automatically uses
+`scenario_id` to apply the screenshot policy and always verifies protected raw evidence,
+`overall_pass`, parameter checksums, Git conditions, and manual fields; it then recalculates
+evidence checksums and updates both manifests. Repeating finalization is rejected explicitly.
+Smoke and trial runs can never become report eligible.
 
 ## Signal and metric semantics
 

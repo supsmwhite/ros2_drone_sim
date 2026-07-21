@@ -347,7 +347,8 @@ class Recorder:
         self.handle.close(); commit,dirty=git_state()
         targets=self.protocol_targets or [target for target in self.observed_targets if target is not None]
         metadata={"schema_version":3,"protocol_version":self.args.protocol_version,
-          "experiment":self.args.experiment,"status":self.args.run_status,"repository_commit":commit,"git_dirty":dirty,
+          "experiment":self.args.experiment,"scenario_id":self.args.scenario_id,
+          "status":self.args.run_status,"repository_commit":commit,"git_dirty":dirty,
           "generated_at":datetime.now(timezone.utc).isoformat(),"target_config":self.args.target_config,"mission_time_source":self.mission_time_source,"stop_reason":self.controller.stop_reason,"final_state":self.controller.state,
           "service_name":self.args.service_name,"targets":targets,
           "target_position":self.final_goal,"target_yaw_rad":self.final_goal_yaw,
@@ -378,8 +379,8 @@ class Recorder:
 
 
 def arguments():
-    p=argparse.ArgumentParser(description=__doc__); p.add_argument("--experiment",choices=EXPERIMENTS,required=True); p.add_argument("--output",required=True); p.add_argument("--run-status",choices=("smoke","candidate","final"),default="candidate")
-    p.add_argument("--protocol-version",default=PROTOCOL_VERSION); p.add_argument("--service-name")
+    p=argparse.ArgumentParser(description=__doc__); p.add_argument("--experiment",choices=EXPERIMENTS,required=True); p.add_argument("--output",required=True); p.add_argument("--run-status",choices=("smoke","trial","candidate","final"),default="candidate")
+    p.add_argument("--protocol-version",default=PROTOCOL_VERSION); p.add_argument("--scenario-id"); p.add_argument("--service-name")
     p.add_argument("--target-config"); p.add_argument("--expected-goal",action="append",nargs=4,type=float,metavar=("X","Y","Z","YAW"))
     p.add_argument("--overwrite-existing",action="store_true"); p.add_argument("--environment-config",default="src/drone_bringup/config/environment.yaml")
     for name,default in (("steady-window",3.),("arrival-position-threshold",.1),("arrival-speed-threshold",.08),("arrival-hold-time",1.),("recovery-position-threshold",.1),("recovery-speed-threshold",.08),("recovery-hold-time",1.),("failure-observation-window",2.),("ground-motion-threshold",.1),("timeout",120.)): p.add_argument("--"+name,type=float,default=default)

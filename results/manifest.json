@@ -1,15 +1,58 @@
 {
-  "schema_version": 3,
-  "repository_commit": "e1d61a614b21499542922d934afe6c6f584456e8",
-  "generated_at": "2026-07-20T09:40:55.822399+00:00",
-  "experiments": [
+  "schema_version": 4,
+  "generated_at": "2026-07-21T12:34:51+08:00",
+  "runs": [
     {
-      "experiment": "hover",
+      "scenario_id": "hover",
+      "recorder_experiment": "hover",
       "status": "smoke",
+      "run_id": "legacy_smoke",
       "path": "01_hover/smoke",
-      "target": [0.0, 0.0, 1.5],
+      "protocol_version": null,
+      "generated_at": "2026-07-20T09:40:55.822399+00:00",
       "metadata": "01_hover/smoke/metadata.json",
-      "summary": "01_hover/smoke/summary.json"
+      "summary": "01_hover/smoke/summary.json",
+      "manifest_entry": null,
+      "git": {
+        "commit_before": "e1d61a614b21499542922d934afe6c6f584456e8",
+        "commit_after": "e1d61a614b21499542922d934afe6c6f584456e8",
+        "source_clean_before": true,
+        "source_clean_after": true
+      },
+      "parameter_snapshot": {
+        "complete": false,
+        "directory": "parameters",
+        "checksums": null
+      },
+      "outcome": {
+        "stop_reason": "arrival_and_steady_window_complete",
+        "overall_pass": null,
+        "failure_reasons": [
+          "legacy smoke predates protocol checks"
+        ]
+      },
+      "manual_acceptance": {
+        "completed": false,
+        "file": null
+      },
+      "eligibility_conditions": {
+        "status_is_final": false,
+        "non_timeout_stop": true,
+        "overall_pass": false,
+        "commit_unchanged": true,
+        "source_clean_before": true,
+        "source_clean_after": true,
+        "parameter_snapshot_complete": false,
+        "manual_acceptance_complete": false
+      },
+      "report_eligible": false,
+      "eligibility_failures": [
+        "status_is_final",
+        "overall_pass",
+        "parameter_snapshot_complete",
+        "manual_acceptance_complete"
+      ],
+      "legacy_layout": true
     }
   ]
 }

@@ -29,6 +29,8 @@ def run_script(tmp_path, experiment="hover", status="smoke", run_id="run_01", ex
     ("multi_goal", "03_multi_goal", "multi_goal", "1.5707963267948966"),
     ("static_avoidance", "04_static_avoidance", "navigation", "13.2 5.5 1.5"),
     ("narrow_corridor", "05_narrow_corridor", "navigation", "12.1 1.1 1.5"),
+    ("disturbance_short_gust", "06_disturbance/short_gust", "disturbance", "--expected-force-duration 2"),
+    ("disturbance_persistent_release", "06_disturbance/persistent_release", "disturbance", "--expected-force-duration 10"),
 ])
 def test_fixed_scenario_mapping(tmp_path, experiment, scenario_dir, recorder, target):
     result = run_script(tmp_path, experiment)
@@ -55,6 +57,20 @@ def test_multi_goal_uses_prehover_then_four_formal_closed_square_targets(tmp_pat
         "--expected-goal 0 0 1.5 -1.5707963267948966")
     assert expected in output
     assert "pre_hover=single 0 0 1.5 yaw=0 before recorder" in output
+
+
+@pytest.mark.parametrize("experiment,profile,duration", [
+    ("disturbance_short_gust", "short_gust", "2"),
+    ("disturbance_persistent_release", "persistent_release", "10")])
+def test_disturbance_dry_run_has_no_service_and_fixed_metadata(tmp_path, experiment, profile, duration):
+    output=run_script(tmp_path,experiment).stdout
+    assert "service=none" in output
+    assert f"profile:={profile}" in output and "start_delay:=10.0" in output
+    assert "--expected-goal 0 0 1.5 0" in output
+    assert f"--disturbance-profile {profile}" in output
+    assert "--expected-force 0.30 0 0" in output
+    assert f"--expected-force-duration {duration}" in output
+    assert "--expected-recovery-duration 10" in output
 
 
 def test_analyzer_uses_run_parameter_snapshot(tmp_path):
@@ -170,6 +186,8 @@ def make_review_run(tmp_path, status="final", overall_pass=True, scenario_id="ho
         "hover": "01_hover", "single_goal": "02_single_goal",
         "multi_goal": "03_multi_goal", "static_avoidance": "04_static_avoidance",
         "narrow_corridor": "05_narrow_corridor",
+        "disturbance_short_gust": "06_disturbance/short_gust",
+        "disturbance_persistent_release": "06_disturbance/persistent_release",
     }
     relative = f"{scenario_directories[scenario_id]}/{status}/run_01"
     run = root / relative; run.mkdir(parents=True)
@@ -233,6 +251,16 @@ def test_basic_scenarios_finalize_without_screenshot(tmp_path, scenario_id):
     assert entry["report_eligible"]
     assert entry["manual_acceptance"]["screenshots"] == []
     assert entry["eligibility_conditions"]["required_screenshots_complete"]
+
+
+@pytest.mark.parametrize("scenario_id", [
+    "disturbance_short_gust", "disturbance_persistent_release"])
+def test_disturbance_scenarios_finalize_without_screenshot(tmp_path, scenario_id):
+    _, run, manifest = make_review_run(tmp_path, scenario_id=scenario_id)
+    complete_manual(run, create_screenshot=False, reference_screenshot=False)
+    entry = finalize_entry(finalize_args(run, manifest, None))
+    assert entry["report_eligible"]
+    assert entry["manual_acceptance"]["screenshots"] == []
 
 
 def test_final_manual_review_promotes_and_synchronizes_manifest(tmp_path):

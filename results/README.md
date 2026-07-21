@@ -15,7 +15,7 @@ promotes an old smoke or trial to final.
   tracked source/parameter state before launch. The analyzer passing is necessary but not
   sufficient for report eligibility.
 
-The five fixed scenarios are:
+The five fixed base/navigation scenarios are:
 
 | Directory / `scenario_id` | Recorder type | Fixed protocol |
 |---|---|---|
@@ -28,6 +28,17 @@ The five fixed scenarios are:
 Static avoidance and narrow corridor intentionally share the ROS recorder type
 `navigation`. Their distinct `scenario_id`, numbered directory, target snapshot, and manifest
 entry must never be collapsed.
+
+Two independent bonus disturbance scenarios are recorded separately:
+
+| Directory / `scenario_id` | Recorder type | Fixed protocol |
+|---|---|---|
+| `06_disturbance/short_gust` / `disturbance_short_gust` | `disturbance` | `(0,0,1.5,0)`, `+X 0.30 N` for `2 s`, then recovery |
+| `06_disturbance/persistent_release` / `disturbance_persistent_release` | `disturbance` | `(0,0,1.5,0)`, `+X 0.30 N` for `10 s`, then force-release recovery |
+
+Short gust evaluates transient suppression and recovery. Persistent release evaluates
+steady-state compensation and recovery after force removal. Neither uses a mission submission
+Service; both reuse the disturbance launch and the unified `disturbance` Recorder.
 
 ## Directory and invocation
 
@@ -58,7 +69,8 @@ Each completed run contains:
 - `manual_acceptance.md`, initially marked `Status: incomplete`.
 
 RViz screenshots are added without replacing recorder or analyzer artifacts. They are optional
-for hover, single-goal, and multi-goal runs, but required for both navigation scenarios.
+for hover, single-goal, multi-goal, and both disturbance runs, but required for both navigation
+scenarios.
 
 ## Manifest schema 4
 

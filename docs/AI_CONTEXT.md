@@ -182,6 +182,12 @@ activation，最终 arrival 等于 complete，duration 为 arrival 减 activatio
 超调使用有效阶段平均水平外力方向的有符号位移，仅统计撤力后穿越目标到反方向的距离；
 它与无方向峰值水平偏差、沿力方向正向峰值是三个独立指标。
 
+正式结果现分为五个基础/导航场景和两个独立抗扰加分场景。抗扰结果位于
+`06_disturbance/short_gust` 与 `06_disturbance/persistent_release`；前者固定施加
+`+X 0.30 N × 2 s`，用于瞬态抑制与恢复，后者固定施加 `+X 0.30 N × 10 s`，用于
+稳态补偿及撤力恢复。两者使用 `disturbance` Recorder、目标 `(0,0,1.5,0)`，无任务
+提交 Service，截图可选但仍必须完成人工验收后才具备报告资格。
+
 唯一允许提交的 smoke 是 `results/01_hover/smoke`。single、multi、navigation、
 disturbance 和 failure_case 的工具验证写入 `/tmp/ros2_drone_assessment_smoke/`，不作为
 报告数据。参数表将 ROS 基础/导航完成门控与评测分析阈值分开记录；正式结果仍必须等待

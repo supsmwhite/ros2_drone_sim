@@ -19,11 +19,15 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'use_rviz', default_value='true',
             description='Start RViz2 for the disturbance assessment.'),
+        DeclareLaunchArgument(
+            'start_delay', default_value='5.0',
+            description='Settled hover countdown before the disturbance.'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(disturbance_demo),
             launch_arguments={
                 'profile': LaunchConfiguration('profile'),
                 'use_rviz': LaunchConfiguration('use_rviz'),
+                'start_delay': LaunchConfiguration('start_delay'),
             }.items(),
         ),
     ])

@@ -100,6 +100,29 @@ def protocol_checks(experiment,metrics,meta,target_ok):
         add("final_position_error",metrics.get("final_position_error_m"),"< 0.05 m",metrics.get("final_position_error_m") is not None and metrics["final_position_error_m"]<.05,"samples.csv:last mission sample")
         add("final_speed",metrics.get("final_speed_m_s"),"< 0.03 m/s",metrics.get("final_speed_m_s") is not None and metrics["final_speed_m_s"]<.03,"samples.csv:last mission sample")
         add("zero_rpm_saturation_samples",metrics.get("saturation_sample_count"),0,metrics.get("saturation_sample_count")==0,"diagnostics.csv callbacks / legacy Odom")
+    elif experiment=="disturbance":
+        expected_profile={"disturbance_short_gust":"short_gust",
+                          "disturbance_persistent_release":"persistent_release"}.get(meta.get("scenario_id"))
+        expected_duration=meta.get("expected_force_duration_s")
+        actual_duration=metrics.get("force_duration_s")
+        duration_tolerance=.20
+        expected_force=meta.get("expected_force")
+        actual_force=metrics.get("mean_horizontal_force_n")
+        force_ok=(isinstance(expected_force,list) and len(expected_force)==3 and
+                  isinstance(actual_force,list) and len(actual_force)==2 and
+                  all(math.isfinite(value) for value in expected_force+actual_force) and
+                  abs(actual_force[0]-expected_force[0])<=.02 and
+                  abs(actual_force[1]-expected_force[1])<=.02)
+        add("disturbance_profile",meta.get("disturbance_profile"),expected_profile,expected_profile is not None and meta.get("disturbance_profile")==expected_profile,"metadata.json:scenario_id,disturbance_profile")
+        add("disturbance_stop",stop,"disturbance_recovery_and_steady_window_complete",stop=="disturbance_recovery_and_steady_window_complete","metadata.json:stop_reason")
+        add("force_start_observed",metrics.get("force_start_time_s"),"available",metrics.get("force_start_time_s") is not None,"events.csv:external_force_started")
+        add("force_release_observed",metrics.get("force_release_time_s"),"available",metrics.get("force_release_time_s") is not None,"events.csv:external_force_released")
+        add("force_duration",actual_duration,f"{expected_duration} ± {duration_tolerance} s",expected_duration is not None and actual_duration is not None and abs(actual_duration-expected_duration)<=duration_tolerance,"events.csv force start/release")
+        add("mean_horizontal_force",actual_force,expected_force[:2] if isinstance(expected_force,list) else None,force_ok,"samples.csv external force during active interval")
+        add("recovery_time_available",metrics.get("recovery_time_s"),"available",metrics.get("recovery_time_s") is not None,"samples.csv post-release recovery gate")
+        add("correct_target_recorded",metrics.get("recorded_targets"),True,target_ok,"metadata.json target snapshot + samples.csv goal")
+        add("final_position_error",metrics.get("final_position_error_m"),"< 0.10 m",metrics.get("final_position_error_m") is not None and metrics["final_position_error_m"]<.10,"samples.csv:last mission sample")
+        add("final_speed",metrics.get("final_speed_m_s"),"< 0.08 m/s",metrics.get("final_speed_m_s") is not None and metrics["final_speed_m_s"]<.08,"samples.csv:last mission sample")
     overall=bool(checks) and all(item["passed"] is True for item in checks.values())
     reasons=[f"{name}: actual={item['actual_value']!r}, required={item['threshold']!r}" for name,item in checks.items() if item["passed"] is not True]
     return checks,overall,reasons
@@ -112,7 +135,8 @@ def derived_paths(run,experiment):
     return [run/name for name in names]
 def plot(path,draw,xlabel="mission time (s)",ylabel=""):
     fig,ax=plt.subplots(figsize=(8,4.8));draw(ax);ax.set_xlabel(xlabel);ax.set_ylabel(ylabel);ax.grid(alpha=.3)
-    if ax.get_legend_handles_labels()[1]:ax.legend();fig.tight_layout();fig.savefig(path,dpi=150);plt.close(fig)
+    if ax.get_legend_handles_labels()[1]:ax.legend()
+    fig.tight_layout();fig.savefig(path,dpi=150);plt.close(fig)
 def figures(run,rows,paths,experiment,navigation_start=None,force_start=None,force_release=None):
     t=[r["mission_time_s"] for r in rows]
     plot(run/"trajectory_xy.png",lambda a:(a.plot([r["actual_x"] for r in rows],[r["actual_y"] for r in rows],label="actual"),a.scatter([rows[-1]["goal_x"]],[rows[-1]["goal_y"]],marker="x",label="goal")),"x (m)","y (m)")

@@ -48,6 +48,7 @@ service_name=""
 launch_command=()
 submission_description=""
 expected_goals=()
+disturbance_recorder_args=()
 case "$experiment" in
   hover)
     scenario_dir="01_hover"; recorder_experiment="hover"; service_name="/drone/mission/execute"
@@ -78,6 +79,18 @@ case "$experiment" in
     launch_command=(ros2 launch drone_bringup assessment_navigation_sim.launch.py "use_rviz:=${use_rviz}" yaw_mode:=path_tangent)
     expected_goals=(--expected-goal 12.1 1.1 1.5 0)
     submission_description="navigation service goal (12.1,1.1,1.5), yaw_mode=path_tangent" ;;
+  disturbance_short_gust)
+    scenario_dir="06_disturbance/short_gust"; recorder_experiment="disturbance"; service_name=""
+    launch_command=(ros2 launch drone_bringup assessment_disturbance_sim.launch.py profile:=short_gust "use_rviz:=${use_rviz}" start_delay:=10.0)
+    expected_goals=(--expected-goal 0 0 1.5 0)
+    disturbance_recorder_args=(--disturbance-profile short_gust --expected-force 0.30 0 0 --expected-force-duration 2 --expected-recovery-duration 10)
+    submission_description="no service; short_gust +X 0.30 N for 2 s, then 10 s recovery" ;;
+  disturbance_persistent_release)
+    scenario_dir="06_disturbance/persistent_release"; recorder_experiment="disturbance"; service_name=""
+    launch_command=(ros2 launch drone_bringup assessment_disturbance_sim.launch.py profile:=persistent_release "use_rviz:=${use_rviz}" start_delay:=10.0)
+    expected_goals=(--expected-goal 0 0 1.5 0)
+    disturbance_recorder_args=(--disturbance-profile persistent_release --expected-force 0.30 0 0 --expected-force-duration 10 --expected-recovery-duration 10)
+    submission_description="no service; persistent_release +X 0.30 N for 10 s, then 10 s recovery" ;;
   *) die "invalid --experiment: $experiment" ;;
 esac
 
@@ -125,9 +138,13 @@ if [[ "$dry_run" == true ]]; then
   echo "output=$run_dir"
   echo "ros_domain_id=$domain_id"
   echo "launch=${launch_display% }"
-  echo "service=$service_name"
+  echo "service=${service_name:-none}"
   echo "expected_goals=${expected_display% }"
   echo "submission=$submission_description"
+  if [[ "$recorder_experiment" == disturbance ]]; then
+    printf -v disturbance_display '%q ' "${disturbance_recorder_args[@]}"
+    echo "disturbance_recorder=${disturbance_display% }"
+  fi
   if [[ "$experiment" =~ ^(single_goal|multi_goal)$ ]]; then
     echo "pre_hover=single 0 0 1.5 yaw=0 before recorder"
   fi
@@ -215,7 +232,9 @@ submit_navigation() {
 }
 
 wait_for_topic /drone/odom 20
-wait_for_service "$service_name" 20
+if [[ -n "$service_name" ]]; then
+  wait_for_service "$service_name" 20
+fi
 
 if [[ "$experiment" =~ ^(single_goal|multi_goal)$ ]]; then
   submit_basic single 0 0 1.5 yaw=0
@@ -225,7 +244,7 @@ fi
 recorder_command=(python3 tools/assessment_recorder.py
   --experiment "$recorder_experiment" --scenario-id "$experiment"
   --run-status "$status" --output "$run_dir" --service-name "$service_name"
-  --timeout "$assessment_timeout" "${expected_goals[@]}")
+  --timeout "$assessment_timeout" "${expected_goals[@]}" "${disturbance_recorder_args[@]}")
 setsid "${recorder_command[@]}" >"${temporary_logs}/recorder_stdout.log" 2>&1 &
 recorder_pid=$!
 
@@ -251,6 +270,7 @@ case "$experiment" in
   multi_goal) submit_basic multi 3 0 1.5 yaw=0 3 3 1.5 yaw=90 0 3 1.5 yaw=180 0 0 1.5 yaw=-90 ;;
   static_avoidance) submit_navigation 13.2 5.5 1.5 ;;
   narrow_corridor) submit_navigation 12.1 1.1 1.5 ;;
+  disturbance_short_gust|disturbance_persistent_release) : ;;
 esac
 
 recorder_deadline=$((SECONDS + assessment_timeout + 20))
@@ -306,15 +326,25 @@ cat >"${run_dir}/git_state.json" <<EOF
 }
 EOF
 
+if [[ "$recorder_experiment" == disturbance ]]; then
+  manual_checklist="- [ ] External force start and release process checked
+- [ ] Red external-force arrow direction is correct
+- [ ] Blue integral-compensation arrow direction is reasonable
+- [ ] Stable recovery after force release confirmed
+- [ ] Curves and summary reviewed against the protocol"
+else
+  manual_checklist="- [ ] RViz trajectory and target markers checked
+- [ ] No visually observed collision or attitude divergence
+${screenshot_checklist}
+- [ ] Curves and summary reviewed against the protocol"
+fi
+
 cat >"${run_dir}/manual_acceptance.md" <<EOF
 # Manual acceptance: ${experiment} / ${run_id}
 
 Status: incomplete
 
-- [ ] RViz trajectory and target markers checked
-- [ ] No visually observed collision or attitude divergence
-${screenshot_checklist}
-- [ ] Curves and summary reviewed against the protocol
+${manual_checklist}
 - [ ] Reviewer name and date recorded below
 
 Reviewer:

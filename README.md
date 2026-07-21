@@ -117,6 +117,11 @@ ros2 launch drone_bringup assessment_disturbance_sim.launch.py \
 `+X 0.30 N × 10 s` 后撤力恢复。红色箭头表示质心处集中等效外力，蓝色箭头表示
 水平积分补偿；它们不代表完整风场。
 
+五个基础/导航正式场景之外，正式评测脚本还提供两个独立抗扰加分场景：
+`disturbance_short_gust` 验证瞬态抑制与撤力恢复，
+`disturbance_persistent_release` 验证持续外力下的稳态补偿及撤力恢复。两者均复用上述
+抗扰入口和统一 Recorder，不通过任务 Service 提交。
+
 ## 考核要求—运行方式—验收指标
 
 | 考核要求 | 运行方式 | 主要验收指标 |

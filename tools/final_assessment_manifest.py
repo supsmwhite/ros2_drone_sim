@@ -17,7 +17,9 @@ REQUIRED_PARAMETERS = (
     "dynamics.yaml", "controller.yaml", "environment.yaml", "astar.yaml",
     "planned_trajectory.yaml", "interactive_goal_editor.yaml",
     "interactive_goal_executor.yaml", "mission.yaml")
-SCREENSHOT_OPTIONAL_SCENARIOS = {"hover", "single_goal", "multi_goal"}
+SCREENSHOT_OPTIONAL_SCENARIOS = {
+    "hover", "single_goal", "multi_goal",
+    "disturbance_short_gust", "disturbance_persistent_release"}
 SCREENSHOT_REQUIRED_SCENARIOS = {"static_avoidance", "narrow_corridor"}
 
 

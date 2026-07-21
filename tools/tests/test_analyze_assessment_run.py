@@ -10,7 +10,7 @@ from assessment_metrics import (directional_disturbance_metrics, goal_timing,
     path_length, phased_tracking_metrics, point_box_distance,
     projection_overshoot, require_nonnegative_mission_times, wrap_to_pi,
     yaw_error_metrics)
-from analyze_assessment_run import (commanded_rpm, derived_paths,
+from analyze_assessment_run import (commanded_rpm, derived_paths, plot,
     protocol_checks, saturation_timeline)
 
 
@@ -258,3 +258,24 @@ def test_output_protection_tracks_yaw_figure(tmp_path):
     paths = derived_paths(tmp_path, "hover")
     assert tmp_path / "summary.json" in paths
     assert tmp_path / "yaw_tracking.png" in paths
+
+
+def test_plot_without_legend_still_saves_nonempty_png(tmp_path):
+    output = tmp_path / "no_legend.png"
+    plot(output, lambda axis: axis.plot([0, 1], [0, 1]))
+    assert output.is_file() and output.stat().st_size > 0
+
+
+@pytest.mark.parametrize("profile,duration", [("short_gust", 2.0), ("persistent_release", 10.0)])
+def test_disturbance_protocol_checks(profile, duration):
+    metrics = passing_metrics("disturbance")
+    metrics.update({"force_start_time_s":8.0,"force_release_time_s":8.0+duration,
+                    "force_duration_s":duration,"mean_horizontal_force_n":[.3,0.0],
+                    "recovery_time_s":1.5})
+    meta={"stop_reason":"disturbance_recovery_and_steady_window_complete",
+          "scenario_id":f"disturbance_{profile}",
+          "disturbance_profile":profile,"expected_force":[.3,0.0,0.0],
+          "expected_force_duration_s":duration}
+    checks,overall,reasons=protocol_checks("disturbance",metrics,meta,True)
+    assert overall and not reasons
+    assert checks["force_duration"]["passed"] and checks["mean_horizontal_force"]["passed"]

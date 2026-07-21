@@ -1,108 +1,129 @@
-# Final assessment results
+# Formal assessment results
 
-This directory contains only approved report experiments for the current three public
-entrypoints. Parameter sweeps, tuning runs, scratch plots, and development regressions must
-not be committed here. Each experiment class keeps one final approved run; a run marked
-`smoke` proves the workflow only and is not report evidence.
+`results/` stores reproducible assessment evidence. Development plots, tuning sweeps, and
+unreviewed ad-hoc runs do not belong here. New runs are created by
+`scripts/run_final_assessment.sh`; the script refuses every existing run directory and never
+promotes an old smoke or trial to final.
 
-## Layout and run lifecycle
+## Run classes
 
-The numbered experiment classes are `01_hover`, `02_single_goal`, `03_multi_goal`,
-`04_navigation`, `05_disturbance`, and `06_failure_case`; `regression` is reserved for final
-workflow regression evidence. Only `parameters/` and the single committed hover smoke are
-populated. The other five smoke runs belong under `/tmp/ros2_drone_assessment_smoke/` and are
-never report evidence or Git data. Empty or fabricated metrics are never added.
+- `smoke`: short workflow validation. It may use shortened recorder observation time and is
+  never report evidence.
+- `trial`: full-protocol rehearsal used to inspect stability, presentation, and manual
+  screenshots. It is never report evidence.
+- `final`: immutable report candidate using the fixed targets below. It requires a clean
+  tracked source/parameter state before launch. The analyzer passing is necessary but not
+  sufficient for report eligibility.
 
-Each run is self-contained:
+The five fixed scenarios are:
 
-1. `assessment_recorder.py` writes immutable raw `samples.csv`, `events.csv`, `paths.json`,
-   `metadata.json`, and `recorder.log`.
-2. `analyze_assessment_run.py` reads those files plus the parameter snapshots and writes
-   `summary.json` and PNG figures. It never needs a running ROS graph.
-3. `manifest.json` lists a run only after it exists.
+| Directory / `scenario_id` | Recorder type | Fixed protocol |
+|---|---|---|
+| `01_hover` / `hover` | `hover` | `(0,0,1.5)`, yaw `0 rad` |
+| `02_single_goal` / `single_goal` | `single_goal` | pre-hover `(0,0,1.5,0)`, then formal `(2,1,1.5,0)` |
+| `03_multi_goal` / `multi_goal` | `multi_goal` | square goals with yaw `0°, 90°, 180°, -90°` |
+| `04_static_avoidance` / `static_avoidance` | `navigation` | `(13.2,5.5,1.5)`, `path_tangent` |
+| `05_narrow_corridor` / `narrow_corridor` | `navigation` | `(12.1,1.1,1.5)`, `path_tangent` |
 
-The six experiment types have separate stop contracts: hover and single-goal use continuous
-arrival plus a steady window; basic multi-goal waits for `/drone/mission/complete`; navigation
-waits for interactive execution and navigation complete/success; disturbance observes force
-start, release, recovery hold, and a final steady window; failure-case waits for an explicit
-rejection, inactive execution, and a safety observation window. `--run-status` explicitly marks
-every run as `smoke`, `candidate`, or `final`.
+Static avoidance and narrow corridor intentionally share the ROS recorder type
+`navigation`. Their distinct `scenario_id`, numbered directory, target snapshot, and manifest
+entry must never be collapsed.
 
-`goal_position_error` is actual position to the current task goal and drives arrival, final,
-and steady metrics. `tracking_error` is actual position to `/drone/trajectory_setpoint`; it is
-null for basic hover/single runs. These meanings are never interchanged.
+## Directory and invocation
 
-`paths.json` schema 3 stores the latest complete `actual` trajectory plus
-`planned_segments`, `simplified_segments`, and `reference_segments`. Each unique non-empty
-path is appended with sequence, goal index, `recording_time_s`, and `mission_time_s`.
-Pre-mission transient-local paths retain a null mission time and cannot start the navigation
-phase. Exact repeats are ignored; empty paths append to `clear_events` and never erase history.
-
-Regenerate plots without rerunning simulation:
-
-```bash
-python3 tools/analyze_assessment_run.py results/01_hover/smoke \
-  --parameters results/parameters
+```text
+results/<numbered_scenario>/<smoke|trial|final>/<run_id>/
 ```
 
-Do not choose final interactive-navigation goals in tooling. The project owner must confirm
-the goals, route, thresholds, and report figures before that experiment is recorded.
+Example dry run:
 
-## Fixed metric definitions
+```bash
+scripts/run_final_assessment.sh \
+  --experiment static_avoidance --status trial --run-id run_01 \
+  --use-rviz true --output-root results --timeout 180 --dry-run
+```
 
-- `final_position_error_m`: 3-D Euclidean distance from the last position sample to the final
-  target. `final_window_mean_error_m` is the mean over the final 1 s.
-- `arrival_time_s`: time from target publication/task acceptance to the first interval for
-  which position error is below the configured threshold and speed is below its threshold
-  continuously for the configured hold time. Defaults are 0.10 m, 0.08 m/s, and 1.0 s.
-- `maximum_overshoot_m`: for hover, `max(z-target_z)` clipped at zero. For a translation
-  segment, the maximum positive distance beyond the target after projection on the unit
-  start-to-target direction. `maximum_overshoot_percent` divides this by segment length;
-  it is null for a zero-length hover segment.
-- `steady_state_mean_error_m`, `steady_state_rms_error_m`, and
-  `steady_state_max_error_m`: position-error statistics over the final 3 s (or the explicitly
-  reported shorter available window).
-- `minimum_raw_obstacle_distance_m`: minimum Euclidean point-to-AABB distance using the raw
-  boxes in `environment.yaml`. `minimum_safety_clearance_m` equals that raw distance minus
-  `safety_radius_m`. Avoidance passes only when raw distance is greater than the safety radius,
-  equivalently safety clearance is positive.
-- Path lengths are sums of adjacent 3-D point distances. `path_efficiency` is actual path
-  length divided by reference path length. Missing planned/reference paths are JSON `null`,
-  never zero.
-- Attitude metrics use absolute roll/pitch and angular-speed magnitude. RPM metrics report
-  extrema, non-finite counts, saturation sample count, longest continuous saturation, and
-  whether saturation remains at the end. A single clipped sample does not itself fail a run.
-- Disturbance runs additionally report peak horizontal deviation, disturbance steady-state
-  error, recovery time, and reverse overshoot. Failure runs retain the rejection/safety event
-  timeline.
+Remove `--dry-run` only after checking the printed launch, Service, target, output path, Git
+state, and ROS domain. `run_id` is never reused. Failed and partial directories are retained for
+diagnosis or moved outside `results/`; they are not overwritten.
 
-For navigation, full-mission tracking includes ground-to-takeoff motion. Formal navigation
-tracking begins at the first valid reference segment associated with a navigation goal, falling
-back to planned, simplified, then goal activation. Reports should use
-`navigation_tracking_max_error_m` and `navigation_tracking_rms_error_m`; full-mission and
-takeoff metrics remain available as context.
+Each completed run contains:
 
-Multi-goal `goal_activation_times_s` means each goal became the active execution target.
-Non-final arrival equals the next activation; final arrival equals task completion, and
-`per_goal_duration_s = arrival - activation`. No activation time is inserted without a recorded
-`goal_activated` event.
+- recorder evidence: `metadata.json`, `samples.csv`, `events.csv`, `paths.json`,
+  `diagnostics.csv`, and `recorder.log`;
+- `summary.json`, protocol checks, failure reasons, `overall_pass`, and PNG figures;
+- `launch.log`, `submission.log`, `recorder_stdout.log`, and `analyzer.log`;
+- copied YAML under `parameters/` plus `parameter_sha256.txt`;
+- `git_state.json`, `evidence_sha256.txt`, `manifest_entry.json`, and `manifest.log`;
+- `manual_acceptance.md`, initially marked `Status: incomplete`.
 
-Disturbance direction is the mean horizontal force while active. Signed displacement projects
-`actual_xy-goal_xy` on that direction. `peak_force_direction_displacement_m` is its positive
-peak; `reverse_overshoot_m` is the maximum post-release crossing distance in the opposite
-direction, distinct from unsigned `peak_horizontal_deviation_m`.
+RViz screenshots referenced by manual acceptance are added without replacing recorder or
+analyzer artifacts.
 
-Every summary records both assignment thresholds (hover error below 0.30 m) and stricter
-project thresholds (final error 0.10 m, positive safety clearance, no non-finite values, no
-sustained attitude divergence, and no RPM saturation at task end).
+## Manifest schema 4
 
-`parameter_table.csv` deliberately distinguishes `basic_mission_gate` and
-`navigation_mission_gate` values used by ROS nodes from stricter `assessment_analysis`
-thresholds used by the recorder. The default 0.10 m analysis arrival threshold is not the
-nodes' 0.20 m completion gate.
+`manifest.json` has a `runs` array. Every new entry records:
 
-## History
+- identity: `scenario_id`, `recorder_experiment`, `status`, `run_id`, `path`, and
+  `protocol_version`;
+- evidence links: metadata, summary, per-run manifest, parameter directory, and checksums;
+- Git provenance: commit before/after and source-clean state before/after;
+- outcome: stop reason, analyzer `overall_pass`, and failure reasons;
+- manual acceptance status;
+- every eligibility condition, `report_eligible`, and unmet conditions.
 
-The former development results remain recoverable from `main`, historical commits, and tag
-`assessment-feature-complete-v1`. Do not rewrite those commits or tags; use `git show` or a
-separate worktree when historical evidence is needed.
+The historical hover smoke predates this workflow and remains explicitly marked
+`legacy_layout`; it is not final evidence.
+
+## Final evidence eligibility
+
+`report_eligible=true` is allowed only when all conditions are true:
+
+1. status is `final`;
+2. recorder stop reason is not a timeout;
+3. analyzer reports `overall_pass=true`;
+4. HEAD is unchanged across the run;
+5. source worktree is clean before and after, excluding only artifacts generated for that run
+   and its manifest update;
+6. all required parameter snapshots and checksums are complete;
+7. manual acceptance is complete.
+
+The orchestration script always creates the manual template as incomplete, so a new run starts
+with `report_eligible=false`. A reviewer must inspect RViz evidence, screenshots, curves, and
+logs before finalization. Mark every checklist item complete, set `Status: complete`, fill in
+reviewer/date, and reference each required screenshot inside the run directory. Then run:
+
+```bash
+python3 tools/final_assessment_manifest.py finalize \
+  --manifest results/manifest.json \
+  --run-dir results/04_static_avoidance/final/run_01 \
+  --screenshot screenshots/rviz_overview.png
+```
+
+Finalization verifies protected raw evidence, `overall_pass`, parameter checksums, Git
+conditions, manual fields, and screenshots; it then recalculates evidence checksums and updates
+both manifests. Repeating finalization is rejected explicitly. Smoke and trial runs can never
+become report eligible.
+
+## Signal and metric semantics
+
+- `/drone/motor_rpm_cmd` is commanded motor RPM, not measured motor speed. New CSV columns
+  are `commanded_motor_rpm_m1` through `commanded_motor_rpm_m4`.
+- Odom linear twist is expressed in `base_link`. `body_velocity_*` preserves that value;
+  `map_velocity_*` is the same vector rotated by the Odom pose quaternion. `speed` is the
+  frame-invariant vector magnitude.
+- Saturation counts, duration, and end state for new runs come from individual
+  `/drone/controller/diagnostics` callbacks in `diagnostics.csv`, not repeated Odom rows.
+- `minimum_raw_obstacle_distance_m` is Euclidean point-to-raw-AABB distance.
+  `minimum_safety_clearance_m = raw distance - safety_radius`; zero is the inflated-obstacle
+  boundary. It is not distance to an already inflated box.
+- `goal_position_error` is actual position to the active task goal. `tracking_error` is actual
+  position to `/drone/trajectory_setpoint`; navigation acceptance uses the navigation-phase
+  tracking metric.
+- Yaw error is `wrap_to_pi(reference_yaw - actual_yaw)`. Basic runs use pose-goal yaw;
+  navigation uses trajectory-setpoint yaw. Yaw is reported without inventing a separate
+  assessment threshold; ROS completion-gate tolerances are identified only as configuration
+  sources.
+
+Legacy schema-3 recordings remain readable. Missing reference yaw is reported as
+`unavailable`, and legacy saturation counts retain their original Odom-sample semantics.

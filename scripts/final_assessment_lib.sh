@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+preserve_assessment_logs() {
+  local temporary_logs="$1" run_dir="$2" name
+  [[ -d "$temporary_logs" && -d "$run_dir" ]] || return 0
+  for name in launch submission recorder_stdout analyzer; do
+    if [[ -f "${temporary_logs}/${name}.log" ]]; then
+      cp -- "${temporary_logs}/${name}.log" "${run_dir}/${name}.log"
+    fi
+  done
+}
+
+navigation_response_was_accepted() {
+  grep -Eq "accepted(: true|=True)" "$1"
+}
+
+stop_ros_domain_daemon() {
+  local domain_id="$1"
+  command -v ros2 >/dev/null 2>&1 || return 0
+  ROS_DOMAIN_ID="$domain_id" ros2 daemon stop >/dev/null 2>&1 || true
+}

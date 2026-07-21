@@ -2,6 +2,78 @@
 """ROS-independent state, path, and metric helpers for assessment tooling."""
 
 import math
+from pathlib import Path
+
+
+def prepare_output_directory(path, allow_overwrite=False, run_status="candidate"):
+    """Create an output directory, refusing implicit or final-result overwrite."""
+    output = Path(path)
+    if output.exists() and not output.is_dir():
+        raise FileExistsError(f"assessment output is not a directory: {output}")
+    nonempty = output.exists() and any(output.iterdir())
+    if nonempty and (run_status == "final" or not allow_overwrite):
+        reason = "final assessment results cannot be overwritten" if run_status == "final" else \
+            "assessment output already exists and is non-empty"
+        raise FileExistsError(f"{reason}: {output}")
+    output.mkdir(parents=True, exist_ok=True)
+    return output
+
+
+def normalized_target(position, yaw_rad=None):
+    values = [float(value) for value in position]
+    if len(values) != 3 or not all(math.isfinite(value) for value in values):
+        raise ValueError("target position must contain three finite values")
+    yaw = None if yaw_rad is None else float(yaw_rad)
+    if yaw is not None and not math.isfinite(yaw):
+        raise ValueError("target yaw must be finite")
+    return {"position": values, "yaw_rad": yaw}
+
+
+def targets_match(observed, expected, position_tolerance=1e-6, yaw_tolerance=1e-6):
+    if any(abs(a - b) > position_tolerance
+           for a, b in zip(observed["position"], expected["position"])):
+        return False
+    if expected.get("yaw_rad") is None:
+        return True
+    if observed.get("yaw_rad") is None:
+        return False
+    yaw_error = math.remainder(observed["yaw_rad"] - expected["yaw_rad"], 2 * math.pi)
+    return abs(yaw_error) <= yaw_tolerance
+
+
+def rotate_body_velocity_to_map(quaternion, velocity):
+    """Rotate a body-frame vector with a normalized body-to-map quaternion."""
+    x, y, z, w = map(float, quaternion)
+    norm = math.sqrt(x*x + y*y + z*z + w*w)
+    if not math.isfinite(norm) or norm < 1e-12:
+        return [math.nan, math.nan, math.nan]
+    x, y, z, w = x/norm, y/norm, z/norm, w/norm
+    vx, vy, vz = map(float, velocity)
+    return [
+        (1 - 2*(y*y + z*z))*vx + 2*(x*y - z*w)*vy + 2*(x*z + y*w)*vz,
+        2*(x*y + z*w)*vx + (1 - 2*(x*x + z*z))*vy + 2*(y*z - x*w)*vz,
+        2*(x*z - y*w)*vx + 2*(y*z + x*w)*vy + (1 - 2*(x*x + y*y))*vz,
+    ]
+
+
+def wrap_to_pi(angle):
+    if angle is None or not math.isfinite(angle):
+        return None
+    return math.remainder(angle, 2 * math.pi)
+
+
+def yaw_error_metrics(actual_yaws, reference_yaws):
+    errors = [wrap_to_pi(reference - actual)
+              for actual, reference in zip(actual_yaws, reference_yaws)
+              if math.isfinite(actual) and math.isfinite(reference)]
+    if not errors:
+        return {"status": "unavailable", "sample_count": 0,
+                "final_error_rad": None, "rms_error_rad": None,
+                "maximum_absolute_error_rad": None}
+    return {"status": "available", "sample_count": len(errors),
+            "final_error_rad": errors[-1],
+            "rms_error_rad": math.sqrt(sum(value * value for value in errors) / len(errors)),
+            "maximum_absolute_error_rad": max(abs(value) for value in errors)}
 
 
 def mission_relative_time(event_time, mission_start):

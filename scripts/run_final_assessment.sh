@@ -201,7 +201,7 @@ submit_navigation() {
   local request="{goals: {header: {frame_id: map}, poses: [{position: {x: ${x}, y: ${y}, z: ${z}}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}]}, draft_revision: 1}"
   echo "+ ros2 service call ${service_name} drone_msgs/srv/ExecuteGoalSequence ${request}" >>"${temporary_logs}/submission.log"
   ros2 service call "$service_name" drone_msgs/srv/ExecuteGoalSequence "$request" >>"${temporary_logs}/submission.log" 2>&1
-  grep -q "accepted: true" "${temporary_logs}/submission.log" || die "navigation mission was not accepted"
+  navigation_response_was_accepted "${temporary_logs}/submission.log" || die "navigation mission was not accepted"
 }
 
 wait_for_topic /drone/odom 20

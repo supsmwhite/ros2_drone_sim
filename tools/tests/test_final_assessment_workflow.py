@@ -116,6 +116,22 @@ def test_recorder_stdout_is_preserved_and_refreshed(tmp_path):
     assert not (run / "recorder.log").exists()
 
 
+@pytest.mark.parametrize("response,accepted", [
+    ("response:\naccepted: true\n", True),
+    ("ExecuteGoalSequence_Response(accepted=True, message='accepted')\n", True),
+    ("response:\naccepted: false\n", False),
+    ("ExecuteGoalSequence_Response(accepted=False, message='rejected')\n", False),
+])
+def test_navigation_acceptance_response_formats(tmp_path, response, accepted):
+    response_file = tmp_path / "submission.log"
+    response_file.write_text(response)
+    command = (
+        f"source '{REPO / 'scripts/final_assessment_lib.sh'}'; "
+        f"navigation_response_was_accepted '{response_file}'")
+    result = subprocess.run(["bash", "-c", command])
+    assert (result.returncode == 0) is accepted
+
+
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 

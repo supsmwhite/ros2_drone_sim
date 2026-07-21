@@ -9,3 +9,7 @@ preserve_assessment_logs() {
     fi
   done
 }
+
+navigation_response_was_accepted() {
+  grep -Eq "accepted(: true|=True)" "$1"
+}

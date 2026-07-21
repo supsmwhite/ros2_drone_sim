@@ -143,6 +143,27 @@ def held_condition_start(times, flags, hold_time):
     return None
 
 
+def disturbance_recovery_times(force_release_time, threshold_entry_time,
+                               recovery_confirmed_time):
+    """Return explicit post-release recovery intervals without inventing missing data."""
+    def after_release(value):
+        if (force_release_time is None or value is None or
+                not math.isfinite(force_release_time) or not math.isfinite(value)):
+            return None
+        return value - force_release_time
+
+    threshold_entry = after_release(threshold_entry_time)
+    confirmed = after_release(recovery_confirmed_time)
+    hold = (None if threshold_entry is None or confirmed is None else
+            confirmed - threshold_entry)
+    return {
+        "recovery_threshold_entry_time_s": threshold_entry,
+        "recovery_confirmed_time_s": confirmed,
+        "recovery_confirmation_hold_time_s": hold,
+        "recovery_time_s": threshold_entry,
+    }
+
+
 def navigation_phase_start(paths, activation_events=()):
     """Return mission time/source of the first valid formal navigation artifact."""
     for name in ("reference", "planned", "simplified"):

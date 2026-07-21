@@ -122,6 +122,11 @@ ros2 launch drone_bringup assessment_disturbance_sim.launch.py \
 `disturbance_persistent_release` 验证持续外力下的稳态补偿及撤力恢复。两者均复用上述
 抗扰入口和统一 Recorder，不通过任务 Service 提交。
 
+抗扰恢复指标区分“首次进入门限”和“持续满足后正式确认”：
+`recovery_threshold_entry_time_s` 是撤力后首次进入位置/速度恢复门限的时间，
+`recovery_confirmed_time_s` 是持续满足保持条件后 Recorder 正式确认恢复的时间，报告
+正文优先采用后者。旧字段 `recovery_time_s` 仅作为前者的兼容别名保留。
+
 ## 考核要求—运行方式—验收指标
 
 | 考核要求 | 运行方式 | 主要验收指标 |

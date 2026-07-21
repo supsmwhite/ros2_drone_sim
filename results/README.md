@@ -153,3 +153,18 @@ Smoke and trial runs can never become report eligible.
 
 Legacy schema-3 recordings remain readable. Missing reference yaw is reported as
 `unavailable`, and legacy saturation counts retain their original Odom-sample semantics.
+
+For disturbance runs, `recovery_threshold_entry_time_s` is the first post-release entry into
+the configured position and speed thresholds. `recovery_confirmed_time_s` is the later Recorder
+confirmation after the hold condition remains satisfied, and is the value preferred in report
+text. `recovery_confirmation_hold_time_s` is their difference. The legacy `recovery_time_s`
+remains an alias of threshold entry for comparability.
+
+The committed historical disturbance finals are not re-analyzed. Their report-only recovery
+semantics are generated from checksum-verified immutable `summary.json` and `events.csv` files:
+
+```bash
+python3 tools/build_disturbance_report_metrics.py \
+  --results-root results \
+  --output results/06_disturbance/report_metrics.json
+```

@@ -188,6 +188,13 @@ activation，最终 arrival 等于 complete，duration 为 arrival 减 activatio
 稳态补偿及撤力恢复。两者使用 `disturbance` Recorder、目标 `(0,0,1.5,0)`，无任务
 提交 Service，截图可选但仍必须完成人工验收后才具备报告资格。
 
+抗扰恢复时间长期区分 threshold entry 与 confirmed recovery：前者是撤力后首次进入
+配置的位置/速度门限，后者是持续满足 `recovery_hold_time_s` 后由 Recorder 记录
+`recovery_confirmed` 的正式确认时间；报告采用 confirmed recovery。兼容字段
+`recovery_time_s` 继续等于 threshold entry，不能静默改变。已有 Final 不重新分析，
+报告新增语义由校验不可变 `summary.json` 和 `events.csv` 后生成的
+`results/06_disturbance/report_metrics.json` 提供。
+
 唯一允许提交的 smoke 是 `results/01_hover/smoke`。single、multi、navigation、
 disturbance 和 failure_case 的工具验证写入 `/tmp/ros2_drone_assessment_smoke/`，不作为
 报告数据。参数表将 ROS 基础/导航完成门控与评测分析阈值分开记录；正式结果仍必须等待

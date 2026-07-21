@@ -6,7 +6,7 @@ import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import yaml
 from assessment_metrics import (directional_disturbance_metrics, goal_timing,
-    held_condition_start, longest_true_duration, navigation_phase_start,
+    disturbance_recovery_times, held_condition_start, longest_true_duration, navigation_phase_start,
     path_length, phased_tracking_metrics, projection_overshoot,
     require_nonnegative_mission_times, wrap_to_pi, yaw_error_metrics)
 
@@ -119,7 +119,15 @@ def protocol_checks(experiment,metrics,meta,target_ok):
         add("force_release_observed",metrics.get("force_release_time_s"),"available",metrics.get("force_release_time_s") is not None,"events.csv:external_force_released")
         add("force_duration",actual_duration,f"{expected_duration} ± {duration_tolerance} s",expected_duration is not None and actual_duration is not None and abs(actual_duration-expected_duration)<=duration_tolerance,"events.csv force start/release")
         add("mean_horizontal_force",actual_force,expected_force[:2] if isinstance(expected_force,list) else None,force_ok,"samples.csv external force during active interval")
-        add("recovery_time_available",metrics.get("recovery_time_s"),"available",metrics.get("recovery_time_s") is not None,"samples.csv post-release recovery gate")
+        threshold_entry=metrics.get("recovery_threshold_entry_time_s")
+        confirmed=metrics.get("recovery_confirmed_time_s")
+        confirmation_hold=metrics.get("recovery_confirmation_hold_time_s")
+        expected_hold=meta.get("thresholds",{}).get("recovery_hold_time_s")
+        add("recovery_threshold_entry_time_available",threshold_entry,"available",threshold_entry is not None,"samples.csv post-release recovery gate")
+        add("recovery_confirmed_time_available",confirmed,"available",confirmed is not None,"events.csv:recovery_confirmed")
+        add("recovery_confirmed_time_nonnegative",confirmed,">= 0 s",confirmed is not None and confirmed>=0,"events.csv recovery_confirmed - force release")
+        add("recovery_confirmation_order",{"threshold_entry":threshold_entry,"confirmed":confirmed},"confirmed >= threshold entry",threshold_entry is not None and confirmed is not None and confirmed>=threshold_entry,"samples.csv + events.csv")
+        add("recovery_confirmation_hold_time",confirmation_hold,f"{expected_hold} ± 0.2 s",confirmation_hold is not None and expected_hold is not None and abs(confirmation_hold-expected_hold)<=.20,"samples.csv threshold entry + events.csv recovery_confirmed")
         add("correct_target_recorded",metrics.get("recorded_targets"),True,target_ok,"metadata.json target snapshot + samples.csv goal")
         add("final_position_error",metrics.get("final_position_error_m"),"< 0.10 m",metrics.get("final_position_error_m") is not None and metrics["final_position_error_m"]<.10,"samples.csv:last mission sample")
         add("final_speed",metrics.get("final_speed_m_s"),"< 0.08 m/s",metrics.get("final_speed_m_s") is not None and metrics["final_speed_m_s"]<.08,"samples.csv:last mission sample")
@@ -278,7 +286,9 @@ def main():
         recovery_start=held_condition_start([r["mission_time_s"] for r in after],[math.hypot(r["goal_error_x"],r["goal_error_y"])<meta["thresholds"]["recovery_position_threshold_m"] and r["speed"]<meta["thresholds"]["recovery_speed_threshold_m_s"] for r in after],meta["thresholds"]["recovery_hold_time_s"]) if after else None
         disturbance_samples=[{"actual":[r["actual_x"],r["actual_y"]],"goal":[r["goal_x"],r["goal_y"]],"force":[r["external_force_x"],r["external_force_y"]],"force_active":r["external_wrench_active"]==1} for r in rows]
         mean_force,peak_direction,reverse,_=directional_disturbance_metrics(disturbance_samples)
-        metrics.update({"force_start_time_s":start,"force_release_time_s":release,"force_duration_s":None if start is None or release is None else release-start,"mean_horizontal_force_n":mean_force,"peak_horizontal_deviation_m":maximum(horizontal),"peak_force_direction_displacement_m":peak_direction,"disturbance_steady_state_error_m":avg([math.hypot(r["goal_error_x"],r["goal_error_y"]) for r in tail]),"recovery_time_s":None if recovery_start is None or release is None else recovery_start-release,"reverse_overshoot_m":reverse})
+        recovery_confirmed=recovery[0] if recovery else None
+        recovery_metrics=disturbance_recovery_times(release,recovery_start,recovery_confirmed)
+        metrics.update({"force_start_time_s":start,"force_release_time_s":release,"force_duration_s":None if start is None or release is None else release-start,"mean_horizontal_force_n":mean_force,"peak_horizontal_deviation_m":maximum(horizontal),"peak_force_direction_displacement_m":peak_direction,"disturbance_steady_state_error_m":avg([math.hypot(r["goal_error_x"],r["goal_error_y"]) for r in tail]),**recovery_metrics,"reverse_overshoot_m":reverse})
     if experiment=="failure_case":
         request=event_times(events,"mission_started");after=[r for r in rows if not request or r["mission_time_s"]>=0];maxalt=maximum([r["actual_z"] for r in after]);maxspeed=maximum([r["speed"] for r in after]);ground=meta["thresholds"]["ground_motion_threshold_m"]
         metrics.update({"failure_detected":bool(meta.get("failure_reason")),"failure_reason":meta.get("failure_reason"),"ready_ever_true":observed(rows,"interactive_ready"),"active_ever_true":observed(rows,"interactive_active"),"maximum_altitude_after_request_m":maxalt,"maximum_speed_after_request_m_s":maxspeed,"unsafe_motion_detected":bool((maxalt or 0)>ground or (maxspeed or 0)>ground),"collision_observed":observed(rows,"collision_state")})
@@ -291,5 +301,6 @@ def main():
     try:gate_params=next(iter(yaml.safe_load((a.parameters/gate_file).read_text()).values()))["ros__parameters"];yaw_gate=gate_params[gate_key]
     except (OSError,KeyError,TypeError):yaw_gate=None
     summary={"schema_version":3,"experiment":experiment,"scenario_id":meta.get("scenario_id"),"status":meta["status"],"repository_commit":meta["repository_commit"],"sample_count":len(rows_all),"mission_sample_count":len(rows),"navigation_phase_start_time_s":navigation_start,"navigation_phase_start_source":navigation_source,"metrics":metrics,"yaw_analysis":{"status":yaw_stats["status"],"reference_field":yaw_key,"error_definition":"wrap_to_pi(reference_yaw - actual_yaw)","completion_gate_yaw_tolerance_rad":yaw_gate,"completion_gate_source":f"{gate_file}:{gate_key}","acceptance_threshold_applied":False},"assignment_thresholds":{"hover_final_position_error_max_m":.3},"project_thresholds":{"final_position_error_max_m":.1,"minimum_safety_clearance_strictly_greater_than_m":0.,"non_finite_value_count":0,"attitude_divergence_detected":False,"saturated_at_end":False},"legacy_checks":legacy_checks,"checks":checks,"overall_pass":overall_pass,"failure_reasons":failure_reasons}
+    if experiment=="disturbance":summary["recovery_time_semantics"]="threshold_entry_after_force_release"
     (a.run/"summary.json").write_text(json.dumps(summary,indent=2,allow_nan=False)+"\n");figures(a.run,rows,paths,experiment,navigation_start,metrics.get("force_start_time_s"),metrics.get("force_release_time_s"));print(json.dumps(metrics,indent=2))
 if __name__=="__main__":main()

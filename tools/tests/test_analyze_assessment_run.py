@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 from assessment_metrics import (directional_disturbance_metrics, goal_timing,
-    held_condition_start, longest_true_duration, navigation_phase_start,
+    disturbance_recovery_times, held_condition_start, longest_true_duration, navigation_phase_start,
     path_length, phased_tracking_metrics, point_box_distance,
     projection_overshoot, require_nonnegative_mission_times, wrap_to_pi,
     yaw_error_metrics)
@@ -59,8 +59,26 @@ def test_sustained_attitude_divergence_duration():
     assert longest_true_duration([0, .5, 1, 1.5], [True, True, True, False]) == 1
 
 
-def test_force_release_recovery_time():
-    assert 6.5 - 4.0 == 2.5
+@pytest.mark.parametrize("release,entry,confirmed,expected", [
+    (15.6048076, 15.6048076 + 6.2848704, 22.8945343,
+     (6.2848704, 7.2897267, 1.0048563)),
+    (23.6803567, 23.6803567, 24.6853619,
+     (0.0, 1.0050052, 1.0050052)),
+])
+def test_disturbance_recovery_time_semantics(release, entry, confirmed, expected):
+    metrics = disturbance_recovery_times(release, entry, confirmed)
+    assert metrics["recovery_threshold_entry_time_s"] == pytest.approx(expected[0])
+    assert metrics["recovery_confirmed_time_s"] == pytest.approx(expected[1])
+    assert metrics["recovery_confirmation_hold_time_s"] == pytest.approx(expected[2])
+    assert metrics["recovery_time_s"] == metrics["recovery_threshold_entry_time_s"]
+
+
+def test_missing_recovery_event_stays_null():
+    metrics = disturbance_recovery_times(10.0, 12.0, None)
+    assert metrics["recovery_threshold_entry_time_s"] == 2.0
+    assert metrics["recovery_confirmed_time_s"] is None
+    assert metrics["recovery_confirmation_hold_time_s"] is None
+    json.dumps(metrics, allow_nan=False)
 
 
 def test_arrival_time_is_start_of_held_interval():
@@ -271,11 +289,47 @@ def test_disturbance_protocol_checks(profile, duration):
     metrics = passing_metrics("disturbance")
     metrics.update({"force_start_time_s":8.0,"force_release_time_s":8.0+duration,
                     "force_duration_s":duration,"mean_horizontal_force_n":[.3,0.0],
+                    "recovery_threshold_entry_time_s":1.5,
+                    "recovery_confirmed_time_s":2.5,
+                    "recovery_confirmation_hold_time_s":1.0,
                     "recovery_time_s":1.5})
     meta={"stop_reason":"disturbance_recovery_and_steady_window_complete",
           "scenario_id":f"disturbance_{profile}",
           "disturbance_profile":profile,"expected_force":[.3,0.0,0.0],
-          "expected_force_duration_s":duration}
+          "expected_force_duration_s":duration,
+          "thresholds":{"recovery_hold_time_s":1.0}}
     checks,overall,reasons=protocol_checks("disturbance",metrics,meta,True)
     assert overall and not reasons
     assert checks["force_duration"]["passed"] and checks["mean_horizontal_force"]["passed"]
+
+
+def test_disturbance_missing_recovery_confirmed_fails():
+    metrics = passing_metrics("disturbance")
+    metrics.update({"force_start_time_s":8.0,"force_release_time_s":10.0,
+                    "force_duration_s":2.0,"mean_horizontal_force_n":[.3,0.0],
+                    "recovery_threshold_entry_time_s":1.0,
+                    "recovery_confirmed_time_s":None,
+                    "recovery_confirmation_hold_time_s":None,
+                    "recovery_time_s":1.0})
+    meta={"scenario_id":"disturbance_short_gust","disturbance_profile":"short_gust",
+          "stop_reason":"disturbance_recovery_and_steady_window_complete",
+          "expected_force":[.3,0.0,0.0],"expected_force_duration_s":2.0,
+          "thresholds":{"recovery_hold_time_s":1.0}}
+    checks,overall,_=protocol_checks("disturbance",metrics,meta,True)
+    assert not overall and not checks["recovery_confirmed_time_available"]["passed"]
+
+
+def test_disturbance_confirmation_before_threshold_entry_fails():
+    metrics = passing_metrics("disturbance")
+    metrics.update({"force_start_time_s":8.0,"force_release_time_s":10.0,
+                    "force_duration_s":2.0,"mean_horizontal_force_n":[.3,0.0],
+                    "recovery_threshold_entry_time_s":2.0,
+                    "recovery_confirmed_time_s":1.0,
+                    "recovery_confirmation_hold_time_s":-1.0,
+                    "recovery_time_s":2.0})
+    meta={"scenario_id":"disturbance_short_gust","disturbance_profile":"short_gust",
+          "stop_reason":"disturbance_recovery_and_steady_window_complete",
+          "expected_force":[.3,0.0,0.0],"expected_force_duration_s":2.0,
+          "thresholds":{"recovery_hold_time_s":1.0}}
+    checks,overall,_=protocol_checks("disturbance",metrics,meta,True)
+    assert not overall and not checks["recovery_confirmation_order"]["passed"]

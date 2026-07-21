@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "metric_semantics": {
+    "recovery_threshold_entry_time_s": "seconds after force release until first entry into the configured recovery position and speed thresholds",
+    "recovery_confirmed_time_s": "seconds after force release until the Recorder confirms the recovery hold condition",
+    "recovery_confirmation_hold_time_s": "elapsed seconds from threshold entry to Recorder recovery confirmation"
+  },
+  "runs": [
+    {
+      "scenario_id": "disturbance_short_gust",
+      "source_summary": "06_disturbance/short_gust/final/run_01/summary.json",
+      "source_events": "06_disturbance/short_gust/final/run_01/events.csv",
+      "force_duration_s": 1.9999828338623047,
+      "mean_horizontal_force_n": [
+        0.29999999999999805,
+        0.0
+      ],
+      "peak_horizontal_deviation_m": 0.33209726027610864,
+      "peak_force_direction_displacement_m": 0.33209726027610864,
+      "disturbance_end_mean_error_m": 0.2560032207567828,
+      "recovery_threshold_entry_time_s": 6.284870386123657,
+      "recovery_confirmed_time_s": 7.289726734161377,
+      "recovery_confirmation_hold_time_s": 1.0048563480377197,
+      "reverse_overshoot_m": 0.12455657986304411,
+      "final_position_error_m": 0.01620598984585676,
+      "final_speed_m_s": 0.008808268938742857,
+      "saturation_sample_count": 0,
+      "overall_pass": true
+    },
+    {
+      "scenario_id": "disturbance_persistent_release",
+      "source_summary": "06_disturbance/persistent_release/final/run_01/summary.json",
+      "source_events": "06_disturbance/persistent_release/final/run_01/events.csv",
+      "force_duration_s": 10.039750814437866,
+      "mean_horizontal_force_n": [
+        0.3,
+        0.0
+      ],
+      "peak_horizontal_deviation_m": 0.48496026866776565,
+      "peak_force_direction_displacement_m": 0.48496026866776565,
+      "disturbance_end_mean_error_m": 0.05969731258684394,
+      "recovery_threshold_entry_time_s": 0.0,
+      "recovery_confirmed_time_s": 1.005005121231079,
+      "recovery_confirmation_hold_time_s": 1.005005121231079,
+      "reverse_overshoot_m": 0.10149598450359482,
+      "final_position_error_m": 0.05984137443368622,
+      "final_speed_m_s": 0.02357385421655744,
+      "saturation_sample_count": 0,
+      "overall_pass": true
+    }
+  ]
+}

@@ -10,6 +10,13 @@ from assessment_metrics import (directional_disturbance_metrics, goal_timing,
     path_length, phased_tracking_metrics, projection_overshoot,
     require_nonnegative_mission_times, wrap_to_pi, yaw_error_metrics)
 
+MULTI_GOAL_NAVIGATION_TARGETS = [
+    {"position": [13.15, 5.80, 3.40], "yaw_rad": 0.0000000000000000},
+    {"position": [9.70, -1.20, 1.20], "yaw_rad": 3.0892327760299634},
+    {"position": [6.30, 5.55, 2.35], "yaw_rad": -1.9547687622336491},
+    {"position": [0.45, 5.70, 1.00], "yaw_rad": -1.6929693744344996},
+]
+
 def num(v):
     try:return float(v)
     except (TypeError,ValueError):return math.nan
@@ -40,6 +47,12 @@ def last_window(rows,seconds):
     end=rows[-1]["mission_time_s"]; return [r for r in rows if r["mission_time_s"]>=end-seconds]
 def segments(paths,name):return paths.get(name+"_segments",[])
 def segments_length(items):return sum(path_length(s["points"]) for s in items) if items else None
+def ordered_segment_length(items,goal_index,goal_count):
+    mission_items=[item for item in items if item.get("mission_time_s") is not None]
+    if len(mission_items)==goal_count:
+        return path_length(mission_items[goal_index]["points"])
+    matching=[item for item in mission_items if item.get("goal_index")==goal_index]
+    return sum(path_length(item["points"]) for item in matching) if matching else None
 def event_rows(path):
     with path.open(newline="") as f:
         result=[]
@@ -62,6 +75,17 @@ def target_snapshot_matches(meta,rows):
         valid=len(final)==3 and all(math.isfinite(value) for value in final+observed_final)
         return targets,valid and all(abs(a-b)<=1e-6 for a,b in zip(final,observed_final))
     except (KeyError,TypeError,ValueError):return targets,False
+def formal_navigation_targets_match(targets):
+    if not isinstance(targets,list) or len(targets)!=len(MULTI_GOAL_NAVIGATION_TARGETS):return False
+    try:
+        for actual,expected in zip(targets,MULTI_GOAL_NAVIGATION_TARGETS):
+            position=[float(value) for value in actual["position"]]
+            yaw=float(actual["yaw_rad"])
+            if len(position)!=3 or any(abs(a-b)>1e-12 for a,b in zip(position,expected["position"])):
+                return False
+            if abs(wrap_to_pi(yaw-expected["yaw_rad"]))>1e-12:return False
+        return True
+    except (KeyError,TypeError,ValueError):return False
 def check(metric_name,actual,threshold,passed,source):
     return {"metric_name":metric_name,"actual_value":actual,"threshold":threshold,
             "passed":None if passed is None else bool(passed),"source":source}
@@ -91,7 +115,7 @@ def protocol_checks(experiment,metrics,meta,target_ok):
         timing=[metrics.get(name) for name in ("goal_activation_times_s","per_goal_arrival_times_s","per_goal_duration_s")]
         timing_ok=count>0 and all(isinstance(values,list) and len(values)==count and all(value is not None and math.isfinite(value) for value in values) for values in timing)
         add("complete_per_goal_timing",{"goal_count":count,"activation":timing[0],"arrival":timing[1],"duration":timing[2]},"all values available",timing_ok,"events.csv:goal_activated and completion")
-    elif experiment in ("navigation","static_avoidance","narrow_corridor"):
+    elif experiment in ("navigation","static_avoidance"):
         add("navigation_complete",metrics.get("navigation_complete"),True,metrics.get("navigation_complete") is True,"samples.csv:/drone/multi_goal/complete")
         add("navigation_success",metrics.get("navigation_success"),True,metrics.get("navigation_success") is True,"samples.csv:/drone/multi_goal/success")
         add("no_collision",metrics.get("collision_observed"),False,metrics.get("collision_observed") is False,"samples.csv:/drone/environment/in_collision")
@@ -100,6 +124,19 @@ def protocol_checks(experiment,metrics,meta,target_ok):
         add("final_position_error",metrics.get("final_position_error_m"),"< 0.05 m",metrics.get("final_position_error_m") is not None and metrics["final_position_error_m"]<.05,"samples.csv:last mission sample")
         add("final_speed",metrics.get("final_speed_m_s"),"< 0.03 m/s",metrics.get("final_speed_m_s") is not None and metrics["final_speed_m_s"]<.03,"samples.csv:last mission sample")
         add("zero_rpm_saturation_samples",metrics.get("saturation_sample_count"),0,metrics.get("saturation_sample_count")==0,"diagnostics.csv callbacks / legacy Odom")
+        if meta.get("scenario_id")=="multi_goal_navigation":
+            count=metrics.get("goal_count") or 0; order=metrics.get("goal_order")
+            visited=metrics.get("visited_goal_count")
+            add("formal_navigation_goal_count",count,4,count==4,"metadata.json:targets")
+            add("visited_goal_count",visited,4,visited==4,"samples.csv:/drone/multi_goal/visited_goals")
+            add("goal_visit_order",order,[0,1,2,3],order==[0,1,2,3],"samples.csv:navigation_goal_index")
+            segment_counts={name:metrics.get(f"{name}_segment_count") for name in ("planned","simplified","reference")}
+            add("four_segment_plans",segment_counts,{"planned":4,"simplified":4,"reference":4},all(value==4 for value in segment_counts.values()),"paths.json:ordered path segments")
+            timing=[metrics.get(name) for name in ("goal_activation_times_s","per_goal_arrival_times_s","per_goal_duration_s")]
+            timing_ok=all(isinstance(values,list) and len(values)==4 and all(value is not None and math.isfinite(value) for value in values) for values in timing)
+            add("complete_per_goal_timing",{"activation":timing[0],"arrival":timing[1],"duration":timing[2]},"four finite values per timing field",timing_ok,"events.csv:goal_activated and navigation completion")
+            add("formal_goal_metadata",metrics.get("recorded_targets"),MULTI_GOAL_NAVIGATION_TARGETS,formal_navigation_targets_match(metrics.get("recorded_targets")),"metadata.json:targets")
+            add("finite_recorded_values",metrics.get("non_finite_core_value_count"),0,metrics.get("non_finite_core_value_count")==0,"samples.csv:core flight telemetry")
     elif experiment=="disturbance":
         expected_profile={"disturbance_short_gust":"short_gust",
                           "disturbance_persistent_release":"persistent_release"}.get(meta.get("scenario_id"))
@@ -153,7 +190,7 @@ def figures(run,rows,paths,experiment,navigation_start=None,force_start=None,for
     plot(run/"position_error.png",lambda a:a.plot(t,[r["goal_position_error"] for r in rows],label="goal error"),ylabel="goal error (m)")
     plot(run/"attitude.png",lambda a:[a.plot(t,[r[x] for r in rows],label=x) for x in ("roll","pitch","yaw")],ylabel="angle (rad)")
     plot(run/"motor_rpm.png",lambda a:[a.plot(t,[commanded_rpm(r,i) for r in rows],label=f"commanded M{i}") for i in range(1,5)],ylabel="commanded RPM")
-    yaw_key="reference_yaw" if experiment in ("navigation","static_avoidance","narrow_corridor") else "goal_yaw"
+    yaw_key="reference_yaw" if experiment in ("navigation","static_avoidance") else "goal_yaw"
     yaw_rows=[r for r in rows if math.isfinite(r.get(yaw_key,math.nan)) and math.isfinite(r.get("yaw",math.nan))]
     if yaw_rows:
         plot(run/"yaw_tracking.png",lambda a:(a.plot([r["mission_time_s"] for r in yaw_rows],[r["yaw"] for r in yaw_rows],label="actual yaw"),a.plot([r["mission_time_s"] for r in yaw_rows],[r[yaw_key] for r in yaw_rows],label="reference yaw"),a.plot([r["mission_time_s"] for r in yaw_rows],[wrap_to_pi(r[yaw_key]-r["yaw"]) for r in yaw_rows],label="wrapped error")),ylabel="angle (rad)")
@@ -227,7 +264,7 @@ def main():
     navigation_start,navigation_source=navigation_phase_start(paths,activation_events) if meta["experiment"]=="navigation" else (None,None)
     full_tracking,takeoff_tracking,navigation_tracking=phased_tracking_metrics(tracking_samples,navigation_start)
     targets,target_ok=target_snapshot_matches(meta,rows)
-    yaw_key="reference_yaw" if meta["experiment"] in ("navigation","static_avoidance","narrow_corridor") else "goal_yaw"
+    yaw_key="reference_yaw" if meta["experiment"] in ("navigation","static_avoidance") else "goal_yaw"
     yaw_rows=[r for r in rows if (navigation_start is None or meta["experiment"]!="navigation" or r["mission_time_s"]>=navigation_start)]
     yaw_stats=yaw_error_metrics([r.get("yaw",math.nan) for r in yaw_rows],[r.get(yaw_key,math.nan) for r in yaw_rows])
     raw=minimum([r["raw_obstacle_distance"] for r in rows]);safety=float(ep["safety_radius"])
@@ -247,18 +284,19 @@ def main():
       "path_efficiency":None if not lengths["reference"] else path_length(actual)/lengths["reference"],"planned_vs_straight_ratio":None if not lengths["planned"] or not straight else lengths["planned"]/straight,"actual_vs_reference_ratio":None if not lengths["reference"] else path_length(actual)/lengths["reference"],
       "maximum_absolute_roll_rad":maximum([abs(r["roll"]) for r in rows]),"maximum_absolute_pitch_rad":maximum([abs(r["pitch"]) for r in rows]),"maximum_angular_speed_rad_s":maximum([math.sqrt(sum(r[f"angular_speed_{x}"]**2 for x in "xyz")) for r in rows]),
       "non_finite_attitude_count":sum(not all(math.isfinite(r[x]) for x in ("roll","pitch","yaw")) for r in rows),"attitude_divergence_detected":longest_true_duration(times,att_bad)>=1.,
+      "non_finite_core_value_count":sum(not all(math.isfinite(r[x]) for x in ("actual_x","actual_y","actual_z","speed","roll","pitch","yaw","angular_speed_x","angular_speed_y","angular_speed_z")) for r in rows),
       "minimum_commanded_motor_rpm":minimum(rpm),"maximum_commanded_motor_rpm":maximum(rpm),
       "minimum_motor_rpm":minimum(rpm),"maximum_motor_rpm":maximum(rpm),
       "motor_rpm_semantics":"commanded_motor_rpm","saturation_sample_source":saturation_source,
       "saturation_sample_count":sum(sat),"longest_saturation_duration_s":longest_true_duration(saturation_times,sat),"saturated_at_end":sat[-1] if sat else None,"non_finite_rpm_count":sum(not math.isfinite(x) for x in rpm)}
     experiment=meta["experiment"]
     if experiment in ("multi_goal","navigation"):
-        index="mission_waypoint_index" if experiment=="multi_goal" else "navigation_goal_index"; unique=[]
+        index_field="mission_waypoint_index" if experiment=="multi_goal" else "navigation_goal_index"; unique=[]
         for r in rows:
-            if math.isfinite(r[index]) and int(r[index]) not in unique:unique.append(int(r[index]))
+            if math.isfinite(r[index_field]) and int(r[index_field]) not in unique:unique.append(int(r[index_field]))
         per_errors=[];segment_overshoots=[]
         for i in unique:
-            group=[r for r in rows if math.isfinite(r[index]) and int(r[index])==i];per_errors.append(group[-1]["goal_position_error"])
+            group=[r for r in rows if math.isfinite(r[index_field]) and int(r[index_field])==i];per_errors.append(group[-1]["goal_position_error"])
             pairs=[([r[f"actual_{x}"] for x in "xyz"],[r[f"goal_{x}"] for x in "xyz"]) for r in group]
             value,percent=projection_overshoot(pairs);segment_overshoots.append({"goal_index":i,"maximum_overshoot_m":value,"maximum_overshoot_percent":percent})
         completed=event_times(events,"mission_complete_changed" if experiment=="multi_goal" else "navigation_complete_changed")
@@ -267,16 +305,19 @@ def main():
         activations,arrivals,durations=goal_timing(goal_count,relevant,completed[-1] if completed else None)
         metrics.update({"goal_count":goal_count,"visited_goal_count":int(maximum([r["navigation_visited_goals"] for r in rows]) or len(unique)) if experiment=="navigation" else len(unique),"goal_order":unique,"goal_activation_times_s":activations,"per_goal_arrival_times_s":arrivals,"per_goal_duration_s":durations,"per_goal_final_errors_m":per_errors,"segment_overshoots":segment_overshoots,
           "mission_complete":observed(rows,"mission_complete") if experiment=="multi_goal" else observed(rows,"navigation_complete"),"mission_success":None if experiment=="multi_goal" else observed(rows,"navigation_success"),"total_mission_time_s":times[-1]})
-        if experiment=="multi_goal":
-            per_goal_yaw=[]
-            for index,arrival_time in enumerate(arrivals):
-                target_yaw=(targets[index].get("yaw_rad") if index<len(targets) and isinstance(targets[index],dict) else None)
-                if arrival_time is None or target_yaw is None:
-                    per_goal_yaw.append({"goal_index":index,"arrival_time_s":arrival_time,"status":"unavailable","yaw_error_rad":None});continue
+        per_goal_yaw=[]; per_goal_segments=[]
+        for goal_index,arrival_time in enumerate(arrivals):
+            target_yaw=(targets[goal_index].get("yaw_rad") if goal_index<len(targets) and isinstance(targets[goal_index],dict) else None)
+            if arrival_time is None or target_yaw is None:
+                yaw_error=None; yaw_status="unavailable"
+            else:
                 sample=min(rows,key=lambda row:abs(row["mission_time_s"]-arrival_time))
-                error=wrap_to_pi(target_yaw-sample["yaw"])
-                per_goal_yaw.append({"goal_index":index,"arrival_time_s":arrival_time,"status":"available" if error is not None else "unavailable","yaw_error_rad":error})
-            metrics["per_goal_arrival_yaw_error"]=per_goal_yaw
+                yaw_error=wrap_to_pi(target_yaw-sample["yaw"]); yaw_status="available" if yaw_error is not None else "unavailable"
+            per_goal_yaw.append({"goal_index":goal_index,"arrival_time_s":arrival_time,"status":yaw_status,"yaw_error_rad":yaw_error})
+            group=[r for r in rows if math.isfinite(r[index_field]) and int(r[index_field])==goal_index]
+            per_goal_segments.append({"goal_index":goal_index,"planned_path_length_m":ordered_segment_length(plan["planned"],goal_index,goal_count),"simplified_path_length_m":ordered_segment_length(plan["simplified"],goal_index,goal_count),"reference_path_length_m":ordered_segment_length(plan["reference"],goal_index,goal_count),"actual_path_length_m":path_length([[r[f"actual_{axis}"] for axis in "xyz"] for r in group]) if group else None,"duration_s":durations[goal_index] if goal_index<len(durations) else None,"final_position_error_m":per_errors[goal_index] if goal_index<len(per_errors) else None,"final_yaw_error_rad":yaw_error,"minimum_safety_clearance_m":minimum([r["safety_clearance"] for r in group]) if group else None})
+        metrics["per_goal_arrival_yaw_error"]=per_goal_yaw
+        metrics["per_goal_segments"]=per_goal_segments
     if experiment=="navigation":metrics.update({"takeoff_tracking_sample_count":takeoff_tracking["sample_count"],"takeoff_tracking_max_error_m":takeoff_tracking["max_error_m"],"takeoff_tracking_rms_error_m":takeoff_tracking["rms_error_m"],"navigation_tracking_sample_count":navigation_tracking["sample_count"],"navigation_tracking_max_error_m":navigation_tracking["max_error_m"],"navigation_tracking_rms_error_m":navigation_tracking["rms_error_m"],"navigation_tracking_final_error_m":navigation_tracking["final_error_m"],"navigation_yaw_tracking_status":yaw_stats["status"],"navigation_yaw_tracking_sample_count":yaw_stats["sample_count"],"navigation_yaw_tracking_final_error_rad":yaw_stats["final_error_rad"],"navigation_yaw_tracking_rms_error_rad":yaw_stats["rms_error_rad"],"navigation_yaw_tracking_maximum_absolute_error_rad":yaw_stats["maximum_absolute_error_rad"],"collision_observed":observed(rows,"collision_state"),"navigation_complete":observed(rows,"navigation_complete"),"navigation_success":observed(rows,"navigation_success"),"preflight_ready_observed":observed(rows,"interactive_ready"),"execution_active_observed":observed(rows,"interactive_active")})
     if experiment=="disturbance":
         start=event_times(events,"external_force_started");release=event_times(events,"external_force_released");recovery=event_times(events,"recovery_confirmed");start=start[0] if start else None;release=release[0] if release else None

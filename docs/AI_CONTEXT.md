@@ -161,9 +161,23 @@ bash scripts/test_full.sh
 临时调参与独立开发评测不得写入。标记为 `smoke` 的记录只验证统一记录/分析流程，
 不作为最终报告数据。
 
-后续批准的实验按 `01_hover`、`02_single_goal`、`03_multi_goal`、`04_navigation`、
-`05_disturbance`、`06_failure_case` 顺序生成。正式交互导航目标点与路线必须由用户最终
-选择，工具和文档不得代为决定或预填结果。
+正式结果结构固定为 `01_hover`、`02_single_goal`、`03_multi_goal`、
+`04_static_avoidance`、`05_multi_goal_navigation` 和 `06_disturbance`（short gust 与
+persistent release 两组）。03 验证无障碍基础环境中的多目标任务和姿态控制；04 验证
+单目标全地图静态避障；05 在障碍环境中一次提交 P1→P2→P3→P4，验证四目标顺序任务、
+四次分段规划、高度变化及各 Pose 的终端 yaw。原 narrow corridor 协议已由新 05 取代，
+旧证据仅可从 Git 历史追溯，不属于当前正式结果集。
+
+```text
+01 Hover
+02 Single Goal
+03 Basic Multi-goal Mission
+04 Full-map Static Avoidance
+05 Multi-goal 3D Navigation
+06 Disturbance
+   ├── Short Gust
+   └── Persistent Release
+```
 
 统一评测工具对六类实验使用独立停止状态机。基础 multi 等待真实 mission complete，
 导航等待 interactive active 与 navigation complete/success，扰动等待外力开始、撤销和
@@ -187,6 +201,14 @@ activation，最终 arrival 等于 complete，duration 为 arrival 减 activatio
 `+X 0.30 N × 2 s`，用于瞬态抑制与恢复，后者固定施加 `+X 0.30 N × 10 s`，用于
 稳态补偿及撤力恢复。两者使用 `disturbance` Recorder、目标 `(0,0,1.5,0)`，无任务
 提交 Service，截图可选但仍必须完成人工验收后才具备报告资格。
+
+新 05 固定目标为 `(13.15,5.80,3.40,0)`、
+`(9.70,-1.20,1.20,3.0892327760299634)`、
+`(6.30,5.55,2.35,-1.9547687622336491)`、
+`(0.45,5.70,1.00,-1.6929693744344996)`。正式脚本通过
+`/drone/interactive_goals/execute` 一次提交完整四 Pose，执行阶段使用
+`path_tangent`，接近每个目标时过渡到该 Pose 的终端 yaw。同一 Launch 仍只允许一项
+任务。
 
 抗扰恢复时间长期区分 threshold entry 与 confirmed recovery：前者是撤力后首次进入
 配置的位置/速度门限，后者是持续满足 `recovery_hold_time_s` 后由 Recorder 记录

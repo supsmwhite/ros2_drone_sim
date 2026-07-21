@@ -20,7 +20,7 @@ REQUIRED_PARAMETERS = (
 SCREENSHOT_OPTIONAL_SCENARIOS = {
     "hover", "single_goal", "multi_goal",
     "disturbance_short_gust", "disturbance_persistent_release"}
-SCREENSHOT_REQUIRED_SCENARIOS = {"static_avoidance", "narrow_corridor"}
+SCREENSHOT_REQUIRED_SCENARIOS = {"static_avoidance", "multi_goal_navigation"}
 
 
 def screenshots_required(scenario_id):

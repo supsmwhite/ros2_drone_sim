@@ -23,11 +23,25 @@ The five fixed base/navigation scenarios are:
 | `02_single_goal` / `single_goal` | `single_goal` | pre-hover `(0,0,1.5,0)`, then formal `(2,1,1.5,0)` |
 | `03_multi_goal` / `multi_goal` | `multi_goal` | pre-hover outside recording, then `(3,0,1.5,0°)` → `(3,3,1.5,90°)` → `(0,3,1.5,180°)` → `(0,0,1.5,-90°)` |
 | `04_static_avoidance` / `static_avoidance` | `navigation` | `(13.2,5.5,1.5)`, `path_tangent` |
-| `05_narrow_corridor` / `narrow_corridor` | `navigation` | `(12.1,1.1,1.5)`, `path_tangent` |
+| `05_multi_goal_navigation` / `multi_goal_navigation` | `navigation` | P1 `(13.15,5.80,3.40,0°)` → P2 `(9.70,-1.20,1.20,177°)` → P3 `(6.30,5.55,2.35,-112°)` → P4 `(0.45,5.70,1.00,-97°)`, `path_tangent` |
 
-Static avoidance and narrow corridor intentionally share the ROS recorder type
-`navigation`. Their distinct `scenario_id`, numbered directory, target snapshot, and manifest
-entry must never be collapsed.
+Static avoidance and multi-goal 3D navigation share the unified ROS recorder type
+`navigation`. Scenario 03 validates a basic multi-goal mission and attitude control in the
+obstacle-free environment; scenario 04 validates single-goal full-map static avoidance;
+scenario 05 validates four ordered goals, four segment plans, altitude changes, and each Pose's
+terminal yaw in the obstacle environment. The former narrow-corridor protocol was replaced by
+this more comprehensive protocol; its old evidence remains in Git history only.
+
+```text
+01 Hover
+02 Single Goal
+03 Basic Multi-goal Mission
+04 Full-map Static Avoidance
+05 Multi-goal 3D Navigation
+06 Disturbance
+   ├── Short Gust
+   └── Persistent Release
+```
 
 Two independent bonus disturbance scenarios are recorded separately:
 
@@ -100,7 +114,7 @@ The historical hover smoke predates this workflow and remains explicitly marked
 6. all required parameter snapshots and checksums are complete;
 7. protected raw evidence still matches its recorded checksums;
 8. manual acceptance is complete;
-9. for `static_avoidance` and `narrow_corridor`, at least one valid RViz screenshot is present
+9. for `static_avoidance` and `multi_goal_navigation`, at least one valid RViz screenshot is present
    and referenced by manual acceptance.
 
 The orchestration script always creates the manual template as incomplete, so a new run starts
@@ -114,7 +128,7 @@ python3 tools/final_assessment_manifest.py finalize \
   --run-dir results/01_hover/final/run_01
 ```
 
-For `static_avoidance` and `narrow_corridor`, save and reference at least one screenshot inside
+For `static_avoidance` and `multi_goal_navigation`, save and reference at least one screenshot inside
 the run directory, then pass it during finalization:
 
 ```bash

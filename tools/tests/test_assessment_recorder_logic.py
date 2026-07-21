@@ -1,10 +1,13 @@
+import math
 import sys
 from pathlib import Path
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from assessment_metrics import (ExperimentStopController, PathHistory,
-    mission_relative_time, path_length)
+    mission_relative_time, normalized_target, path_length,
+    prepare_output_directory, rotate_body_velocity_to_map, targets_match)
 
 
 def update_arrival(controller):
@@ -137,3 +140,30 @@ def test_pre_mission_event_is_null_not_negative():
 
 def test_tiny_timestamp_roundoff_clamps_to_zero():
     assert mission_relative_time(12.5 - 5e-10, 12.5) == 0.0
+
+
+def test_nonempty_output_requires_explicit_overwrite(tmp_path):
+    output = tmp_path / "run"; output.mkdir(); (output / "samples.csv").write_text("old")
+    with pytest.raises(FileExistsError):
+        prepare_output_directory(output)
+    assert prepare_output_directory(output, allow_overwrite=True) == output
+    assert (output / "samples.csv").read_text() == "old"
+
+
+def test_final_output_cannot_be_overwritten(tmp_path):
+    output = tmp_path / "run"; output.mkdir(); (output / "metadata.json").write_text("{}")
+    with pytest.raises(FileExistsError):
+        prepare_output_directory(output, allow_overwrite=True, run_status="final")
+
+
+def test_expected_goal_rejects_stale_hover_and_accepts_wrapped_yaw():
+    expected = normalized_target([2, 1, 1.5], 0)
+    stale = normalized_target([0, 0, 1.5], 0)
+    wrapped = normalized_target([2, 1, 1.5], 2 * math.pi)
+    assert not targets_match(stale, expected)
+    assert targets_match(wrapped, expected)
+
+
+def test_body_velocity_is_rotated_to_map_frame():
+    half = math.sqrt(.5)
+    assert rotate_body_velocity_to_map([0, 0, half, half], [1, 0, 0]) == pytest.approx([0, 1, 0])

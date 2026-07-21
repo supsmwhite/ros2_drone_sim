@@ -8,7 +8,10 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 from assessment_metrics import (directional_disturbance_metrics, goal_timing,
     held_condition_start, longest_true_duration, navigation_phase_start,
     path_length, phased_tracking_metrics, point_box_distance,
-    projection_overshoot, require_nonnegative_mission_times)
+    projection_overshoot, require_nonnegative_mission_times, wrap_to_pi,
+    yaw_error_metrics)
+from analyze_assessment_run import (commanded_rpm, derived_paths,
+    protocol_checks, saturation_timeline)
 
 
 def test_path_length_3d():
@@ -152,3 +155,97 @@ def test_near_zero_horizontal_force_has_null_direction_metrics():
 
 def test_negative_mission_time_is_rejected():
     with pytest.raises(ValueError): require_nonnegative_mission_times([None, 0, .1, -.01])
+
+
+def test_commanded_rpm_reads_new_and_legacy_schema():
+    assert commanded_rpm({"commanded_motor_rpm_m1": 123}, 1) == 123
+    assert commanded_rpm({"m1_rpm": 456}, 1) == 456
+
+
+def test_saturation_count_uses_diagnostics_callbacks(tmp_path):
+    (tmp_path / "diagnostics.csv").write_text(
+        "recording_time_s,mission_time_s,horizontal_saturated,altitude_saturated,attitude_saturated,mixer_saturated,any_saturated\n"
+        "0,0,1,0,0,0,1\n1,1,0,0,0,0,0\n")
+    odom_rows = [{"mission_time_s": value, "horizontal_saturated": 1,
+                  "altitude_saturated": 0, "attitude_saturated": 0,
+                  "mixer_saturated": 0} for value in (0, .1, .2, .3)]
+    times, flags, source = saturation_timeline(tmp_path, odom_rows)
+    assert times == [0, 1] and flags == [True, False]
+    assert source == "diagnostics_callbacks"
+
+
+def passing_metrics(experiment):
+    metrics = {"non_finite_attitude_count": 0, "non_finite_rpm_count": 0,
+               "attitude_divergence_detected": False, "saturated_at_end": False,
+               "final_position_error_m": .01, "final_speed_m_s": .01,
+               "recorded_targets": [{"position": [1, 2, 3], "yaw_rad": 0.0}]}
+    if experiment == "multi_goal":
+        metrics.update({"goal_count": 2, "goal_order": [0, 1],
+                        "mission_complete": True,
+                        "goal_activation_times_s": [0, 2],
+                        "per_goal_arrival_times_s": [2, 4],
+                        "per_goal_duration_s": [2, 2]})
+    if experiment in ("navigation", "static_avoidance", "narrow_corridor"):
+        metrics.update({"navigation_complete": True, "navigation_success": True,
+                        "collision_observed": False,
+                        "navigation_tracking_max_error_m": .049,
+                        "minimum_safety_clearance_m": .085,
+                        "saturation_sample_count": 0})
+    return metrics
+
+
+@pytest.mark.parametrize("experiment", [
+    "hover", "single_goal", "multi_goal", "static_avoidance", "narrow_corridor"])
+def test_five_formal_scenarios_pass(experiment):
+    stop = "arrival_and_steady_window_complete" if experiment in ("hover", "single_goal") else "completed"
+    checks, overall, reasons = protocol_checks(
+        experiment, passing_metrics(experiment), {"stop_reason": stop}, True)
+    assert overall and not reasons
+    assert all(set(("metric_name", "actual_value", "threshold", "passed", "source")) <= set(item) for item in checks.values())
+
+
+@pytest.mark.parametrize("experiment", [
+    "hover", "single_goal", "multi_goal", "static_avoidance", "narrow_corridor"])
+def test_five_formal_scenarios_fail_with_reason(experiment):
+    metrics = passing_metrics(experiment); metrics["non_finite_rpm_count"] = 1
+    stop = "arrival_and_steady_window_complete" if experiment in ("hover", "single_goal") else "completed"
+    checks, overall, reasons = protocol_checks(experiment, metrics, {"stop_reason": stop}, True)
+    assert not overall and not checks["finite_commanded_rpm"]["passed"]
+    assert any(reason.startswith("finite_commanded_rpm:") for reason in reasons)
+
+
+def test_strict_boundaries_fail_and_produce_reasons():
+    metrics = passing_metrics("hover"); metrics["final_position_error_m"] = .10; metrics["final_speed_m_s"] = .08
+    checks, overall, reasons = protocol_checks(
+        "hover", metrics, {"stop_reason": "arrival_and_steady_window_complete"}, True)
+    assert not overall and not checks["final_position_error"]["passed"] and not checks["final_speed"]["passed"]
+    assert any(reason.startswith("final_position_error:") for reason in reasons)
+
+
+def test_navigation_strict_threshold_boundaries():
+    metrics = passing_metrics("navigation")
+    metrics.update({"navigation_tracking_max_error_m": .05,
+                    "final_position_error_m": .05, "final_speed_m_s": .03})
+    checks, overall, _ = protocol_checks("navigation", metrics, {"stop_reason": "completed"}, True)
+    assert checks["minimum_safety_clearance"]["passed"]
+    assert not checks["navigation_tracking_max_error"]["passed"]
+    assert not checks["final_position_error"]["passed"]
+    assert not checks["final_speed"]["passed"] and not overall
+
+
+def test_yaw_error_wraps_across_pi_boundary():
+    metrics = yaw_error_metrics([math.pi - .01], [-math.pi + .01])
+    assert metrics["final_error_rad"] == pytest.approx(.02)
+    assert wrap_to_pi(-2 * math.pi + .02) == pytest.approx(.02)
+
+
+def test_legacy_missing_yaw_is_unavailable_not_failure():
+    metrics = yaw_error_metrics([0.1], [math.nan])
+    assert metrics["status"] == "unavailable"
+    assert metrics["final_error_rad"] is None
+
+
+def test_output_protection_tracks_yaw_figure(tmp_path):
+    paths = derived_paths(tmp_path, "hover")
+    assert tmp_path / "summary.json" in paths
+    assert tmp_path / "yaw_tracking.png" in paths

@@ -1,0 +1,6 @@
++ ros2 service call /drone/interactive_goals/execute drone_msgs/srv/ExecuteGoalSequence {goals: {header: {frame_id: map}, poses: [{position: {x: 13.2, y: 5.5, z: 1.5}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}]}, draft_revision: 1}
+requester: making request: drone_msgs.srv.ExecuteGoalSequence_Request(goals=geometry_msgs.msg.PoseArray(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id='map'), poses=[geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=13.2, y=5.5, z=1.5), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0))]), draft_revision=1)
+
+response:
+drone_msgs.srv.ExecuteGoalSequence_Response(accepted=True, message='ACCEPTED: mission snapshot received; preflight validation started')
+

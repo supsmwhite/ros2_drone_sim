@@ -1,0 +1,107 @@
+{
+  "schema_version": 3,
+  "protocol_version": "final-assessment-v1",
+  "experiment": "navigation",
+  "scenario_id": "static_avoidance",
+  "status": "final",
+  "repository_commit": "249ea180ad81236bd8b1c68f1295585230a49964",
+  "git_dirty": true,
+  "generated_at": "2026-07-21T07:00:08.390169+00:00",
+  "target_config": null,
+  "mission_time_source": "interactive_mission_active",
+  "stop_reason": "navigation_success_and_steady_window_complete",
+  "final_state": "STEADY_WINDOW",
+  "service_name": "/drone/interactive_goals/execute",
+  "targets": [
+    {
+      "position": [
+        13.2,
+        5.5,
+        1.5
+      ],
+      "yaw_rad": 0.0
+    }
+  ],
+  "target_position": [
+    13.2,
+    5.5,
+    1.5
+  ],
+  "target_yaw_rad": 0.0,
+  "goals": [
+    [
+      13.2,
+      5.5,
+      1.5
+    ]
+  ],
+  "goal_order": [
+    0
+  ],
+  "ignored_nonmatching_goal_count": 0,
+  "signal_semantics": {
+    "odom_twist_frame": "base_link",
+    "body_velocity_fields": [
+      "body_velocity_x",
+      "body_velocity_y",
+      "body_velocity_z"
+    ],
+    "map_velocity_fields": [
+      "map_velocity_x",
+      "map_velocity_y",
+      "map_velocity_z"
+    ],
+    "motor_rpm_topic": "/drone/motor_rpm_cmd",
+    "motor_rpm_quantity": "commanded_motor_rpm",
+    "saturation_count_source": "diagnostics.csv callbacks"
+  },
+  "safety_radius_m": 0.25,
+  "failure_reason": null,
+  "safety_observations": {
+    "maximum_altitude_m": 1.5019084297209258,
+    "maximum_speed_m_s": 1.0141091403324056,
+    "nonzero_rpm_observed": true
+  },
+  "thresholds": {
+    "steady_window_s": 3.0,
+    "arrival_position_threshold_m": 0.1,
+    "arrival_speed_threshold_m_s": 0.08,
+    "arrival_hold_time_s": 1.0,
+    "recovery_position_threshold_m": 0.1,
+    "recovery_speed_threshold_m_s": 0.08,
+    "recovery_hold_time_s": 1.0,
+    "failure_observation_window_s": 2.0,
+    "ground_motion_threshold_m": 0.1,
+    "timeout_s": 180.0
+  },
+  "topic_message_counts": {
+    "/drone/odom": 12444,
+    "/drone/imu": 12443,
+    "/drone/motor_rpm_cmd": 6381,
+    "/drone/controller/diagnostics": 6103,
+    "/drone/goal": 0,
+    "/drone/trajectory_setpoint": 3052,
+    "/drone/path": 625,
+    "/drone/planned_path": 2,
+    "/drone/simplified_path": 2,
+    "/drone/reference_path": 2,
+    "/drone/mission/goals": 0,
+    "/drone/mission/current_waypoint_index": 0,
+    "/drone/mission/complete": 0,
+    "/drone/interactive_goals/selected_goals": 3043,
+    "/drone/multi_goal/current_goal_pose": 292,
+    "/drone/multi_goal/current_goal_index": 3190,
+    "/drone/multi_goal/visited_goals": 3190,
+    "/drone/multi_goal/complete": 3190,
+    "/drone/multi_goal/success": 3190,
+    "/drone/interactive_goals/status": 3043,
+    "/drone/interactive_goals/ready": 3043,
+    "/drone/interactive_goals/count": 3043,
+    "/drone/interactive_mission/status": 3179,
+    "/drone/interactive_mission/active": 3180,
+    "/drone/environment/in_collision": 1276,
+    "/drone/environment/markers": 1,
+    "/drone/external_wrench/active": 1,
+    "/drone/external_wrench/applied": 1
+  }
+}

@@ -1,0 +1,19 @@
+waypoint_manager_node:
+  ros__parameters:
+    # Flat [x, y, z, yaw] groups in map/ENU. The first version deliberately
+    # stops and settles at each target before switching to the next one.
+    waypoints:
+      [
+        3.0, 0.0, 1.5, 0.0,
+        3.0, 3.0, 1.5, 1.5707963267948966,
+        0.0, 3.0, 1.5, 3.141592653589793,
+        0.0, 0.0, 1.5, -1.5707963267948966
+      ]
+
+    position_tolerance: 0.20
+    linear_speed_tolerance: 0.15
+    yaw_tolerance: 0.10
+    angular_speed_tolerance: 0.20
+    hold_duration: 1.0
+    update_frequency: 20.0
+    odometry_timeout: 0.25

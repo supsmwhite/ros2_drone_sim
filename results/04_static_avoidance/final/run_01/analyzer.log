@@ -1,0 +1,104 @@
+{
+  "final_position_error_m": 0.0038572438761306322,
+  "final_speed_m_s": 0.005726653788826878,
+  "final_window_mean_error_m": 0.0066465821310156,
+  "recorded_targets": [
+    {
+      "position": [
+        13.2,
+        5.5,
+        1.5
+      ],
+      "yaw_rad": 0.0
+    }
+  ],
+  "target_snapshot_matches_samples": true,
+  "yaw_metrics_status": "available",
+  "yaw_sample_count": 11483,
+  "final_yaw_error_rad": -2.429255629660408e-07,
+  "yaw_error_rms_rad": 0.10390247936479709,
+  "maximum_absolute_yaw_error_rad": 0.32788446012787964,
+  "arrival_time_s": 56.714476346969604,
+  "maximum_overshoot_m": 0.016796168290663886,
+  "maximum_overshoot_percent": 0.11681482466908863,
+  "steady_state_mean_error_m": 0.010087229607544719,
+  "steady_state_rms_error_m": 0.010457121383766976,
+  "steady_state_max_error_m": 0.013053646894462506,
+  "maximum_goal_position_error_m": 14.378456106272328,
+  "full_mission_tracking_max_error_m": 1.5,
+  "full_mission_tracking_rms_error_m": 0.17362329503259966,
+  "minimum_raw_obstacle_distance_m": 0.40018315437898444,
+  "safety_radius_m": 0.25,
+  "minimum_safety_clearance_m": 0.15018315437898444,
+  "straight_line_distance_m": 14.378456106272328,
+  "actual_path_length_m": 22.187320153714964,
+  "flight_time_s": 61.06946587562561,
+  "planned_segment_count": 1,
+  "simplified_segment_count": 1,
+  "reference_segment_count": 1,
+  "planned_path_length_m": 20.953465138250003,
+  "simplified_path_length_m": 20.176328317121026,
+  "reference_path_length_m": 20.60879904748736,
+  "path_efficiency": 1.0765945217181425,
+  "planned_vs_straight_ratio": 1.4572819907353929,
+  "actual_vs_reference_ratio": 1.0765945217181425,
+  "maximum_absolute_roll_rad": 0.036198581477228195,
+  "maximum_absolute_pitch_rad": 0.06242781241004401,
+  "maximum_angular_speed_rad_s": 0.7680810704308206,
+  "non_finite_attitude_count": 0,
+  "attitude_divergence_detected": false,
+  "minimum_commanded_motor_rpm": 0.0,
+  "maximum_commanded_motor_rpm": 13067.535212862302,
+  "minimum_motor_rpm": 0.0,
+  "maximum_motor_rpm": 13067.535212862302,
+  "motor_rpm_semantics": "commanded_motor_rpm",
+  "saturation_sample_source": "diagnostics_callbacks",
+  "saturation_sample_count": 0,
+  "longest_saturation_duration_s": 0.0,
+  "saturated_at_end": false,
+  "non_finite_rpm_count": 0,
+  "goal_count": 1,
+  "visited_goal_count": 1,
+  "goal_order": [
+    0
+  ],
+  "goal_activation_times_s": [
+    0.0
+  ],
+  "per_goal_arrival_times_s": [
+    58.059473752975464
+  ],
+  "per_goal_duration_s": [
+    58.059473752975464
+  ],
+  "per_goal_final_errors_m": [
+    0.0038572438761306322
+  ],
+  "segment_overshoots": [
+    {
+      "goal_index": 0,
+      "maximum_overshoot_m": 0.016796168290663886,
+      "maximum_overshoot_percent": 0.11681482466908863
+    }
+  ],
+  "mission_complete": true,
+  "mission_success": true,
+  "total_mission_time_s": 61.06946587562561,
+  "takeoff_tracking_sample_count": 723,
+  "takeoff_tracking_max_error_m": 1.5,
+  "takeoff_tracking_rms_error_m": 0.7123508873242195,
+  "navigation_tracking_sample_count": 11483,
+  "navigation_tracking_max_error_m": 0.02341960336342933,
+  "navigation_tracking_rms_error_m": 0.009646748472578867,
+  "navigation_tracking_final_error_m": 0.0038572438761306322,
+  "navigation_yaw_tracking_status": "available",
+  "navigation_yaw_tracking_sample_count": 11483,
+  "navigation_yaw_tracking_final_error_rad": -2.429255629660408e-07,
+  "navigation_yaw_tracking_rms_error_rad": 0.10390247936479709,
+  "navigation_yaw_tracking_maximum_absolute_error_rad": 0.32788446012787964,
+  "collision_observed": false,
+  "navigation_complete": true,
+  "navigation_success": true,
+  "preflight_ready_observed": false,
+  "execution_active_observed": true
+}

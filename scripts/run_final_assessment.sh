@@ -4,6 +4,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/.." && pwd)"
+source "${script_dir}/final_assessment_lib.sh"
 
 experiment=""
 status=""
@@ -121,6 +122,7 @@ if [[ "$dry_run" == true ]]; then
   echo "service=$service_name"
   echo "expected_goals=${expected_display% }"
   echo "submission=$submission_description"
+  echo "analyzer_parameters=${run_dir}/parameters"
   exit 0
 fi
 
@@ -128,17 +130,6 @@ mkdir -p -- "$run_dir"
 temporary_logs="$(mktemp -d /tmp/final_assessment_logs.XXXXXX)"
 launch_pid=""
 recorder_pid=""
-logs_preserved=false
-
-preserve_logs() {
-  [[ "$logs_preserved" == false && -d "$run_dir" ]] || return 0
-  for name in launch submission recorder_stdout analyzer; do
-    if [[ -f "${temporary_logs}/${name}.log" && ! -e "${run_dir}/${name}.log" ]]; then
-      cp -- "${temporary_logs}/${name}.log" "${run_dir}/${name}.log"
-    fi
-  done
-  logs_preserved=true
-}
 
 stop_process_group() {
   local pid="$1"
@@ -154,7 +145,7 @@ stop_process_group() {
 cleanup() {
   stop_process_group "$recorder_pid"
   stop_process_group "$launch_pid"
-  preserve_logs
+  preserve_assessment_logs "$temporary_logs" "$run_dir"
   rm -rf -- "$temporary_logs"
 }
 trap cleanup EXIT INT TERM
@@ -227,7 +218,22 @@ recorder_command=(python3 tools/assessment_recorder.py
   --timeout "$assessment_timeout" "${expected_goals[@]}")
 setsid "${recorder_command[@]}" >"${temporary_logs}/recorder_stdout.log" 2>&1 &
 recorder_pid=$!
-sleep 1
+
+wait_for_recorder() {
+  local deadline=$((SECONDS + 15)) nodes info
+  while ((SECONDS < deadline)); do
+    kill -0 "$recorder_pid" 2>/dev/null || die "recorder exited before becoming ready"
+    nodes="$(ros2 node list --no-daemon --spin-time 1.0 2>/dev/null || true)"
+    info="$(ros2 node info /assessment_recorder --no-daemon --spin-time 1.0 2>/dev/null || true)"
+    if grep -qx '/assessment_recorder' <<<"$nodes" && grep -q '/drone/odom' <<<"$info"
+    then
+      return 0
+    fi
+    sleep 0.1
+  done
+  die "timed out waiting for /assessment_recorder"
+}
+wait_for_recorder
 
 case "$experiment" in
   hover) submit_basic single 0 0 1.5 yaw=0 ;;
@@ -251,15 +257,15 @@ recorder_pid=""
 
 stop_process_group "$launch_pid"
 launch_pid=""
-preserve_logs
-
-python3 tools/analyze_assessment_run.py "$run_dir" --parameters "${repo_root}/src/drone_bringup/config" >"${temporary_logs}/analyzer.log" 2>&1
-cp -- "${temporary_logs}/analyzer.log" "${run_dir}/analyzer.log"
+preserve_assessment_logs "$temporary_logs" "$run_dir"
 
 mkdir -- "${run_dir}/parameters"
 for parameter in "${parameter_names[@]}"; do
   cp -- "${repo_root}/src/drone_bringup/config/${parameter}" "${run_dir}/parameters/${parameter}"
 done
+python3 tools/analyze_assessment_run.py "$run_dir" --parameters "${run_dir}/parameters" >"${temporary_logs}/analyzer.log" 2>&1
+preserve_assessment_logs "$temporary_logs" "$run_dir"
+
 (
   cd "${run_dir}/parameters"
   sha256sum -- "${parameter_names[@]}"
@@ -306,7 +312,7 @@ Date:
 Notes:
 EOF
 
-python3 tools/final_assessment_manifest.py \
+python3 tools/final_assessment_manifest.py create \
   --manifest "$manifest_path" --run-dir "$run_dir" --relative-path "$relative_path" \
   --scenario-id "$experiment" --recorder-experiment "$recorder_experiment" \
   --status "$status" --run-id "$run_id" \
@@ -315,5 +321,8 @@ python3 tools/final_assessment_manifest.py \
   --parameters-complete "$parameters_complete" \
   --manual-acceptance-complete false >"${run_dir}/manifest.log"
 
-find "$run_dir" -type f ! -name evidence_sha256.txt -print0 | sort -z | xargs -0 sha256sum >"${run_dir}/evidence_sha256.txt"
+(
+  cd "$run_dir"
+  find . -type f ! -name evidence_sha256.txt -print0 | sort -z | xargs -0 sha256sum
+) >"${run_dir}/evidence_sha256.txt"
 echo "Assessment completed: $run_dir"

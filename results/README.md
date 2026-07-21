@@ -90,8 +90,20 @@ The historical hover smoke predates this workflow and remains explicitly marked
 
 The orchestration script always creates the manual template as incomplete, so a new run starts
 with `report_eligible=false`. A reviewer must inspect RViz evidence, screenshots, curves, and
-logs before an explicit manifest review may mark manual acceptance complete. Smoke and trial
-runs can never become report eligible.
+logs before finalization. Mark every checklist item complete, set `Status: complete`, fill in
+reviewer/date, and reference each required screenshot inside the run directory. Then run:
+
+```bash
+python3 tools/final_assessment_manifest.py finalize \
+  --manifest results/manifest.json \
+  --run-dir results/04_static_avoidance/final/run_01 \
+  --screenshot screenshots/rviz_overview.png
+```
+
+Finalization verifies protected raw evidence, `overall_pass`, parameter checksums, Git
+conditions, manual fields, and screenshots; it then recalculates evidence checksums and updates
+both manifests. Repeating finalization is rejected explicitly. Smoke and trial runs can never
+become report eligible.
 
 ## Signal and metric semantics
 

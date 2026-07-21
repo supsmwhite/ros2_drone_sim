@@ -121,9 +121,13 @@ Odometry / IMU / RViz / Results
 | 外力 | `0.30 N` | `0.30 N` |
 | 持续时间 | `2.00 s` | `10.04 s` |
 | 峰值水平偏差 | `0.3321 m` | `0.4850 m` |
-| 正式确认恢复时间 | `7.29 s` | `1.005 s` |
+| 撤力后正式确认恢复时间 | `7.29 s` | `1.005 s` |
 | 最终误差 | `0.0162 m` | `0.0598 m` |
 | 饱和样本 | `0` | `0` |
+
+恢复时间均从外力撤除时刻开始计时。Persistent Release 的约 `1.005 s` 表示撤力时系统
+已经进入位置与速度恢复门限，随后持续满足约 `1 s` 的保持条件，Recorder 才正式确认
+恢复。报告正文继续优先采用 `recovery_confirmed_time_s`。
 
 七组正式结果均已完成自动分析、人工验收和证据 finalize，`results/manifest.json` 中
 均为 `report_eligible=true`，Reviewer 为 `Peter`。
@@ -133,9 +137,12 @@ Odometry / IMU / RViz / Results
 ```bash
 cd ~/ros2_drone_sim
 source /opt/ros/humble/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install
 source install/setup.bash
 ```
+
+已安装全部依赖时，rosdep 会直接跳过已满足的包。
 
 不同仿真 Launch 不应同时运行在同一个 ROS Domain。
 

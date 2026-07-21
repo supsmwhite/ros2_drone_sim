@@ -56,21 +56,38 @@ Service; both reuse the disturbance launch and the unified `disturbance` Recorde
 
 ## Directory and invocation
 
+Formal Final evidence:
+
 ```text
-results/<numbered_scenario>/<smoke|trial|final>/<run_id>/
+results/<numbered_scenario>/final/<run_id>/
 ```
 
-Example dry run:
+Temporary smoke/trial runs:
+
+```text
+/tmp/ros2_drone_assessment_smoke/<numbered_scenario>/<smoke|trial>/<run_id>/
+```
+
+`results/` contains only the seven current Final evidence sets, the shared manifest, and shared
+parameter documentation. Smoke and trial runs default to `/tmp/ros2_drone_assessment_smoke/`
+and can never become formal report evidence.
+
+Example trial dry run:
 
 ```bash
 scripts/run_final_assessment.sh \
-  --experiment static_avoidance --status trial --run-id run_01 \
-  --use-rviz true --output-root results --timeout 180 --dry-run
+  --experiment static_avoidance \
+  --status trial \
+  --run-id trial_01 \
+  --use-rviz true \
+  --output-root /tmp/ros2_drone_assessment_smoke \
+  --timeout 180 \
+  --dry-run
 ```
 
 Remove `--dry-run` only after checking the printed launch, Service, target, output path, Git
-state, and ROS domain. `run_id` is never reused. Failed and partial directories are retained for
-diagnosis or moved outside `results/`; they are not overwritten.
+state, and ROS domain. `run_id` is never reused. Failed and partial smoke/trial directories stay
+under the temporary output root for diagnosis; they are not overwritten or moved into `results/`.
 
 Each completed run contains:
 

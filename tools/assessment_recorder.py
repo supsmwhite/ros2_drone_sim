@@ -16,7 +16,8 @@ from visualization_msgs.msg import MarkerArray
 
 from assessment_metrics import (ExperimentStopController, PathHistory,
     mission_relative_time, normalized_target, point_box_distance,
-    prepare_output_directory, rotate_body_velocity_to_map, targets_match)
+    prepare_output_directory, rotate_body_velocity_to_map, target_sequences_match,
+    targets_match)
 
 EXPERIMENTS = ("hover", "single_goal", "multi_goal", "navigation", "disturbance", "failure_case")
 PROTOCOL_VERSION = "final-assessment-v1"
@@ -227,9 +228,13 @@ class Recorder:
         if ((kind=="basic") != (self.args.experiment in ("hover","single_goal","multi_goal"))):return
         targets=[normalized_target([p.position.x,p.position.y,p.position.z],euler(p.orientation)[2]) for p in m.poses]
         points=[target["position"] for target in targets]
+        if (kind=="basic" and self.args.experiment=="multi_goal" and
+            self.protocol_targets and not target_sequences_match(targets,self.protocol_targets)):
+            self.ignored_goal_count+=1; return
         if points:
             self.observed_targets=targets; self.goals=points; self.final_goal=points[-1]; self.final_goal_yaw=targets[-1]["yaw_rad"]; self.goal_count=len(points)
         if kind=="basic" and points and self.args.experiment=="multi_goal":
+            self.mission_complete=False
             mission_time=stamp_s(m.header.stamp) or self.last_ros
             self.start_mission("mission_goals_received",mission_time);self.event("mission_goals_received",{"goal_count":len(points)},mission_time)
             self.activate_goal(self.mission_index,"mission_waypoint_index",mission_time)

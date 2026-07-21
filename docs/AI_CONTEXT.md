@@ -25,6 +25,10 @@
 基础入口不会自动读取 YAML waypoint。`single` 与 `multi` 共用同一个运行时任务接口，
 由任务管理节点串行接收，不创建第二套执行器或重名 Marker 发布者。
 
+正式 multi 在 Recorder 启动前独立完成 `(0,0,1.5,0°)` 预备悬停；正式记录仅包含
+`(3,0,1.5,0°)` → `(3,3,1.5,90°)` → `(0,3,1.5,180°)` →
+`(0,0,1.5,-90°)` 四个目标，形成 `3 m × 3 m` 闭环且 `goal_count=4`。
+
 ## Launch 依赖图
 
 ```text
@@ -189,8 +193,8 @@ disturbance 和 failure_case 的工具验证写入 `/tmp/ros2_drone_assessment_s
 
 项目负责人已完成人工 RViz 验收：hover、single goal、multi goal、interactive
 navigation、full-map avoidance、failure rejection、short gust 和 persistent
-disturbance/release 均通过；单目标 Marker 已确认能够从 `GOAL CURRENT` 切换为
-`GOAL DONE`。导航速度与路径净空属于后续 `experiment/navigation-performance` 分支的
+disturbance/release 均通过；单目标 Marker 状态切换逻辑保持为 `P1 CURRENT` →
+`P1 DONE`。导航速度与路径净空属于后续 `experiment/navigation-performance` 分支的
 性能探索，不是当前稳定基线的阻塞问题。
 
 ## 正式采用 A2 导航参数

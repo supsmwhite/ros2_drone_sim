@@ -21,7 +21,7 @@ The five fixed scenarios are:
 |---|---|---|
 | `01_hover` / `hover` | `hover` | `(0,0,1.5)`, yaw `0 rad` |
 | `02_single_goal` / `single_goal` | `single_goal` | pre-hover `(0,0,1.5,0)`, then formal `(2,1,1.5,0)` |
-| `03_multi_goal` / `multi_goal` | `multi_goal` | square goals with yaw `0°, 90°, 180°, -90°` |
+| `03_multi_goal` / `multi_goal` | `multi_goal` | pre-hover outside recording, then `(3,0,1.5,0°)` → `(3,3,1.5,90°)` → `(0,3,1.5,180°)` → `(0,0,1.5,-90°)` |
 | `04_static_avoidance` / `static_avoidance` | `navigation` | `(13.2,5.5,1.5)`, `path_tangent` |
 | `05_narrow_corridor` / `narrow_corridor` | `navigation` | `(12.1,1.1,1.5)`, `path_tangent` |
 

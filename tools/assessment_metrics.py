@@ -41,6 +41,11 @@ def targets_match(observed, expected, position_tolerance=1e-6, yaw_tolerance=1e-
     return abs(yaw_error) <= yaw_tolerance
 
 
+def target_sequences_match(observed, expected):
+    return len(observed) == len(expected) and all(
+        targets_match(actual, required) for actual, required in zip(observed, expected))
+
+
 def rotate_body_velocity_to_map(quaternion, velocity):
     """Rotate a body-frame vector with a normalized body-to-map quaternion."""
     x, y, z, w = map(float, quaternion)

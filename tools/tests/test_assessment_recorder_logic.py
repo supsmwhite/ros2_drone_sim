@@ -7,7 +7,8 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from assessment_metrics import (ExperimentStopController, PathHistory,
     mission_relative_time, normalized_target, path_length,
-    prepare_output_directory, rotate_body_velocity_to_map, targets_match)
+    prepare_output_directory, rotate_body_velocity_to_map, target_sequences_match,
+    targets_match)
 
 
 def update_arrival(controller):
@@ -162,6 +163,17 @@ def test_expected_goal_rejects_stale_hover_and_accepts_wrapped_yaw():
     wrapped = normalized_target([2, 1, 1.5], 2 * math.pi)
     assert not targets_match(stale, expected)
     assert targets_match(wrapped, expected)
+
+
+def test_formal_multi_sequence_rejects_prehover_snapshot():
+    expected = [
+        normalized_target([3, 0, 1.5], 0),
+        normalized_target([3, 3, 1.5], math.pi / 2),
+        normalized_target([0, 3, 1.5], math.pi),
+        normalized_target([0, 0, 1.5], -math.pi / 2),
+    ]
+    assert not target_sequences_match([normalized_target([0, 0, 1.5], 0)], expected)
+    assert target_sequences_match(expected, expected)
 
 
 def test_body_velocity_is_rotated_to_map_frame():

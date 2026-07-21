@@ -71,6 +71,25 @@ double degrees(double yaw)
   return yaw * 180.0 / M_PI;
 }
 
+std::string compact_state(GoalDraftState state)
+{
+  switch (state) {
+    case GoalDraftState::Editing:
+      return "EDITING";
+    case GoalDraftState::CandidateValid:
+      return "VALID";
+    case GoalDraftState::CandidateInvalid:
+      return "INVALID";
+    case GoalDraftState::Validating:
+      return "VALIDATING";
+    case GoalDraftState::Ready:
+      return "READY";
+    case GoalDraftState::Rejected:
+      return "REJECTED";
+  }
+  return "UNKNOWN";
+}
+
 visualization_msgs::msg::InteractiveMarkerControl world_z_control(
   const std::string & name, std::uint8_t mode)
 {
@@ -200,6 +219,7 @@ visualization_msgs::msg::InteractiveMarker make_goal_candidate_marker(
   const InteractiveGoal & candidate, std::size_t next_goal_number,
   GoalDraftState state, const std::string & status, const std::string & frame_id)
 {
+  static_cast<void>(status);
   visualization_msgs::msg::InteractiveMarker marker;
   marker.header.frame_id = frame_id;
   marker.name = "goal_candidate";
@@ -240,10 +260,10 @@ visualization_msgs::msg::InteractiveMarker make_goal_candidate_marker(
   label.color.b = 1.0F;
   label.color.a = 1.0F;
   std::ostringstream text;
-  text << "Candidate P" << next_goal_number << "\nx=" << std::fixed << std::setprecision(2)
-       << candidate.position.x() << " y=" << candidate.position.y() << " z=" <<
-    candidate.position.z() << " yaw=" << std::setprecision(0) << degrees(candidate.yaw) <<
-    " deg\n" << status;
+  text << "Candidate P" << next_goal_number << " [" << compact_state(state) << "]\n" <<
+    std::fixed << std::setprecision(2) << "(" << candidate.position.x() << "," <<
+    candidate.position.y() << "," << candidate.position.z() << ")  yaw=" <<
+    std::lround(degrees(candidate.yaw)) << "°";
   label.text = text.str();
   body.markers.push_back(label);
   marker.controls.push_back(body);
@@ -315,9 +335,9 @@ visualization_msgs::msg::MarkerArray make_interactive_goal_markers(
     label.color.r = label.color.g = label.color.b = label.color.a = 1.0F;
     std::ostringstream text;
     text << "P" << index + 1U << "\n" << std::fixed << std::setprecision(2) <<
-      "x=" << goals[index].position.x() << "  y=" << goals[index].position.y() <<
-      "  z=" << goals[index].position.z() << "\nyaw=" <<
-      std::lround(degrees(goals[index].yaw)) << " deg";
+      "(" << goals[index].position.x() << "," << goals[index].position.y() << "," <<
+      goals[index].position.z() << ")  yaw=" <<
+      std::lround(degrees(goals[index].yaw)) << "°";
     label.text = text.str();
     result.markers.push_back(label);
   }

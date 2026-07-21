@@ -180,11 +180,11 @@ def passing_metrics(experiment):
                "final_position_error_m": .01, "final_speed_m_s": .01,
                "recorded_targets": [{"position": [1, 2, 3], "yaw_rad": 0.0}]}
     if experiment == "multi_goal":
-        metrics.update({"goal_count": 2, "goal_order": [0, 1],
+        metrics.update({"goal_count": 4, "goal_order": [0, 1, 2, 3],
                         "mission_complete": True,
-                        "goal_activation_times_s": [0, 2],
-                        "per_goal_arrival_times_s": [2, 4],
-                        "per_goal_duration_s": [2, 2]})
+                        "goal_activation_times_s": [0, 2, 4, 6],
+                        "per_goal_arrival_times_s": [2, 4, 6, 8],
+                        "per_goal_duration_s": [2, 2, 2, 2]})
     if experiment in ("navigation", "static_avoidance", "narrow_corridor"):
         metrics.update({"navigation_complete": True, "navigation_success": True,
                         "collision_observed": False,
@@ -212,6 +212,15 @@ def test_five_formal_scenarios_fail_with_reason(experiment):
     checks, overall, reasons = protocol_checks(experiment, metrics, {"stop_reason": stop}, True)
     assert not overall and not checks["finite_commanded_rpm"]["passed"]
     assert any(reason.startswith("finite_commanded_rpm:") for reason in reasons)
+
+
+def test_formal_multi_requires_exactly_four_goals():
+    metrics = passing_metrics("multi_goal")
+    metrics["goal_count"] = 3
+    checks, overall, _ = protocol_checks(
+        "multi_goal", metrics, {"stop_reason": "completed"}, True)
+    assert not overall
+    assert not checks["formal_goal_count"]["passed"]
 
 
 def test_strict_boundaries_fail_and_produce_reasons():

@@ -47,8 +47,8 @@ std::string goal_label(
     1.0 - 2.0 * (orientation.y * orientation.y + orientation.z * orientation.z));
   std::ostringstream text;
   text << name << " " << state << "\n" << std::fixed << std::setprecision(2)
-       << "x=" << pose.position.x << "  y=" << pose.position.y << "  z=" << pose.position.z
-       << "\nyaw=" << std::lround(yaw * 180.0 / M_PI) << " deg";
+       << "(" << pose.position.x << "," << pose.position.y << "," << pose.position.z
+       << ")  yaw=" << std::lround(yaw * 180.0 / M_PI) << "°";
   return text.str();
 }
 

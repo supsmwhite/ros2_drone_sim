@@ -63,11 +63,11 @@ case "$experiment" in
     scenario_dir="03_multi_goal"; recorder_experiment="multi_goal"; service_name="/drone/mission/execute"
     launch_command=(ros2 launch drone_bringup assessment_basic_sim.launch.py "use_rviz:=${use_rviz}")
     expected_goals=(
-      --expected-goal 0 0 1.5 0
-      --expected-goal 2 0 1.5 1.5707963267948966
-      --expected-goal 2 2 1.5 3.141592653589793
-      --expected-goal 0 2 1.5 -1.5707963267948966)
-    submission_description="goal_cli four-point square (yaw 0,90,180,-90 deg)" ;;
+      --expected-goal 3 0 1.5 0
+      --expected-goal 3 3 1.5 1.5707963267948966
+      --expected-goal 0 3 1.5 3.141592653589793
+      --expected-goal 0 0 1.5 -1.5707963267948966)
+    submission_description="pre-hover (0,0,1.5,0), then formal 3 m closed square (yaw 0,90,180,-90 deg)" ;;
   static_avoidance)
     scenario_dir="04_static_avoidance"; recorder_experiment="navigation"; service_name="/drone/interactive_goals/execute"
     launch_command=(ros2 launch drone_bringup assessment_navigation_sim.launch.py "use_rviz:=${use_rviz}" yaw_mode:=path_tangent)
@@ -128,6 +128,9 @@ if [[ "$dry_run" == true ]]; then
   echo "service=$service_name"
   echo "expected_goals=${expected_display% }"
   echo "submission=$submission_description"
+  if [[ "$experiment" =~ ^(single_goal|multi_goal)$ ]]; then
+    echo "pre_hover=single 0 0 1.5 yaw=0 before recorder"
+  fi
   echo "analyzer_parameters=${run_dir}/parameters"
   exit 0
 fi
@@ -214,7 +217,7 @@ submit_navigation() {
 wait_for_topic /drone/odom 20
 wait_for_service "$service_name" 20
 
-if [[ "$experiment" == single_goal ]]; then
+if [[ "$experiment" =~ ^(single_goal|multi_goal)$ ]]; then
   submit_basic single 0 0 1.5 yaw=0
   wait_for_true /drone/mission/complete "$assessment_timeout"
 fi
@@ -245,7 +248,7 @@ wait_for_recorder
 case "$experiment" in
   hover) submit_basic single 0 0 1.5 yaw=0 ;;
   single_goal) submit_basic single 2 1 1.5 yaw=0 ;;
-  multi_goal) submit_basic multi 0 0 1.5 yaw=0 2 0 1.5 yaw=90 2 2 1.5 yaw=180 0 2 1.5 yaw=-90 ;;
+  multi_goal) submit_basic multi 3 0 1.5 yaw=0 3 3 1.5 yaw=90 0 3 1.5 yaw=180 0 0 1.5 yaw=-90 ;;
   static_avoidance) submit_navigation 13.2 5.5 1.5 ;;
   narrow_corridor) submit_navigation 12.1 1.1 1.5 ;;
 esac

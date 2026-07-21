@@ -39,11 +39,14 @@ ros2 run drone_mission goal_cli single 2 1 1.5 yaw=0
 
 ```bash
 ros2 run drone_mission goal_cli multi \
-  0 0 1.5 yaw=0 \
-  2 0 1.5 yaw=90 \
-  2 2 1.5 yaw=180 \
-  0 2 1.5 yaw=-90
+  3 0 1.5 yaw=0 \
+  3 3 1.5 yaw=90 \
+  0 3 1.5 yaw=180 \
+  0 0 1.5 yaw=-90
 ```
+
+正式多目标评测先独立完成 `(0,0,1.5)`、yaw `0°` 的预备悬停；Recorder 随后启动，
+只记录上述四个正式目标构成的 `3 m × 3 m` 闭环。
 
 纯数字 yaw 仍按弧度解析，`yaw=<degrees>` 按角度解析。任务执行中不允许抢占；请在
 前一任务完成后再提交下一任务。

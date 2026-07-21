@@ -53,12 +53,12 @@ TEST(MultiGoalVisualizationTest, MarksCurrentCompletedAndWaitingGoals)
   EXPECT_EQ(markers.markers[0].ns, "multi_goal_points");
   EXPECT_FLOAT_EQ(markers.markers[0].color.g, 0.85F);
   EXPECT_EQ(markers.markers[1].type, visualization_msgs::msg::Marker::ARROW);
-  EXPECT_EQ(markers.markers[2].text, "P1 DONE\nx=0.00  y=0.00  z=1.50\nyaw=0 deg");
+  EXPECT_EQ(markers.markers[2].text, "P1 DONE\n(0.00,0.00,1.50)  yaw=0°");
   EXPECT_FLOAT_EQ(markers.markers[3].scale.x, 0.40);
   EXPECT_FLOAT_EQ(markers.markers[3].color.r, 1.00F);
-  EXPECT_EQ(markers.markers[5].text, "P2 CURRENT\nx=1.00  y=0.50  z=1.50\nyaw=0 deg");
+  EXPECT_EQ(markers.markers[5].text, "P2 CURRENT\n(1.00,0.50,1.50)  yaw=0°");
   EXPECT_FLOAT_EQ(markers.markers[6].color.r, 0.95F);
-  EXPECT_EQ(markers.markers[8].text, "P3 WAITING\nx=2.00  y=1.00  z=1.50\nyaw=0 deg");
+  EXPECT_EQ(markers.markers[8].text, "P3 WAITING\n(2.00,1.00,1.50)  yaw=0°");
   EXPECT_NE(markers.markers.back().text.find("Goal: P2 / 5"), std::string::npos);
   EXPECT_NE(markers.markers.back().text.find("Actual: 0.42 m/s"), std::string::npos);
   EXPECT_NE(markers.markers.back().text.find("Reference: 0.45 m/s"), std::string::npos);

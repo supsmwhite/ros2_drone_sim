@@ -83,6 +83,7 @@ def protocol_checks(experiment,metrics,meta,target_ok):
         add("arrival_and_steady_stop",stop,"arrival_and_steady_window_complete",stop=="arrival_and_steady_window_complete","metadata.json:stop_reason")
     elif experiment=="multi_goal":
         count=metrics.get("goal_count") or 0; expected=list(range(count)); order=metrics.get("goal_order")
+        add("formal_goal_count",count,4,count==4,"metadata.json:goals")
         add("mission_complete",metrics.get("mission_complete"),True,metrics.get("mission_complete") is True,"events.csv + samples.csv")
         add("goal_visit_order",order,expected,order==expected and count>0,"samples.csv:mission_waypoint_index")
         add("final_position_error",metrics.get("final_position_error_m"),"< 0.10 m",metrics.get("final_position_error_m") is not None and metrics["final_position_error_m"]<.10,"samples.csv:last mission sample")

@@ -46,6 +46,17 @@ def test_static_and_narrow_have_distinct_identity_and_path(tmp_path):
     assert "recorder_experiment=navigation" in static and "recorder_experiment=navigation" in narrow
 
 
+def test_multi_goal_uses_prehover_then_four_formal_closed_square_targets(tmp_path):
+    output = run_script(tmp_path, "multi_goal").stdout
+    expected = (
+        "expected_goals=--expected-goal 3 0 1.5 0 "
+        "--expected-goal 3 3 1.5 1.5707963267948966 "
+        "--expected-goal 0 3 1.5 3.141592653589793 "
+        "--expected-goal 0 0 1.5 -1.5707963267948966")
+    assert expected in output
+    assert "pre_hover=single 0 0 1.5 yaw=0 before recorder" in output
+
+
 def test_analyzer_uses_run_parameter_snapshot(tmp_path):
     result = run_script(tmp_path, "hover")
     expected = tmp_path / "01_hover" / "smoke" / "run_01" / "parameters"

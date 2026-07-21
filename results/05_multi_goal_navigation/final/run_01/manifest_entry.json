@@ -1,0 +1,50 @@
+{
+  "scenario_id": "multi_goal_navigation",
+  "recorder_experiment": "navigation",
+  "status": "final",
+  "run_id": "run_01",
+  "path": "05_multi_goal_navigation/final/run_01",
+  "protocol_version": "final-assessment-v1",
+  "generated_at": "2026-07-21T09:11:05.031586+00:00",
+  "metadata": "05_multi_goal_navigation/final/run_01/metadata.json",
+  "summary": "05_multi_goal_navigation/final/run_01/summary.json",
+  "manifest_entry": "05_multi_goal_navigation/final/run_01/manifest_entry.json",
+  "evidence_checksums": "05_multi_goal_navigation/final/run_01/evidence_sha256.txt",
+  "git": {
+    "commit_before": "16528fbe97fde04aa6c5bf2ae3e11b9f1909f94d",
+    "commit_after": "16528fbe97fde04aa6c5bf2ae3e11b9f1909f94d",
+    "source_clean_before": true,
+    "source_clean_after": true
+  },
+  "parameter_snapshot": {
+    "complete": true,
+    "directory": "05_multi_goal_navigation/final/run_01/parameters",
+    "checksums": "05_multi_goal_navigation/final/run_01/parameter_sha256.txt"
+  },
+  "outcome": {
+    "stop_reason": "navigation_success_and_steady_window_complete",
+    "overall_pass": true,
+    "failure_reasons": []
+  },
+  "manual_acceptance": {
+    "completed": false,
+    "file": "05_multi_goal_navigation/final/run_01/manual_acceptance.md",
+    "screenshots": []
+  },
+  "eligibility_conditions": {
+    "status_is_final": true,
+    "non_timeout_stop": true,
+    "overall_pass": true,
+    "commit_unchanged": true,
+    "source_clean_before": true,
+    "source_clean_after": true,
+    "parameter_snapshot_complete": true,
+    "manual_acceptance_complete": false,
+    "required_screenshots_complete": false
+  },
+  "report_eligible": false,
+  "eligibility_failures": [
+    "manual_acceptance_complete",
+    "required_screenshots_complete"
+  ]
+}

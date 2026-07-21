@@ -1,8 +1,0 @@
-recording_time_s,mission_time_s,event,details
-,,waypoint_index_changed,"{""value"":0}"
-,,mission_complete_changed,"{""value"":false}"
-0.0,,recording_started,{}
-4.235974550247192,0.0,mission_started,"{""source"":""goal_received""}"
-4.235974550247192,0.0,goal_received,"{""position"":[0.0,0.0,1.5]}"
-8.285155057907104,4.049180507659912,arrival_confirmed,{}
-11.290090799331665,7.054116249084473,recording_stopped,"{""reason"":""arrival_and_steady_window_complete""}"

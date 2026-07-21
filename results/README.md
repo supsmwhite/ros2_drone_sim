@@ -86,6 +86,10 @@ RViz screenshots are added without replacing recorder or analyzer artifacts. The
 for hover, single-goal, multi-goal, and both disturbance runs, but required for both navigation
 scenarios.
 
+All seven current Final runs have completed automated analysis, manual acceptance, and
+finalization. Every entry in `results/manifest.json` is `report_eligible=true`; the reviewer is
+`Peter`. Scenario 04 registers one RViz screenshot, and scenario 05 registers three.
+
 ## Manifest schema 4
 
 `manifest.json` has a `runs` array. Every new entry records:
@@ -98,8 +102,8 @@ scenarios.
 - manual acceptance status;
 - every eligibility condition, `report_eligible`, and unmet conditions.
 
-The historical hover smoke predates this workflow and remains explicitly marked
-`legacy_layout`; it is not final evidence.
+Smoke and trial outputs are not stored as formal evidence in `results/`; temporary workflow
+checks use `/tmp/ros2_drone_assessment_smoke/`.
 
 ## Final evidence eligibility
 
@@ -117,9 +121,9 @@ The historical hover smoke predates this workflow and remains explicitly marked
 9. for `static_avoidance` and `multi_goal_navigation`, at least one valid RViz screenshot is present
    and referenced by manual acceptance.
 
-The orchestration script always creates the manual template as incomplete, so a new run starts
-with `report_eligible=false`. A reviewer must inspect the available RViz evidence, curves, and
-logs before finalization, mark every checklist item complete, and fill in reviewer/date. Hover,
+The orchestration script always creates the manual template as incomplete, so a new run is not
+report eligible. A reviewer must inspect the available RViz evidence, curves, and logs before
+finalization, mark every checklist item complete, and fill in reviewer/date. Hover,
 single-goal, and multi-goal runs may then be finalized without `--screenshot`:
 
 ```bash

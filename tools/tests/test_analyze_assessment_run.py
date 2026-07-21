@@ -6,11 +6,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 from assessment_metrics import (directional_disturbance_metrics, goal_timing,
-    held_condition_start, longest_true_duration, navigation_phase_start,
+    disturbance_recovery_times, held_condition_start, longest_true_duration, navigation_phase_start,
     path_length, phased_tracking_metrics, point_box_distance,
     projection_overshoot, require_nonnegative_mission_times, wrap_to_pi,
     yaw_error_metrics)
-from analyze_assessment_run import (commanded_rpm, derived_paths,
+from analyze_assessment_run import (MULTI_GOAL_NAVIGATION_TARGETS, commanded_rpm,
+    derived_paths, formal_navigation_targets_match, ordered_segment_length, plot,
     protocol_checks, saturation_timeline)
 
 
@@ -59,8 +60,26 @@ def test_sustained_attitude_divergence_duration():
     assert longest_true_duration([0, .5, 1, 1.5], [True, True, True, False]) == 1
 
 
-def test_force_release_recovery_time():
-    assert 6.5 - 4.0 == 2.5
+@pytest.mark.parametrize("release,entry,confirmed,expected", [
+    (15.6048076, 15.6048076 + 6.2848704, 22.8945343,
+     (6.2848704, 7.2897267, 1.0048563)),
+    (23.6803567, 23.6803567, 24.6853619,
+     (0.0, 1.0050052, 1.0050052)),
+])
+def test_disturbance_recovery_time_semantics(release, entry, confirmed, expected):
+    metrics = disturbance_recovery_times(release, entry, confirmed)
+    assert metrics["recovery_threshold_entry_time_s"] == pytest.approx(expected[0])
+    assert metrics["recovery_confirmed_time_s"] == pytest.approx(expected[1])
+    assert metrics["recovery_confirmation_hold_time_s"] == pytest.approx(expected[2])
+    assert metrics["recovery_time_s"] == metrics["recovery_threshold_entry_time_s"]
+
+
+def test_missing_recovery_event_stays_null():
+    metrics = disturbance_recovery_times(10.0, 12.0, None)
+    assert metrics["recovery_threshold_entry_time_s"] == 2.0
+    assert metrics["recovery_confirmed_time_s"] is None
+    assert metrics["recovery_confirmation_hold_time_s"] is None
+    json.dumps(metrics, allow_nan=False)
 
 
 def test_arrival_time_is_start_of_held_interval():
@@ -180,12 +199,12 @@ def passing_metrics(experiment):
                "final_position_error_m": .01, "final_speed_m_s": .01,
                "recorded_targets": [{"position": [1, 2, 3], "yaw_rad": 0.0}]}
     if experiment == "multi_goal":
-        metrics.update({"goal_count": 2, "goal_order": [0, 1],
+        metrics.update({"goal_count": 4, "goal_order": [0, 1, 2, 3],
                         "mission_complete": True,
-                        "goal_activation_times_s": [0, 2],
-                        "per_goal_arrival_times_s": [2, 4],
-                        "per_goal_duration_s": [2, 2]})
-    if experiment in ("navigation", "static_avoidance", "narrow_corridor"):
+                        "goal_activation_times_s": [0, 2, 4, 6],
+                        "per_goal_arrival_times_s": [2, 4, 6, 8],
+                        "per_goal_duration_s": [2, 2, 2, 2]})
+    if experiment in ("navigation", "static_avoidance"):
         metrics.update({"navigation_complete": True, "navigation_success": True,
                         "collision_observed": False,
                         "navigation_tracking_max_error_m": .049,
@@ -195,8 +214,8 @@ def passing_metrics(experiment):
 
 
 @pytest.mark.parametrize("experiment", [
-    "hover", "single_goal", "multi_goal", "static_avoidance", "narrow_corridor"])
-def test_five_formal_scenarios_pass(experiment):
+    "hover", "single_goal", "multi_goal", "static_avoidance"])
+def test_existing_formal_scenarios_pass(experiment):
     stop = "arrival_and_steady_window_complete" if experiment in ("hover", "single_goal") else "completed"
     checks, overall, reasons = protocol_checks(
         experiment, passing_metrics(experiment), {"stop_reason": stop}, True)
@@ -205,13 +224,22 @@ def test_five_formal_scenarios_pass(experiment):
 
 
 @pytest.mark.parametrize("experiment", [
-    "hover", "single_goal", "multi_goal", "static_avoidance", "narrow_corridor"])
-def test_five_formal_scenarios_fail_with_reason(experiment):
+    "hover", "single_goal", "multi_goal", "static_avoidance"])
+def test_existing_formal_scenarios_fail_with_reason(experiment):
     metrics = passing_metrics(experiment); metrics["non_finite_rpm_count"] = 1
     stop = "arrival_and_steady_window_complete" if experiment in ("hover", "single_goal") else "completed"
     checks, overall, reasons = protocol_checks(experiment, metrics, {"stop_reason": stop}, True)
     assert not overall and not checks["finite_commanded_rpm"]["passed"]
     assert any(reason.startswith("finite_commanded_rpm:") for reason in reasons)
+
+
+def test_formal_multi_requires_exactly_four_goals():
+    metrics = passing_metrics("multi_goal")
+    metrics["goal_count"] = 3
+    checks, overall, _ = protocol_checks(
+        "multi_goal", metrics, {"stop_reason": "completed"}, True)
+    assert not overall
+    assert not checks["formal_goal_count"]["passed"]
 
 
 def test_strict_boundaries_fail_and_produce_reasons():
@@ -233,6 +261,64 @@ def test_navigation_strict_threshold_boundaries():
     assert not checks["final_speed"]["passed"] and not overall
 
 
+def multi_goal_navigation_metrics():
+    metrics = passing_metrics("navigation")
+    metrics.update({"goal_count": 4, "visited_goal_count": 4,
+                    "goal_order": [0, 1, 2, 3],
+                    "goal_activation_times_s": [0, 10, 20, 30],
+                    "per_goal_arrival_times_s": [10, 20, 30, 40],
+                    "per_goal_duration_s": [10, 10, 10, 10],
+                    "planned_segment_count": 4,
+                    "simplified_segment_count": 4,
+                    "reference_segment_count": 4,
+                    "recorded_targets": MULTI_GOAL_NAVIGATION_TARGETS,
+                    "non_finite_core_value_count": 0})
+    return metrics
+
+
+def test_multi_goal_navigation_requires_exact_count_order_visits_timing_and_metadata():
+    meta = {"stop_reason": "completed", "scenario_id": "multi_goal_navigation"}
+    checks, overall, reasons = protocol_checks(
+        "navigation", multi_goal_navigation_metrics(), meta, True)
+    assert overall and not reasons
+    assert checks["formal_navigation_goal_count"]["passed"]
+    assert checks["visited_goal_count"]["passed"]
+    assert checks["goal_visit_order"]["passed"]
+    assert checks["four_segment_plans"]["passed"]
+    assert checks["complete_per_goal_timing"]["passed"]
+    assert checks["formal_goal_metadata"]["passed"]
+
+
+@pytest.mark.parametrize("field,value,check_name", [
+    ("goal_count", 3, "formal_navigation_goal_count"),
+    ("visited_goal_count", 3, "visited_goal_count"),
+    ("goal_order", [0, 2, 1, 3], "goal_visit_order"),
+    ("per_goal_duration_s", [10, None, 10, 10], "complete_per_goal_timing"),
+    ("non_finite_core_value_count", 1, "finite_recorded_values"),
+])
+def test_multi_goal_navigation_rejects_incomplete_protocol(field, value, check_name):
+    metrics = multi_goal_navigation_metrics(); metrics[field] = value
+    checks, overall, _ = protocol_checks(
+        "navigation", metrics,
+        {"stop_reason": "completed", "scenario_id": "multi_goal_navigation"}, True)
+    assert not overall and not checks[check_name]["passed"]
+
+
+def test_multi_goal_navigation_target_snapshot_is_exact():
+    assert formal_navigation_targets_match(MULTI_GOAL_NAVIGATION_TARGETS)
+    changed = json.loads(json.dumps(MULTI_GOAL_NAVIGATION_TARGETS))
+    changed[2]["yaw_rad"] += 1e-6
+    assert not formal_navigation_targets_match(changed)
+
+
+def test_ordered_segment_length_tolerates_lagging_goal_index_labels():
+    segments = [
+        {"mission_time_s": i, "goal_index": label,
+         "points": [[0, 0, 0], [length, 0, 0]]}
+        for i, (label, length) in enumerate(zip([0, 1, 2, 2], [1, 2, 3, 4]))]
+    assert [ordered_segment_length(segments, i, 4) for i in range(4)] == [1, 2, 3, 4]
+
+
 def test_yaw_error_wraps_across_pi_boundary():
     metrics = yaw_error_metrics([math.pi - .01], [-math.pi + .01])
     assert metrics["final_error_rad"] == pytest.approx(.02)
@@ -249,3 +335,60 @@ def test_output_protection_tracks_yaw_figure(tmp_path):
     paths = derived_paths(tmp_path, "hover")
     assert tmp_path / "summary.json" in paths
     assert tmp_path / "yaw_tracking.png" in paths
+
+
+def test_plot_without_legend_still_saves_nonempty_png(tmp_path):
+    output = tmp_path / "no_legend.png"
+    plot(output, lambda axis: axis.plot([0, 1], [0, 1]))
+    assert output.is_file() and output.stat().st_size > 0
+
+
+@pytest.mark.parametrize("profile,duration", [("short_gust", 2.0), ("persistent_release", 10.0)])
+def test_disturbance_protocol_checks(profile, duration):
+    metrics = passing_metrics("disturbance")
+    metrics.update({"force_start_time_s":8.0,"force_release_time_s":8.0+duration,
+                    "force_duration_s":duration,"mean_horizontal_force_n":[.3,0.0],
+                    "recovery_threshold_entry_time_s":1.5,
+                    "recovery_confirmed_time_s":2.5,
+                    "recovery_confirmation_hold_time_s":1.0,
+                    "recovery_time_s":1.5})
+    meta={"stop_reason":"disturbance_recovery_and_steady_window_complete",
+          "scenario_id":f"disturbance_{profile}",
+          "disturbance_profile":profile,"expected_force":[.3,0.0,0.0],
+          "expected_force_duration_s":duration,
+          "thresholds":{"recovery_hold_time_s":1.0}}
+    checks,overall,reasons=protocol_checks("disturbance",metrics,meta,True)
+    assert overall and not reasons
+    assert checks["force_duration"]["passed"] and checks["mean_horizontal_force"]["passed"]
+
+
+def test_disturbance_missing_recovery_confirmed_fails():
+    metrics = passing_metrics("disturbance")
+    metrics.update({"force_start_time_s":8.0,"force_release_time_s":10.0,
+                    "force_duration_s":2.0,"mean_horizontal_force_n":[.3,0.0],
+                    "recovery_threshold_entry_time_s":1.0,
+                    "recovery_confirmed_time_s":None,
+                    "recovery_confirmation_hold_time_s":None,
+                    "recovery_time_s":1.0})
+    meta={"scenario_id":"disturbance_short_gust","disturbance_profile":"short_gust",
+          "stop_reason":"disturbance_recovery_and_steady_window_complete",
+          "expected_force":[.3,0.0,0.0],"expected_force_duration_s":2.0,
+          "thresholds":{"recovery_hold_time_s":1.0}}
+    checks,overall,_=protocol_checks("disturbance",metrics,meta,True)
+    assert not overall and not checks["recovery_confirmed_time_available"]["passed"]
+
+
+def test_disturbance_confirmation_before_threshold_entry_fails():
+    metrics = passing_metrics("disturbance")
+    metrics.update({"force_start_time_s":8.0,"force_release_time_s":10.0,
+                    "force_duration_s":2.0,"mean_horizontal_force_n":[.3,0.0],
+                    "recovery_threshold_entry_time_s":2.0,
+                    "recovery_confirmed_time_s":1.0,
+                    "recovery_confirmation_hold_time_s":-1.0,
+                    "recovery_time_s":2.0})
+    meta={"scenario_id":"disturbance_short_gust","disturbance_profile":"short_gust",
+          "stop_reason":"disturbance_recovery_and_steady_window_complete",
+          "expected_force":[.3,0.0,0.0],"expected_force_duration_s":2.0,
+          "thresholds":{"recovery_hold_time_s":1.0}}
+    checks,overall,_=protocol_checks("disturbance",metrics,meta,True)
+    assert not overall and not checks["recovery_confirmation_order"]["passed"]

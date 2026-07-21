@@ -33,7 +33,7 @@ def generate_test_description():
 
 def marker_labels(message):
     return {
-        marker.text for marker in message.markers
+        marker.text.splitlines()[0] for marker in message.markers
         if marker.type == Marker.TEXT_VIEW_FACING
     }
 
@@ -81,7 +81,7 @@ class TestGoalVisualizerNode(unittest.TestCase):
             goal.pose.position.z = 1.5
             goal.pose.orientation.w = 1.0
             goal_publisher.publish(goal)
-            wait_for_labels({'GOAL CURRENT'})
+            wait_for_labels({'P1 CURRENT'})
 
             goals = PoseArray()
             goals.header.frame_id = 'map'
@@ -96,16 +96,16 @@ class TestGoalVisualizerNode(unittest.TestCase):
             goals_publisher.publish(goals)
             index_publisher.publish(UInt32(data=0))
             complete_publisher.publish(Bool(data=False))
-            wait_for_labels({'GOAL CURRENT'})
+            wait_for_labels({'P1 CURRENT'})
 
             complete_publisher.publish(Bool(data=True))
-            wait_for_labels({'GOAL DONE'})
+            wait_for_labels({'P1 DONE'})
 
             goals.poses = [first, second]
             goals_publisher.publish(goals)
             index_publisher.publish(UInt32(data=0))
             complete_publisher.publish(Bool(data=False))
-            wait_for_labels({'P1 CURRENT', 'P2'})
+            wait_for_labels({'P1 CURRENT', 'P2 WAITING'})
 
             index_publisher.publish(UInt32(data=1))
             wait_for_labels({'P1 DONE', 'P2 CURRENT'})

@@ -1,0 +1,315 @@
+{
+  "schema_version": 3,
+  "experiment": "multi_goal",
+  "scenario_id": "multi_goal",
+  "status": "final",
+  "repository_commit": "066a1e8dbd7686cbca62bda89a0770e495f31e4d",
+  "sample_count": 7225,
+  "mission_sample_count": 6644,
+  "navigation_phase_start_time_s": null,
+  "navigation_phase_start_source": null,
+  "metrics": {
+    "final_position_error_m": 0.006954859723380079,
+    "final_speed_m_s": 0.019451749428420137,
+    "final_window_mean_error_m": 0.01767397011744642,
+    "recorded_targets": [
+      {
+        "position": [
+          3.0,
+          0.0,
+          1.5
+        ],
+        "yaw_rad": 0.0
+      },
+      {
+        "position": [
+          3.0,
+          3.0,
+          1.5
+        ],
+        "yaw_rad": 1.5707963267948966
+      },
+      {
+        "position": [
+          0.0,
+          3.0,
+          1.5
+        ],
+        "yaw_rad": 3.141592653589793
+      },
+      {
+        "position": [
+          0.0,
+          0.0,
+          1.5
+        ],
+        "yaw_rad": -1.5707963267948966
+      }
+    ],
+    "target_snapshot_matches_samples": true,
+    "yaw_metrics_status": "available",
+    "yaw_sample_count": 6644,
+    "final_yaw_error_rad": 5.254883861383064e-09,
+    "yaw_error_rms_rad": 0.33336382901086237,
+    "maximum_absolute_yaw_error_rad": 1.5707964699781103,
+    "arrival_time_s": 30.40683341026306,
+    "maximum_overshoot_m": 4.037909971499332e-06,
+    "maximum_overshoot_percent": 0.8901826326874307,
+    "steady_state_mean_error_m": 0.048750286412978586,
+    "steady_state_rms_error_m": 0.05687824321351191,
+    "steady_state_max_error_m": 0.11171874361366721,
+    "maximum_goal_position_error_m": 3.0037877887985642,
+    "full_mission_tracking_max_error_m": null,
+    "full_mission_tracking_rms_error_m": null,
+    "minimum_raw_obstacle_distance_m": 0.0,
+    "safety_radius_m": 0.25,
+    "minimum_safety_clearance_m": -0.25,
+    "straight_line_distance_m": 0.00045360466753985307,
+    "actual_path_length_m": 11.739149115376975,
+    "flight_time_s": 33.214760303497314,
+    "planned_segment_count": 0,
+    "simplified_segment_count": 0,
+    "reference_segment_count": 0,
+    "planned_path_length_m": null,
+    "simplified_path_length_m": null,
+    "reference_path_length_m": null,
+    "path_efficiency": null,
+    "planned_vs_straight_ratio": null,
+    "actual_vs_reference_ratio": null,
+    "maximum_absolute_roll_rad": 0.13934507890196865,
+    "maximum_absolute_pitch_rad": 0.11438926320737715,
+    "maximum_angular_speed_rad_s": 2.3833764256666727,
+    "non_finite_attitude_count": 0,
+    "attitude_divergence_detected": false,
+    "minimum_commanded_motor_rpm": 7792.331428735345,
+    "maximum_commanded_motor_rpm": 12872.698453953933,
+    "minimum_motor_rpm": 7792.331428735345,
+    "maximum_motor_rpm": 12872.698453953933,
+    "motor_rpm_semantics": "commanded_motor_rpm",
+    "saturation_sample_source": "diagnostics_callbacks",
+    "saturation_sample_count": 202,
+    "longest_saturation_duration_s": 0.5016899108886719,
+    "saturated_at_end": false,
+    "non_finite_rpm_count": 0,
+    "goal_count": 4,
+    "visited_goal_count": 4,
+    "goal_order": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "goal_activation_times_s": [
+      0.0,
+      7.557227373123169,
+      15.10702633857727,
+      22.656988382339478
+    ],
+    "per_goal_arrival_times_s": [
+      7.557227373123169,
+      15.10702633857727,
+      22.656988382339478,
+      30.206985473632812
+    ],
+    "per_goal_duration_s": [
+      7.557227373123169,
+      7.549798965454102,
+      7.549962043762207,
+      7.549997091293335
+    ],
+    "per_goal_final_errors_m": [
+      0.11397927876935936,
+      0.1123635383905938,
+      0.11236199428890264,
+      0.006954859723380079
+    ],
+    "segment_overshoots": [
+      {
+        "goal_index": 0,
+        "maximum_overshoot_m": 0.0,
+        "maximum_overshoot_percent": 0.0
+      },
+      {
+        "goal_index": 1,
+        "maximum_overshoot_m": 0.0,
+        "maximum_overshoot_percent": 0.0
+      },
+      {
+        "goal_index": 2,
+        "maximum_overshoot_m": 0.0,
+        "maximum_overshoot_percent": 0.0
+      },
+      {
+        "goal_index": 3,
+        "maximum_overshoot_m": 0.0,
+        "maximum_overshoot_percent": 0.0
+      }
+    ],
+    "mission_complete": true,
+    "mission_success": null,
+    "total_mission_time_s": 33.216981410980225,
+    "per_goal_arrival_yaw_error": [
+      {
+        "goal_index": 0,
+        "arrival_time_s": 7.557227373123169,
+        "status": "available",
+        "yaw_error_rad": -5.585833559558481e-17
+      },
+      {
+        "goal_index": 1,
+        "arrival_time_s": 15.10702633857727,
+        "status": "available",
+        "yaw_error_rad": 1.40890910271807e-07
+      },
+      {
+        "goal_index": 2,
+        "arrival_time_s": 22.656988382339478,
+        "status": "available",
+        "yaw_error_rad": 1.4365954914552503e-07
+      },
+      {
+        "goal_index": 3,
+        "arrival_time_s": 30.206985473632812,
+        "status": "available",
+        "yaw_error_rad": 1.4246563817543745e-07
+      }
+    ]
+  },
+  "yaw_analysis": {
+    "status": "available",
+    "reference_field": "goal_yaw",
+    "error_definition": "wrap_to_pi(reference_yaw - actual_yaw)",
+    "completion_gate_yaw_tolerance_rad": 0.1,
+    "completion_gate_source": "mission.yaml:yaw_tolerance",
+    "acceptance_threshold_applied": false
+  },
+  "assignment_thresholds": {
+    "hover_final_position_error_max_m": 0.3
+  },
+  "project_thresholds": {
+    "final_position_error_max_m": 0.1,
+    "minimum_safety_clearance_strictly_greater_than_m": 0.0,
+    "non_finite_value_count": 0,
+    "attitude_divergence_detected": false,
+    "saturated_at_end": false
+  },
+  "legacy_checks": {
+    "assignment_hover_error_pass": true,
+    "project_final_error_pass": true,
+    "finite_attitude_pass": true,
+    "finite_rpm_pass": true,
+    "attitude_stability_pass": true,
+    "rpm_end_saturation_pass": true
+  },
+  "checks": {
+    "stop_reason_not_timeout": {
+      "metric_name": "stop_reason_not_timeout",
+      "actual_value": "mission_complete_and_steady_window_complete",
+      "threshold": "must not start with timeout",
+      "passed": true,
+      "source": "metadata.json:stop_reason"
+    },
+    "finite_attitude": {
+      "metric_name": "finite_attitude",
+      "actual_value": 0,
+      "threshold": 0,
+      "passed": true,
+      "source": "samples.csv:roll,pitch,yaw"
+    },
+    "finite_commanded_rpm": {
+      "metric_name": "finite_commanded_rpm",
+      "actual_value": 0,
+      "threshold": 0,
+      "passed": true,
+      "source": "samples.csv:commanded_motor_rpm / legacy m*_rpm"
+    },
+    "no_attitude_divergence": {
+      "metric_name": "no_attitude_divergence",
+      "actual_value": false,
+      "threshold": false,
+      "passed": true,
+      "source": "analyzer:attitude duration"
+    },
+    "not_saturated_at_end": {
+      "metric_name": "not_saturated_at_end",
+      "actual_value": false,
+      "threshold": false,
+      "passed": true,
+      "source": "diagnostics.csv:last mission callback / legacy Odom"
+    },
+    "formal_goal_count": {
+      "metric_name": "formal_goal_count",
+      "actual_value": 4,
+      "threshold": 4,
+      "passed": true,
+      "source": "metadata.json:goals"
+    },
+    "mission_complete": {
+      "metric_name": "mission_complete",
+      "actual_value": true,
+      "threshold": true,
+      "passed": true,
+      "source": "events.csv + samples.csv"
+    },
+    "goal_visit_order": {
+      "metric_name": "goal_visit_order",
+      "actual_value": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "threshold": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "passed": true,
+      "source": "samples.csv:mission_waypoint_index"
+    },
+    "final_position_error": {
+      "metric_name": "final_position_error",
+      "actual_value": 0.006954859723380079,
+      "threshold": "< 0.10 m",
+      "passed": true,
+      "source": "samples.csv:last mission sample"
+    },
+    "final_speed": {
+      "metric_name": "final_speed",
+      "actual_value": 0.019451749428420137,
+      "threshold": "< 0.08 m/s",
+      "passed": true,
+      "source": "samples.csv:last mission sample"
+    },
+    "complete_per_goal_timing": {
+      "metric_name": "complete_per_goal_timing",
+      "actual_value": {
+        "goal_count": 4,
+        "activation": [
+          0.0,
+          7.557227373123169,
+          15.10702633857727,
+          22.656988382339478
+        ],
+        "arrival": [
+          7.557227373123169,
+          15.10702633857727,
+          22.656988382339478,
+          30.206985473632812
+        ],
+        "duration": [
+          7.557227373123169,
+          7.549798965454102,
+          7.549962043762207,
+          7.549997091293335
+        ]
+      },
+      "threshold": "all values available",
+      "passed": true,
+      "source": "events.csv:goal_activated and completion"
+    }
+  },
+  "overall_pass": true,
+  "failure_reasons": []
+}

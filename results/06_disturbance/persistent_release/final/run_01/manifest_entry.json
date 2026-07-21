@@ -1,0 +1,49 @@
+{
+  "scenario_id": "disturbance_persistent_release",
+  "recorder_experiment": "disturbance",
+  "status": "final",
+  "run_id": "run_01",
+  "path": "06_disturbance/persistent_release/final/run_01",
+  "protocol_version": "final-assessment-v1",
+  "generated_at": "2026-07-21T07:31:15.994009+00:00",
+  "metadata": "06_disturbance/persistent_release/final/run_01/metadata.json",
+  "summary": "06_disturbance/persistent_release/final/run_01/summary.json",
+  "manifest_entry": "06_disturbance/persistent_release/final/run_01/manifest_entry.json",
+  "evidence_checksums": "06_disturbance/persistent_release/final/run_01/evidence_sha256.txt",
+  "git": {
+    "commit_before": "08cf64ee32d38fccb0149c47081e5b9ba22da61f",
+    "commit_after": "08cf64ee32d38fccb0149c47081e5b9ba22da61f",
+    "source_clean_before": true,
+    "source_clean_after": true
+  },
+  "parameter_snapshot": {
+    "complete": true,
+    "directory": "06_disturbance/persistent_release/final/run_01/parameters",
+    "checksums": "06_disturbance/persistent_release/final/run_01/parameter_sha256.txt"
+  },
+  "outcome": {
+    "stop_reason": "disturbance_recovery_and_steady_window_complete",
+    "overall_pass": true,
+    "failure_reasons": []
+  },
+  "manual_acceptance": {
+    "completed": true,
+    "file": "06_disturbance/persistent_release/final/run_01/manual_acceptance.md",
+    "screenshots": [],
+    "reviewed_at": "2026-07-21T10:11:34.906068+00:00"
+  },
+  "eligibility_conditions": {
+    "status_is_final": true,
+    "non_timeout_stop": true,
+    "overall_pass": true,
+    "commit_unchanged": true,
+    "source_clean_before": true,
+    "source_clean_after": true,
+    "parameter_snapshot_complete": true,
+    "manual_acceptance_complete": true,
+    "required_screenshots_complete": true
+  },
+  "report_eligible": true,
+  "eligibility_failures": [],
+  "finalized_at": "2026-07-21T10:11:34.906068+00:00"
+}

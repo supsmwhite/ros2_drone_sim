@@ -16,7 +16,8 @@ from visualization_msgs.msg import MarkerArray
 
 from assessment_metrics import (ExperimentStopController, PathHistory,
     mission_relative_time, normalized_target, point_box_distance,
-    prepare_output_directory, rotate_body_velocity_to_map, targets_match)
+    prepare_output_directory, rotate_body_velocity_to_map, target_sequences_match,
+    targets_match)
 
 EXPERIMENTS = ("hover", "single_goal", "multi_goal", "navigation", "disturbance", "failure_case")
 PROTOCOL_VERSION = "final-assessment-v1"
@@ -203,9 +204,9 @@ class Recorder:
         self.diagnostic_samples.append({"time_s":now,**flags,"any_saturated":any(flags.values())})
     def on_goal(self,m):
         self.tick("/drone/goal")
-        if self.args.experiment not in ("hover","single_goal"):return
+        if self.args.experiment not in ("hover","single_goal","disturbance"):return
         observed=normalized_target([m.pose.position.x,m.pose.position.y,m.pose.position.z],euler(m.pose.orientation)[2])
-        if self.args.experiment=="single_goal" and self.protocol_targets and not targets_match(observed,self.protocol_targets[-1]):
+        if self.args.experiment in ("single_goal","disturbance") and self.protocol_targets and not targets_match(observed,self.protocol_targets[-1]):
             self.ignored_goal_count+=1; return
         goal_time=stamp_s(m.header.stamp) or self.last_ros
         repeated=self.mission_start is not None and self.current_goal is not None and targets_match(observed,normalized_target(self.current_goal,self.current_goal_yaw))
@@ -227,9 +228,13 @@ class Recorder:
         if ((kind=="basic") != (self.args.experiment in ("hover","single_goal","multi_goal"))):return
         targets=[normalized_target([p.position.x,p.position.y,p.position.z],euler(p.orientation)[2]) for p in m.poses]
         points=[target["position"] for target in targets]
+        if (kind=="basic" and self.args.experiment=="multi_goal" and
+            self.protocol_targets and not target_sequences_match(targets,self.protocol_targets)):
+            self.ignored_goal_count+=1; return
         if points:
             self.observed_targets=targets; self.goals=points; self.final_goal=points[-1]; self.final_goal_yaw=targets[-1]["yaw_rad"]; self.goal_count=len(points)
         if kind=="basic" and points and self.args.experiment=="multi_goal":
+            self.mission_complete=False
             mission_time=stamp_s(m.header.stamp) or self.last_ros
             self.start_mission("mission_goals_received",mission_time);self.event("mission_goals_received",{"goal_count":len(points)},mission_time)
             self.activate_goal(self.mission_index,"mission_waypoint_index",mission_time)
@@ -362,6 +367,12 @@ class Recorder:
           "safety_observations":{"maximum_altitude_m":self.maximum_altitude if math.isfinite(self.maximum_altitude) else None,"maximum_speed_m_s":self.maximum_speed,"nonzero_rpm_observed":self.nonzero_rpm},
           "thresholds":{"steady_window_s":self.args.steady_window,"arrival_position_threshold_m":self.args.arrival_position_threshold,"arrival_speed_threshold_m_s":self.args.arrival_speed_threshold,"arrival_hold_time_s":self.args.arrival_hold_time,
            "recovery_position_threshold_m":self.args.recovery_position_threshold,"recovery_speed_threshold_m_s":self.args.recovery_speed_threshold,"recovery_hold_time_s":self.args.recovery_hold_time,"failure_observation_window_s":self.args.failure_observation_window,"ground_motion_threshold_m":self.args.ground_motion_threshold,"timeout_s":self.args.timeout},"topic_message_counts":self.counts}
+        if self.args.experiment=="disturbance":
+            metadata.update({"disturbance_profile":self.args.disturbance_profile,
+              "expected_force":self.args.expected_force,
+              "expected_force_x":self.args.expected_force[0],"expected_force_y":self.args.expected_force[1],"expected_force_z":self.args.expected_force[2],
+              "expected_force_duration_s":self.args.expected_force_duration,
+              "expected_recovery_duration_s":self.args.expected_recovery_duration})
         (self.output/"metadata.json").write_text(json.dumps(metadata,indent=2,allow_nan=False)+"\n")
         with (self.output/"events.csv").open("w",newline="") as f:
             w=csv.DictWriter(f,fieldnames=("recording_time_s","mission_time_s","event","details")); w.writeheader()
@@ -382,11 +393,21 @@ def arguments():
     p=argparse.ArgumentParser(description=__doc__); p.add_argument("--experiment",choices=EXPERIMENTS,required=True); p.add_argument("--output",required=True); p.add_argument("--run-status",choices=("smoke","trial","candidate","final"),default="candidate")
     p.add_argument("--protocol-version",default=PROTOCOL_VERSION); p.add_argument("--scenario-id"); p.add_argument("--service-name")
     p.add_argument("--target-config"); p.add_argument("--expected-goal",action="append",nargs=4,type=float,metavar=("X","Y","Z","YAW"))
+    p.add_argument("--disturbance-profile",choices=("short_gust","persistent_release"))
+    p.add_argument("--expected-force",nargs=3,type=float,metavar=("FX","FY","FZ"))
+    p.add_argument("--expected-force-duration",type=float)
+    p.add_argument("--expected-recovery-duration",type=float)
     p.add_argument("--overwrite-existing",action="store_true"); p.add_argument("--environment-config",default="src/drone_bringup/config/environment.yaml")
     for name,default in (("steady-window",3.),("arrival-position-threshold",.1),("arrival-speed-threshold",.08),("arrival-hold-time",1.),("recovery-position-threshold",.1),("recovery-speed-threshold",.08),("recovery-hold-time",1.),("failure-observation-window",2.),("ground-motion-threshold",.1),("timeout",120.)): p.add_argument("--"+name,type=float,default=default)
     a=p.parse_args()
     if a.run_status=="final" and a.overwrite_existing:p.error("--overwrite-existing is forbidden for final runs")
     if a.service_name is None:a.service_name=default_service_name(a.experiment)
+    if a.experiment=="disturbance" and any(value is None for value in (
+            a.disturbance_profile,a.expected_force,a.expected_force_duration,
+            a.expected_recovery_duration)):
+        p.error("disturbance requires profile, expected force, force duration, and recovery duration")
+    if a.expected_force is not None and not all(math.isfinite(value) for value in a.expected_force):
+        p.error("expected force components must be finite")
     if any(not math.isfinite(v) or v<=0 for k,v in vars(a).items() if isinstance(v,float)):p.error("all numeric thresholds must be finite and positive")
     return a
 

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -12,7 +13,7 @@ SCRIPT = REPO / "scripts" / "run_final_assessment.sh"
 sys.path.insert(0, str(REPO / "tools"))
 
 from final_assessment_manifest import (REQUIRED_PARAMETERS, finalize_entry,
-    recalculate_evidence_checksums, report_eligibility)
+    recalculate_evidence_checksums, report_eligibility, screenshots_required)
 
 
 def run_script(tmp_path, experiment="hover", status="smoke", run_id="run_01", extra=()):
@@ -28,7 +29,9 @@ def run_script(tmp_path, experiment="hover", status="smoke", run_id="run_01", ex
     ("single_goal", "02_single_goal", "single_goal", "--expected-goal 2 1 1.5 0"),
     ("multi_goal", "03_multi_goal", "multi_goal", "1.5707963267948966"),
     ("static_avoidance", "04_static_avoidance", "navigation", "13.2 5.5 1.5"),
-    ("narrow_corridor", "05_narrow_corridor", "navigation", "12.1 1.1 1.5"),
+    ("multi_goal_navigation", "05_multi_goal_navigation", "navigation", "3.0892327760299634"),
+    ("disturbance_short_gust", "06_disturbance/short_gust", "disturbance", "--expected-force-duration 2"),
+    ("disturbance_persistent_release", "06_disturbance/persistent_release", "disturbance", "--expected-force-duration 10"),
 ])
 def test_fixed_scenario_mapping(tmp_path, experiment, scenario_dir, recorder, target):
     result = run_script(tmp_path, experiment)
@@ -38,12 +41,87 @@ def test_fixed_scenario_mapping(tmp_path, experiment, scenario_dir, recorder, ta
     assert target in result.stdout
 
 
-def test_static_and_narrow_have_distinct_identity_and_path(tmp_path):
+def test_static_and_multi_goal_navigation_have_distinct_identity_and_path(tmp_path):
     static = run_script(tmp_path, "static_avoidance").stdout
-    narrow = run_script(tmp_path, "narrow_corridor").stdout
+    navigation = run_script(tmp_path, "multi_goal_navigation").stdout
     assert "scenario_id=static_avoidance" in static and "04_static_avoidance" in static
-    assert "scenario_id=narrow_corridor" in narrow and "05_narrow_corridor" in narrow
-    assert "recorder_experiment=navigation" in static and "recorder_experiment=navigation" in narrow
+    assert "scenario_id=multi_goal_navigation" in navigation and "05_multi_goal_navigation" in navigation
+    assert "recorder_experiment=navigation" in static and "recorder_experiment=navigation" in navigation
+
+
+def test_multi_goal_navigation_dry_run_has_exact_four_goal_protocol(tmp_path):
+    output = run_script(tmp_path, "multi_goal_navigation").stdout
+    assert "service=/drone/interactive_goals/execute" in output
+    assert "goal_count=4" in output and "yaw_mode=path_tangent" in output
+    expected = (
+        "expected_goals=--expected-goal 13.15 5.80 3.40 0.0000000000000000 "
+        "--expected-goal 9.70 -1.20 1.20 3.0892327760299634 "
+        "--expected-goal 6.30 5.55 2.35 -1.9547687622336491 "
+        "--expected-goal 0.45 5.70 1.00 -1.6929693744344996")
+    assert expected in output
+    for index in range(1, 5):
+        assert f"P{index}=" in output
+
+
+def test_multi_goal_navigation_submits_one_four_pose_request_with_exact_quaternions():
+    source = SCRIPT.read_text()
+    start = source.index("submit_multi_goal_navigation()")
+    end = source.index("\n}\n", start)
+    function = source[start:end]
+    assert function.count("{position:") == 4
+    assert function.count("draft_revision: 1") == 1
+    for value in ("0.9996573249755573", "0.0261769483078731",
+                  "-0.8290375725550417", "0.5591929034707468",
+                  "-0.7489557207890021", "0.6626200482157375"):
+        assert value in function
+
+
+@pytest.mark.parametrize("z,w,yaw", [
+    (0.0, 1.0, 0.0),
+    (0.9996573249755573, 0.0261769483078731, 3.0892327760299634),
+    (-0.8290375725550417, 0.5591929034707468, -1.9547687622336491),
+    (-0.7489557207890021, 0.6626200482157375, -1.6929693744344996),
+])
+def test_multi_goal_navigation_quaternions_match_fixed_yaw(z, w, yaw):
+    assert math.atan2(2.0 * w * z, 1.0 - 2.0 * z * z) == pytest.approx(yaw)
+
+
+def test_replacing_old_05_preserves_all_other_committed_final_results():
+    expected = [
+        "results/01_hover/final/run_01",
+        "results/02_single_goal/final/run_01",
+        "results/03_multi_goal/final/run_01",
+        "results/04_static_avoidance/final/run_01",
+        "results/06_disturbance/short_gust/final/run_01",
+        "results/06_disturbance/persistent_release/final/run_01",
+    ]
+    assert all((REPO / path).is_dir() for path in expected)
+    assert not (REPO / "results/05_narrow_corridor").exists()
+
+
+def test_multi_goal_uses_prehover_then_four_formal_closed_square_targets(tmp_path):
+    output = run_script(tmp_path, "multi_goal").stdout
+    expected = (
+        "expected_goals=--expected-goal 3 0 1.5 0 "
+        "--expected-goal 3 3 1.5 1.5707963267948966 "
+        "--expected-goal 0 3 1.5 3.141592653589793 "
+        "--expected-goal 0 0 1.5 -1.5707963267948966")
+    assert expected in output
+    assert "pre_hover=single 0 0 1.5 yaw=0 before recorder" in output
+
+
+@pytest.mark.parametrize("experiment,profile,duration", [
+    ("disturbance_short_gust", "short_gust", "2"),
+    ("disturbance_persistent_release", "persistent_release", "10")])
+def test_disturbance_dry_run_has_no_service_and_fixed_metadata(tmp_path, experiment, profile, duration):
+    output=run_script(tmp_path,experiment).stdout
+    assert "service=none" in output
+    assert f"profile:={profile}" in output and "start_delay:=10.0" in output
+    assert "--expected-goal 0 0 1.5 0" in output
+    assert f"--disturbance-profile {profile}" in output
+    assert "--expected-force 0.30 0 0" in output
+    assert f"--expected-force-duration {duration}" in output
+    assert "--expected-recovery-duration 10" in output
 
 
 def test_analyzer_uses_run_parameter_snapshot(tmp_path):
@@ -153,12 +231,19 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def make_review_run(tmp_path, status="final", overall_pass=True):
+def make_review_run(tmp_path, status="final", overall_pass=True, scenario_id="hover"):
     root = tmp_path / "results"
-    relative = f"01_hover/{status}/run_01"
+    scenario_directories = {
+        "hover": "01_hover", "single_goal": "02_single_goal",
+        "multi_goal": "03_multi_goal", "static_avoidance": "04_static_avoidance",
+        "multi_goal_navigation": "05_multi_goal_navigation",
+        "disturbance_short_gust": "06_disturbance/short_gust",
+        "disturbance_persistent_release": "06_disturbance/persistent_release",
+    }
+    relative = f"{scenario_directories[scenario_id]}/{status}/run_01"
     run = root / relative; run.mkdir(parents=True)
     protected = {
-        "metadata.json": json.dumps({"status": status,
+        "metadata.json": json.dumps({"status": status, "scenario_id": scenario_id,
             "stop_reason": "arrival_and_steady_window_complete"}),
         "summary.json": json.dumps({"status": status,
             "overall_pass": overall_pass, "failure_reasons": []}),
@@ -174,7 +259,9 @@ def make_review_run(tmp_path, status="final", overall_pass=True):
         f"{sha(parameter_dir / name)}  {name}\n" for name in REQUIRED_PARAMETERS))
     (run / "manual_acceptance.md").write_text("Status: incomplete\n- [ ] review\nReviewer:\nDate:\n")
     entry = {
-        "scenario_id": "hover", "recorder_experiment": "hover",
+        "scenario_id": scenario_id,
+        "recorder_experiment": "navigation" if scenario_id in (
+            "static_avoidance", "multi_goal_navigation") else scenario_id,
         "status": status, "run_id": "run_01", "path": relative,
         "git": {"commit_before": "abc", "commit_after": "abc",
                 "source_clean_before": True, "source_clean_after": True},
@@ -190,18 +277,41 @@ def make_review_run(tmp_path, status="final", overall_pass=True):
     return root, run, manifest_path
 
 
-def complete_manual(run, create_screenshot=True):
+def complete_manual(run, create_screenshot=True, reference_screenshot=True):
     screenshot = run / "screenshots" / "rviz_overview.png"
     if create_screenshot:
         screenshot.parent.mkdir(); screenshot.write_bytes(b"png evidence")
+    screenshot_line = "Screenshot: screenshots/rviz_overview.png\n" if reference_screenshot else ""
     (run / "manual_acceptance.md").write_text(
         "Status: complete\n- [x] review\nReviewer: Test Reviewer\n"
-        "Date: 2026-07-21\nScreenshot: screenshots/rviz_overview.png\n")
+        f"Date: 2026-07-21\n{screenshot_line}")
     return "screenshots/rviz_overview.png"
 
 
 def finalize_args(run, manifest, screenshot):
-    return SimpleNamespace(run_dir=run, manifest=manifest, screenshot=[screenshot])
+    return SimpleNamespace(
+        run_dir=run, manifest=manifest,
+        screenshot=[] if screenshot is None else [screenshot])
+
+
+@pytest.mark.parametrize("scenario_id", ["hover", "single_goal", "multi_goal"])
+def test_basic_scenarios_finalize_without_screenshot(tmp_path, scenario_id):
+    _, run, manifest = make_review_run(tmp_path, scenario_id=scenario_id)
+    complete_manual(run, create_screenshot=False, reference_screenshot=False)
+    entry = finalize_entry(finalize_args(run, manifest, None))
+    assert entry["report_eligible"]
+    assert entry["manual_acceptance"]["screenshots"] == []
+    assert entry["eligibility_conditions"]["required_screenshots_complete"]
+
+
+@pytest.mark.parametrize("scenario_id", [
+    "disturbance_short_gust", "disturbance_persistent_release"])
+def test_disturbance_scenarios_finalize_without_screenshot(tmp_path, scenario_id):
+    _, run, manifest = make_review_run(tmp_path, scenario_id=scenario_id)
+    complete_manual(run, create_screenshot=False, reference_screenshot=False)
+    entry = finalize_entry(finalize_args(run, manifest, None))
+    assert entry["report_eligible"]
+    assert entry["manual_acceptance"]["screenshots"] == []
 
 
 def test_final_manual_review_promotes_and_synchronizes_manifest(tmp_path):
@@ -235,11 +345,30 @@ def test_incomplete_manual_review_is_rejected(tmp_path):
         finalize_entry(finalize_args(run, manifest, "screenshots/missing.png"))
 
 
-def test_missing_required_screenshot_is_rejected(tmp_path):
-    _, run, manifest = make_review_run(tmp_path)
+@pytest.mark.parametrize("scenario_id", ["static_avoidance", "multi_goal_navigation"])
+def test_navigation_scenarios_require_screenshot_then_finalize_after_supplement(
+        tmp_path, scenario_id):
+    _, run, manifest = make_review_run(tmp_path, scenario_id=scenario_id)
     screenshot = complete_manual(run, create_screenshot=False)
+    protected_before = {name: sha(run / name) for name in (
+        "metadata.json", "samples.csv", "diagnostics.csv", "events.csv",
+        "paths.json", "summary.json")}
     with pytest.raises(ValueError, match="screenshot is missing"):
         finalize_entry(finalize_args(run, manifest, screenshot))
+    assert {name: sha(run / name) for name in protected_before} == protected_before
+    screenshot_path = run / screenshot
+    screenshot_path.parent.mkdir()
+    screenshot_path.write_bytes(b"png evidence")
+    entry = finalize_entry(finalize_args(run, manifest, screenshot))
+    assert entry["report_eligible"]
+    assert entry["manual_acceptance"]["screenshots"] == [screenshot]
+
+
+def test_narrow_corridor_is_not_a_formal_scenario(tmp_path):
+    result = run_script(tmp_path, "narrow_corridor")
+    assert result.returncode == 2 and "invalid --experiment" in result.stderr
+    with pytest.raises(ValueError, match="unknown scenario_id"):
+        screenshots_required("narrow_corridor")
 
 
 def test_failed_summary_cannot_be_finalized(tmp_path):
@@ -271,3 +400,13 @@ def test_finalize_rejects_changed_raw_evidence(tmp_path):
     (run / "samples.csv").write_text("changed\n")
     with pytest.raises(ValueError, match="changed after recording"):
         finalize_entry(finalize_args(run, manifest, screenshot))
+
+
+def test_finalize_rejects_scenario_identity_mismatch(tmp_path):
+    _, run, manifest = make_review_run(tmp_path, scenario_id="static_avoidance")
+    entry = json.loads((run / "manifest_entry.json").read_text())
+    entry["scenario_id"] = "hover"
+    (run / "manifest_entry.json").write_text(json.dumps(entry))
+    complete_manual(run, create_screenshot=False, reference_screenshot=False)
+    with pytest.raises(ValueError, match="scenario_id does not match"):
+        finalize_entry(finalize_args(run, manifest, None))

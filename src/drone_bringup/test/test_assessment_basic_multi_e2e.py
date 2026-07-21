@@ -22,13 +22,14 @@ import pytest
 import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, UInt32
+from visualization_msgs.msg import Marker, MarkerArray
 
 
 GOALS = (
-    (0.0, 0.0, 1.5, 0.0),
-    (2.0, 0.0, 1.5, math.pi / 2.0),
-    (2.0, 2.0, 1.5, math.pi),
-    (0.0, 2.0, 1.5, -math.pi / 2.0),
+    (3.0, 0.0, 1.5, 0.0),
+    (3.0, 3.0, 1.5, math.pi / 2.0),
+    (0.0, 3.0, 1.5, math.pi),
+    (0.0, 0.0, 1.5, -math.pi / 2.0),
 )
 
 
@@ -121,6 +122,9 @@ class TestAssessmentBasicMulti(unittest.TestCase):
             node.create_subscription(
                 PoseStamped, '/drone/goal',
                 lambda msg: latest.__setitem__('goal', msg), 20),
+            node.create_subscription(
+                MarkerArray, '/drone/mission/goal_markers',
+                lambda msg: latest.__setitem__('markers', msg), latched),
         ]
         client = node.create_client(ExecuteGoalSequence, '/drone/mission/execute')
 
@@ -137,13 +141,23 @@ class TestAssessmentBasicMulti(unittest.TestCase):
         try:
             self.assertTrue(client.wait_for_service(timeout_sec=8.0))
             spin_until(lambda: 'position' in latest, 5.0, 'initial Odom')
+            prehover = ExecuteGoalSequence.Request()
+            prehover.goals.header.frame_id = 'map'
+            prehover.goals.poses = [make_pose((0.0, 0.0, 1.5, 0.0))]
+            prehover.draft_revision = 1
+            future = client.call_async(prehover)
+            spin_until(future.done, 5.0, 'pre-hover response')
+            self.assertTrue(future.result().accepted, future.result().message)
+            spin_until(lambda: latest.get('complete') is True, 35.0, 'pre-hover completion')
+
             request = ExecuteGoalSequence.Request()
             request.goals.header.frame_id = 'map'
             request.goals.poses = [make_pose(goal) for goal in GOALS]
-            request.draft_revision = 1
+            request.draft_revision = 2
             future = client.call_async(request)
             spin_until(future.done, 5.0, 'mission response')
             self.assertTrue(future.result().accepted, future.result().message)
+            spin_until(lambda: latest.get('complete') is False, 5.0, 'formal mission start')
             spin_until(lambda: latest.get('complete') is True, 85.0, 'square mission')
             settle_deadline = time.monotonic() + 2.0
             while time.monotonic() < settle_deadline:
@@ -156,6 +170,16 @@ class TestAssessmentBasicMulti(unittest.TestCase):
                     2.0 * actual.orientation.w * actual.orientation.z,
                     1.0 - 2.0 * actual.orientation.z * actual.orientation.z)
                 self.assertLess(abs(math.remainder(yaw - expected[3], 2.0 * math.pi)), 1e-6)
+            labels = [
+                marker.text for marker in latest['markers'].markers
+                if marker.type == Marker.TEXT_VIEW_FACING
+            ]
+            self.assertEqual(labels, [
+                'P1 DONE\n(3.00,0.00,1.50)  yaw=0°',
+                'P2 DONE\n(3.00,3.00,1.50)  yaw=90°',
+                'P3 DONE\n(0.00,3.00,1.50)  yaw=180°',
+                'P4 DONE\n(0.00,0.00,1.50)  yaw=-90°',
+            ])
             final_error = math.dist(latest['position'], GOALS[-1][:3])
             self.assertLess(final_error, 0.10)
             self.assertLess(latest['speed'], 0.08)

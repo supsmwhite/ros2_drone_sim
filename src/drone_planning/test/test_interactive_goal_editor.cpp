@@ -131,6 +131,11 @@ TEST(InteractiveGoalEditorMarkerTest, SeparatesOuterTranslationRingFromInnerYawR
 {
   const auto marker = make_goal_candidate_marker(
     {{0.0, 0.0, 1.5}, M_PI / 2.0}, 4U, GoalDraftState::Editing, "EDITING");
+  ASSERT_FALSE(marker.controls.empty());
+  ASSERT_GE(marker.controls.front().markers.size(), 3U);
+  EXPECT_EQ(
+    marker.controls.front().markers[2].text,
+    "Candidate P4 [EDITING]\n(0.00,0.00,1.50)  yaw=90°");
   std::size_t axes = 0U;
   std::size_t planes = 0U;
   std::size_t menus = 0U;
@@ -189,6 +194,17 @@ TEST(InteractiveGoalEditorMarkerTest, SeparatesOuterTranslationRingFromInnerYawR
                visualization_msgs::msg::InteractiveMarkerControl::ROTATE_AXIS;
       }),
     1);
+}
+
+TEST(InteractiveGoalEditorMarkerTest, ShowsCompactValidCandidateLabel)
+{
+  const auto marker = make_goal_candidate_marker(
+    {{12.1, 1.1, 1.5}, 0.0}, 2U, GoalDraftState::CandidateValid, "GEOMETRY VALID");
+  ASSERT_FALSE(marker.controls.empty());
+  ASSERT_GE(marker.controls.front().markers.size(), 3U);
+  EXPECT_EQ(
+    marker.controls.front().markers[2].text,
+    "Candidate P2 [VALID]\n(12.10,1.10,1.50)  yaw=0°");
 }
 
 TEST(InteractiveGoalEditorYawTest, PreservesIndependentYawAndUndoRestoresWholeGoal)
@@ -259,7 +275,8 @@ TEST(InteractiveGoalEditorYawTest, PoseArrayYamlAndDirectionMarkersPreserveYaw)
   EXPECT_EQ(markers.markers[2].type, visualization_msgs::msg::Marker::ARROW);
   ASSERT_TRUE(yaw_from_quaternion(markers.markers[2].pose.orientation));
   EXPECT_NEAR(*yaw_from_quaternion(markers.markers[2].pose.orientation), M_PI / 2.0, 1.0e-12);
-  EXPECT_NE(markers.markers[3].text.find("yaw=90"), std::string::npos);
+  EXPECT_EQ(markers.markers[3].text, "P1\n(1.00,2.00,1.50)  yaw=90°");
+  EXPECT_EQ(markers.markers[6].text, "P2\n(3.00,4.00,2.50)  yaw=180°");
   std::set<std::pair<std::string, int>> identifiers;
   for (auto iterator = markers.markers.begin() + 1; iterator != markers.markers.end(); ++iterator) {
     EXPECT_TRUE(identifiers.emplace(iterator->ns, iterator->id).second);

@@ -48,6 +48,7 @@ service_name=""
 launch_command=()
 submission_description=""
 expected_goals=()
+disturbance_recorder_args=()
 case "$experiment" in
   hover)
     scenario_dir="01_hover"; recorder_experiment="hover"; service_name="/drone/mission/execute"
@@ -63,23 +64,45 @@ case "$experiment" in
     scenario_dir="03_multi_goal"; recorder_experiment="multi_goal"; service_name="/drone/mission/execute"
     launch_command=(ros2 launch drone_bringup assessment_basic_sim.launch.py "use_rviz:=${use_rviz}")
     expected_goals=(
-      --expected-goal 0 0 1.5 0
-      --expected-goal 2 0 1.5 1.5707963267948966
-      --expected-goal 2 2 1.5 3.141592653589793
-      --expected-goal 0 2 1.5 -1.5707963267948966)
-    submission_description="goal_cli four-point square (yaw 0,90,180,-90 deg)" ;;
+      --expected-goal 3 0 1.5 0
+      --expected-goal 3 3 1.5 1.5707963267948966
+      --expected-goal 0 3 1.5 3.141592653589793
+      --expected-goal 0 0 1.5 -1.5707963267948966)
+    submission_description="pre-hover (0,0,1.5,0), then formal 3 m closed square (yaw 0,90,180,-90 deg)" ;;
   static_avoidance)
     scenario_dir="04_static_avoidance"; recorder_experiment="navigation"; service_name="/drone/interactive_goals/execute"
     launch_command=(ros2 launch drone_bringup assessment_navigation_sim.launch.py "use_rviz:=${use_rviz}" yaw_mode:=path_tangent)
     expected_goals=(--expected-goal 13.2 5.5 1.5 0)
     submission_description="navigation service goal (13.2,5.5,1.5), yaw_mode=path_tangent" ;;
-  narrow_corridor)
-    scenario_dir="05_narrow_corridor"; recorder_experiment="navigation"; service_name="/drone/interactive_goals/execute"
+  multi_goal_navigation)
+    scenario_dir="05_multi_goal_navigation"; recorder_experiment="navigation"; service_name="/drone/interactive_goals/execute"
     launch_command=(ros2 launch drone_bringup assessment_navigation_sim.launch.py "use_rviz:=${use_rviz}" yaw_mode:=path_tangent)
-    expected_goals=(--expected-goal 12.1 1.1 1.5 0)
-    submission_description="navigation service goal (12.1,1.1,1.5), yaw_mode=path_tangent" ;;
+    expected_goals=(
+      --expected-goal 13.15 5.80 3.40 0.0000000000000000
+      --expected-goal 9.70 -1.20 1.20 3.0892327760299634
+      --expected-goal 6.30 5.55 2.35 -1.9547687622336491
+      --expected-goal 0.45 5.70 1.00 -1.6929693744344996)
+    submission_description="one four-Pose navigation request: P1 -> P2 -> P3 -> P4, yaw_mode=path_tangent" ;;
+  disturbance_short_gust)
+    scenario_dir="06_disturbance/short_gust"; recorder_experiment="disturbance"; service_name=""
+    launch_command=(ros2 launch drone_bringup assessment_disturbance_sim.launch.py profile:=short_gust "use_rviz:=${use_rviz}" start_delay:=10.0)
+    expected_goals=(--expected-goal 0 0 1.5 0)
+    disturbance_recorder_args=(--disturbance-profile short_gust --expected-force 0.30 0 0 --expected-force-duration 2 --expected-recovery-duration 10)
+    submission_description="no service; short_gust +X 0.30 N for 2 s, then 10 s recovery" ;;
+  disturbance_persistent_release)
+    scenario_dir="06_disturbance/persistent_release"; recorder_experiment="disturbance"; service_name=""
+    launch_command=(ros2 launch drone_bringup assessment_disturbance_sim.launch.py profile:=persistent_release "use_rviz:=${use_rviz}" start_delay:=10.0)
+    expected_goals=(--expected-goal 0 0 1.5 0)
+    disturbance_recorder_args=(--disturbance-profile persistent_release --expected-force 0.30 0 0 --expected-force-duration 10 --expected-recovery-duration 10)
+    submission_description="no service; persistent_release +X 0.30 N for 10 s, then 10 s recovery" ;;
   *) die "invalid --experiment: $experiment" ;;
 esac
+
+if [[ "$experiment" =~ ^(static_avoidance|multi_goal_navigation)$ ]]; then
+  screenshot_checklist="- [ ] At least one RViz screenshot saved and referenced"
+else
+  screenshot_checklist="- [ ] Optional screenshots reviewed if supplied"
+fi
 
 output_root="$(realpath -m -- "$output_root")"
 relative_path="${scenario_dir}/${status}/${run_id}"
@@ -119,9 +142,24 @@ if [[ "$dry_run" == true ]]; then
   echo "output=$run_dir"
   echo "ros_domain_id=$domain_id"
   echo "launch=${launch_display% }"
-  echo "service=$service_name"
+  echo "service=${service_name:-none}"
   echo "expected_goals=${expected_display% }"
   echo "submission=$submission_description"
+  if [[ "$experiment" == multi_goal_navigation ]]; then
+    echo "goal_count=4"
+    echo "P1=(13.15,5.80,3.40), yaw=0.0000000000000000 rad"
+    echo "P2=(9.70,-1.20,1.20), yaw=3.0892327760299634 rad"
+    echo "P3=(6.30,5.55,2.35), yaw=-1.9547687622336491 rad"
+    echo "P4=(0.45,5.70,1.00), yaw=-1.6929693744344996 rad"
+    echo "yaw_mode=path_tangent"
+  fi
+  if [[ "$recorder_experiment" == disturbance ]]; then
+    printf -v disturbance_display '%q ' "${disturbance_recorder_args[@]}"
+    echo "disturbance_recorder=${disturbance_display% }"
+  fi
+  if [[ "$experiment" =~ ^(single_goal|multi_goal)$ ]]; then
+    echo "pre_hover=single 0 0 1.5 yaw=0 before recorder"
+  fi
   echo "analyzer_parameters=${run_dir}/parameters"
   exit 0
 fi
@@ -197,18 +235,32 @@ submit_basic() {
   ros2 run drone_mission goal_cli "$@" >>"${temporary_logs}/submission.log" 2>&1
 }
 
-submit_navigation() {
-  local x="$1" y="$2" z="$3"
-  local request="{goals: {header: {frame_id: map}, poses: [{position: {x: ${x}, y: ${y}, z: ${z}}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}]}, draft_revision: 1}"
+submit_navigation_request() {
+  local request="$1"
   echo "+ ros2 service call ${service_name} drone_msgs/srv/ExecuteGoalSequence ${request}" >>"${temporary_logs}/submission.log"
   ros2 service call "$service_name" drone_msgs/srv/ExecuteGoalSequence "$request" >>"${temporary_logs}/submission.log" 2>&1
   navigation_response_was_accepted "${temporary_logs}/submission.log" || die "navigation mission was not accepted"
 }
 
-wait_for_topic /drone/odom 20
-wait_for_service "$service_name" 20
+submit_static_avoidance() {
+  submit_navigation_request "{goals: {header: {frame_id: map}, poses: [{position: {x: 13.2, y: 5.5, z: 1.5}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}]}, draft_revision: 1}"
+}
 
-if [[ "$experiment" == single_goal ]]; then
+submit_multi_goal_navigation() {
+  submit_navigation_request "{goals: {header: {frame_id: map}, poses: [
+    {position: {x: 13.15, y: 5.80, z: 3.40}, orientation: {x: 0.0, y: 0.0, z: 0.0000000000000000, w: 1.0000000000000000}},
+    {position: {x: 9.70, y: -1.20, z: 1.20}, orientation: {x: 0.0, y: 0.0, z: 0.9996573249755573, w: 0.0261769483078731}},
+    {position: {x: 6.30, y: 5.55, z: 2.35}, orientation: {x: 0.0, y: 0.0, z: -0.8290375725550417, w: 0.5591929034707468}},
+    {position: {x: 0.45, y: 5.70, z: 1.00}, orientation: {x: 0.0, y: 0.0, z: -0.7489557207890021, w: 0.6626200482157375}}
+  ]}, draft_revision: 1}"
+}
+
+wait_for_topic /drone/odom 20
+if [[ -n "$service_name" ]]; then
+  wait_for_service "$service_name" 20
+fi
+
+if [[ "$experiment" =~ ^(single_goal|multi_goal)$ ]]; then
   submit_basic single 0 0 1.5 yaw=0
   wait_for_true /drone/mission/complete "$assessment_timeout"
 fi
@@ -216,7 +268,7 @@ fi
 recorder_command=(python3 tools/assessment_recorder.py
   --experiment "$recorder_experiment" --scenario-id "$experiment"
   --run-status "$status" --output "$run_dir" --service-name "$service_name"
-  --timeout "$assessment_timeout" "${expected_goals[@]}")
+  --timeout "$assessment_timeout" "${expected_goals[@]}" "${disturbance_recorder_args[@]}")
 setsid "${recorder_command[@]}" >"${temporary_logs}/recorder_stdout.log" 2>&1 &
 recorder_pid=$!
 
@@ -239,9 +291,10 @@ wait_for_recorder
 case "$experiment" in
   hover) submit_basic single 0 0 1.5 yaw=0 ;;
   single_goal) submit_basic single 2 1 1.5 yaw=0 ;;
-  multi_goal) submit_basic multi 0 0 1.5 yaw=0 2 0 1.5 yaw=90 2 2 1.5 yaw=180 0 2 1.5 yaw=-90 ;;
-  static_avoidance) submit_navigation 13.2 5.5 1.5 ;;
-  narrow_corridor) submit_navigation 12.1 1.1 1.5 ;;
+  multi_goal) submit_basic multi 3 0 1.5 yaw=0 3 3 1.5 yaw=90 0 3 1.5 yaw=180 0 0 1.5 yaw=-90 ;;
+  static_avoidance) submit_static_avoidance ;;
+  multi_goal_navigation) submit_multi_goal_navigation ;;
+  disturbance_short_gust|disturbance_persistent_release) : ;;
 esac
 
 recorder_deadline=$((SECONDS + assessment_timeout + 20))
@@ -297,15 +350,35 @@ cat >"${run_dir}/git_state.json" <<EOF
 }
 EOF
 
+if [[ "$experiment" == multi_goal_navigation ]]; then
+  manual_checklist="- [ ] Four goal positions and yaw values verified
+- [ ] P1 -> P2 -> P3 -> P4 completion order verified
+- [ ] Replanning completed for every flight segment
+- [ ] Altitude changes and terminal goal orientations match the protocol
+- [ ] Planned path, reference trajectory, and actual trajectory checked
+- [ ] No collision or obvious workspace violation observed
+- [ ] Final task state shows MISSION COMPLETE
+- [ ] Curves and summary checked
+- [ ] At least one RViz screenshot saved and referenced"
+elif [[ "$recorder_experiment" == disturbance ]]; then
+  manual_checklist="- [ ] External force start and release process checked
+- [ ] Red external-force arrow direction is correct
+- [ ] Blue integral-compensation arrow direction is reasonable
+- [ ] Stable recovery after force release confirmed
+- [ ] Curves and summary reviewed against the protocol"
+else
+  manual_checklist="- [ ] RViz trajectory and target markers checked
+- [ ] No visually observed collision or attitude divergence
+${screenshot_checklist}
+- [ ] Curves and summary reviewed against the protocol"
+fi
+
 cat >"${run_dir}/manual_acceptance.md" <<EOF
 # Manual acceptance: ${experiment} / ${run_id}
 
 Status: incomplete
 
-- [ ] RViz trajectory and target markers checked
-- [ ] No visually observed collision or attitude divergence
-- [ ] Required screenshots saved and referenced
-- [ ] Curves and summary reviewed against the protocol
+${manual_checklist}
 - [ ] Reviewer name and date recorded below
 
 Reviewer:

@@ -15,37 +15,79 @@ promotes an old smoke or trial to final.
   tracked source/parameter state before launch. The analyzer passing is necessary but not
   sufficient for report eligibility.
 
-The five fixed scenarios are:
+The five fixed base/navigation scenarios are:
 
 | Directory / `scenario_id` | Recorder type | Fixed protocol |
 |---|---|---|
 | `01_hover` / `hover` | `hover` | `(0,0,1.5)`, yaw `0 rad` |
 | `02_single_goal` / `single_goal` | `single_goal` | pre-hover `(0,0,1.5,0)`, then formal `(2,1,1.5,0)` |
-| `03_multi_goal` / `multi_goal` | `multi_goal` | square goals with yaw `0°, 90°, 180°, -90°` |
+| `03_multi_goal` / `multi_goal` | `multi_goal` | pre-hover outside recording, then `(3,0,1.5,0°)` → `(3,3,1.5,90°)` → `(0,3,1.5,180°)` → `(0,0,1.5,-90°)` |
 | `04_static_avoidance` / `static_avoidance` | `navigation` | `(13.2,5.5,1.5)`, `path_tangent` |
-| `05_narrow_corridor` / `narrow_corridor` | `navigation` | `(12.1,1.1,1.5)`, `path_tangent` |
+| `05_multi_goal_navigation` / `multi_goal_navigation` | `navigation` | P1 `(13.15,5.80,3.40,0°)` → P2 `(9.70,-1.20,1.20,177°)` → P3 `(6.30,5.55,2.35,-112°)` → P4 `(0.45,5.70,1.00,-97°)`, `path_tangent` |
 
-Static avoidance and narrow corridor intentionally share the ROS recorder type
-`navigation`. Their distinct `scenario_id`, numbered directory, target snapshot, and manifest
-entry must never be collapsed.
+Static avoidance and multi-goal 3D navigation share the unified ROS recorder type
+`navigation`. Scenario 03 validates a basic multi-goal mission and attitude control in the
+obstacle-free environment; scenario 04 validates single-goal full-map static avoidance;
+scenario 05 validates four ordered goals, four segment plans, altitude changes, and each Pose's
+terminal yaw in the obstacle environment. The former narrow-corridor protocol was replaced by
+this more comprehensive protocol; its old evidence remains in Git history only.
+
+```text
+01 Hover
+02 Single Goal
+03 Basic Multi-goal Mission
+04 Full-map Static Avoidance
+05 Multi-goal 3D Navigation
+06 Disturbance
+   ├── Short Gust
+   └── Persistent Release
+```
+
+Two independent bonus disturbance scenarios are recorded separately:
+
+| Directory / `scenario_id` | Recorder type | Fixed protocol |
+|---|---|---|
+| `06_disturbance/short_gust` / `disturbance_short_gust` | `disturbance` | `(0,0,1.5,0)`, `+X 0.30 N` for `2 s`, then recovery |
+| `06_disturbance/persistent_release` / `disturbance_persistent_release` | `disturbance` | `(0,0,1.5,0)`, `+X 0.30 N` for `10 s`, then force-release recovery |
+
+Short gust evaluates transient suppression and recovery. Persistent release evaluates
+steady-state compensation and recovery after force removal. Neither uses a mission submission
+Service; both reuse the disturbance launch and the unified `disturbance` Recorder.
 
 ## Directory and invocation
 
+Formal Final evidence:
+
 ```text
-results/<numbered_scenario>/<smoke|trial|final>/<run_id>/
+results/<numbered_scenario>/final/<run_id>/
 ```
 
-Example dry run:
+Temporary smoke/trial runs:
+
+```text
+/tmp/ros2_drone_assessment_smoke/<numbered_scenario>/<smoke|trial>/<run_id>/
+```
+
+`results/` contains only the seven current Final evidence sets, the shared manifest, and shared
+parameter documentation. Smoke and trial runs default to `/tmp/ros2_drone_assessment_smoke/`
+and can never become formal report evidence.
+
+Example trial dry run:
 
 ```bash
 scripts/run_final_assessment.sh \
-  --experiment static_avoidance --status trial --run-id run_01 \
-  --use-rviz true --output-root results --timeout 180 --dry-run
+  --experiment static_avoidance \
+  --status trial \
+  --run-id trial_01 \
+  --use-rviz true \
+  --output-root /tmp/ros2_drone_assessment_smoke \
+  --timeout 180 \
+  --dry-run
 ```
 
 Remove `--dry-run` only after checking the printed launch, Service, target, output path, Git
-state, and ROS domain. `run_id` is never reused. Failed and partial directories are retained for
-diagnosis or moved outside `results/`; they are not overwritten.
+state, and ROS domain. `run_id` is never reused. Failed and partial smoke/trial directories stay
+under the temporary output root for diagnosis; they are not overwritten or moved into `results/`.
 
 Each completed run contains:
 
@@ -57,8 +99,13 @@ Each completed run contains:
 - `git_state.json`, `evidence_sha256.txt`, `manifest_entry.json`, and `manifest.log`;
 - `manual_acceptance.md`, initially marked `Status: incomplete`.
 
-RViz screenshots referenced by manual acceptance are added without replacing recorder or
-analyzer artifacts.
+RViz screenshots are added without replacing recorder or analyzer artifacts. They are optional
+for hover, single-goal, multi-goal, and both disturbance runs, but required for both navigation
+scenarios.
+
+All seven current Final runs have completed automated analysis, manual acceptance, and
+finalization. Every entry in `results/manifest.json` is `report_eligible=true`; the reviewer is
+`Peter`. Scenario 04 registers one RViz screenshot, and scenario 05 registers three.
 
 ## Manifest schema 4
 
@@ -72,8 +119,8 @@ analyzer artifacts.
 - manual acceptance status;
 - every eligibility condition, `report_eligible`, and unmet conditions.
 
-The historical hover smoke predates this workflow and remains explicitly marked
-`legacy_layout`; it is not final evidence.
+Smoke and trial outputs are not stored as formal evidence in `results/`; temporary workflow
+checks use `/tmp/ros2_drone_assessment_smoke/`.
 
 ## Final evidence eligibility
 
@@ -86,12 +133,24 @@ The historical hover smoke predates this workflow and remains explicitly marked
 5. source worktree is clean before and after, excluding only artifacts generated for that run
    and its manifest update;
 6. all required parameter snapshots and checksums are complete;
-7. manual acceptance is complete.
+7. protected raw evidence still matches its recorded checksums;
+8. manual acceptance is complete;
+9. for `static_avoidance` and `multi_goal_navigation`, at least one valid RViz screenshot is present
+   and referenced by manual acceptance.
 
-The orchestration script always creates the manual template as incomplete, so a new run starts
-with `report_eligible=false`. A reviewer must inspect RViz evidence, screenshots, curves, and
-logs before finalization. Mark every checklist item complete, set `Status: complete`, fill in
-reviewer/date, and reference each required screenshot inside the run directory. Then run:
+The orchestration script always creates the manual template as incomplete, so a new run is not
+report eligible. A reviewer must inspect the available RViz evidence, curves, and logs before
+finalization, mark every checklist item complete, and fill in reviewer/date. Hover,
+single-goal, and multi-goal runs may then be finalized without `--screenshot`:
+
+```bash
+python3 tools/final_assessment_manifest.py finalize \
+  --manifest results/manifest.json \
+  --run-dir results/01_hover/final/run_01
+```
+
+For `static_avoidance` and `multi_goal_navigation`, save and reference at least one screenshot inside
+the run directory, then pass it during finalization:
 
 ```bash
 python3 tools/final_assessment_manifest.py finalize \
@@ -100,10 +159,12 @@ python3 tools/final_assessment_manifest.py finalize \
   --screenshot screenshots/rviz_overview.png
 ```
 
-Finalization verifies protected raw evidence, `overall_pass`, parameter checksums, Git
-conditions, manual fields, and screenshots; it then recalculates evidence checksums and updates
-both manifests. Repeating finalization is rejected explicitly. Smoke and trial runs can never
-become report eligible.
+Navigation screenshots may be added after the formal data run. Until they are supplied,
+finalization is rejected without altering the recorded metrics. Finalization automatically uses
+`scenario_id` to apply the screenshot policy and always verifies protected raw evidence,
+`overall_pass`, parameter checksums, Git conditions, and manual fields; it then recalculates
+evidence checksums and updates both manifests. Repeating finalization is rejected explicitly.
+Smoke and trial runs can never become report eligible.
 
 ## Signal and metric semantics
 
@@ -127,3 +188,18 @@ become report eligible.
 
 Legacy schema-3 recordings remain readable. Missing reference yaw is reported as
 `unavailable`, and legacy saturation counts retain their original Odom-sample semantics.
+
+For disturbance runs, `recovery_threshold_entry_time_s` is the first post-release entry into
+the configured position and speed thresholds. `recovery_confirmed_time_s` is the later Recorder
+confirmation after the hold condition remains satisfied, and is the value preferred in report
+text. `recovery_confirmation_hold_time_s` is their difference. The legacy `recovery_time_s`
+remains an alias of threshold entry for comparability.
+
+The committed historical disturbance finals are not re-analyzed. Their report-only recovery
+semantics are generated from checksum-verified immutable `summary.json` and `events.csv` files:
+
+```bash
+python3 tools/build_disturbance_report_metrics.py \
+  --results-root results \
+  --output results/06_disturbance/report_metrics.json
+```

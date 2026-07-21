@@ -1,6 +1,9 @@
 #include "drone_mission/goal_visualization.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <iomanip>
+#include <sstream>
 #include <string>
 
 #include "geometry_msgs/msg/point.hpp"
@@ -34,6 +37,21 @@ visualization_msgs::msg::Marker base_marker(
   return marker;
 }
 
+std::string goal_label(
+  const std::string & name, const std::string & state,
+  const geometry_msgs::msg::Pose & pose)
+{
+  const auto & orientation = pose.orientation;
+  const double yaw = std::atan2(
+    2.0 * (orientation.w * orientation.z + orientation.x * orientation.y),
+    1.0 - 2.0 * (orientation.y * orientation.y + orientation.z * orientation.z));
+  std::ostringstream text;
+  text << name << " " << state << "\n" << std::fixed << std::setprecision(2)
+       << "(" << pose.position.x << "," << pose.position.y << "," << pose.position.z
+       << ")  yaw=" << std::lround(yaw * 180.0 / M_PI) << "°";
+  return text.str();
+}
+
 }  // namespace
 
 visualization_msgs::msg::MarkerArray make_single_goal_markers(
@@ -59,7 +77,7 @@ visualization_msgs::msg::MarkerArray make_single_goal_markers(
   label.pose.position.z += 0.35;
   label.scale.z = 0.25;
   label.color = point.color;
-  label.text = "GOAL CURRENT";
+  label.text = goal_label("P1", "CURRENT", goal);
   result.markers.push_back(label);
   return result;
 }
@@ -105,9 +123,9 @@ visualization_msgs::msg::MarkerArray make_mission_goal_markers(
     label.pose.position.z += 0.35;
     label.scale.z = 0.25;
     label.color = point.color;
-    const std::string prefix = goals.poses.size() == 1U ? "GOAL" :
-      "P" + std::to_string(index + 1U);
-    label.text = prefix + (done ? " DONE" : (current ? " CURRENT" : ""));
+    const std::string prefix = "P" + std::to_string(index + 1U);
+    label.text = goal_label(
+      prefix, done ? "DONE" : (current ? "CURRENT" : "WAITING"), goals.poses[index]);
     result.markers.push_back(label);
   }
   return result;

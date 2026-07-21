@@ -1,0 +1,8 @@
+recording_time_s,mission_time_s,event,details
+0.0,,recording_started,{}
+0.02897930145263672,0.0,mission_started,"{""source"":""goal_received""}"
+0.02897930145263672,0.0,goal_received,"{""position"":[0.0,0.0,1.5],""yaw_rad"":0.0}"
+13.669585227966309,13.640605926513672,external_force_started,{}
+23.709336042404175,23.680356740951538,external_force_released,{}
+24.714341163635254,24.685361862182617,recovery_confirmed,{}
+27.719230890274048,27.69025158882141,recording_stopped,"{""reason"":""disturbance_recovery_and_steady_window_complete""}"

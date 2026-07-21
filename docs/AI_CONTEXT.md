@@ -1,31 +1,56 @@
-# AI 上下文：考核收束后的真实结构
+# AI 上下文：ROS2 四旋翼考核项目
 
-本文记录 `refactor/assessment-scope-consolidation` 分支的最终产品边界、依赖关系与
-回归策略。项目只公开三个考核入口，使用一张 `environment.yaml` 静态地图；本阶段
-不增加功能，也不改变动力学、控制律、规划安全半径、yaw 算法或完成门控。
+本文供后续 AI 或开发者快速接管项目，记录稳定的产品边界、依赖关系、正式协议与验证
+状态，不作为开发日志或实验复盘。
 
-## 产品边界
+## 1. 当前状态
 
-公开能力集中为：悬停、单目标、3～4 目标顺序飞行、多障碍物静态避障、明显绕行或
-地图可用通道、误差/RPM/轨迹/障碍距离结果，以及独立抗扰演示。导航目标的位置、
-高度和 yaw 由用户在 RViz 中选择。
+项目基于 Ubuntu 22.04、ROS2 Humble、C++17 和 Eigen3。功能与正式考核协议已经收束：
+公开三个仿真入口，使用一张 `environment.yaml` 静态地图，保留五组基础/导航场景和
+两组独立抗扰场景。
 
-系统边界保持不变：水平位置环为 `P + D + 受限 I + 期望加速度前馈`，高度和姿态
-环为 PD；静态障碍物用于规划和碰撞监测，不产生物理接触；外力是质心处集中等效
-力。系统不包含动态障碍、局部重规划、完整风场、MPC 或完整姿态规划。
+七组正式结果已经完成自动分析、人工验收和 finalize，所有正式 manifest 条目均为
+`report_eligible=true`。04 登记 1 张 RViz 截图，05 登记 3 张 RViz 截图，Reviewer
+为 `Peter`。
 
-## 三个公开入口
+## 2. 产品边界
 
-| 入口 | 默认参数 | 实现方式 |
+系统提供四电机目标 RPM 驱动的刚体动力学，位置、速度与姿态闭环控制，单目标与
+多目标顺序任务，三维 A*、路径简化、安全连续轨迹、`path_tangent` yaw、静态碰撞与
+安全净空监测、RViz 交互目标，以及短时/持续外力抗扰演示。
+
+水平位置环为 `P + D + 受限 I + 期望加速度前馈`，高度和姿态环为 PD。静态障碍只用于
+规划和碰撞监测，不产生物理接触；外力是质心处集中等效力。系统不包含动态障碍、局部
+重规划、完整风场、MPC 或完整姿态规划。
+
+## 3. 公开入口
+
+| 入口 | 默认参数 | 用途 |
 |---|---|---|
-| `assessment_basic_sim.launch.py` | `use_rviz:=true` | 薄封装 `mission_sim.launch.py`，强制 `start_with_configured_waypoints:=false`，等待 `goal_cli single` 或 `goal_cli multi` |
-| `assessment_navigation_sim.launch.py` | `yaw_mode:=path_tangent`、`use_rviz:=true` | 薄封装 `interactive_goal_navigation_sim.launch.py`，复用预览、预检、3D A*、简化、连续轨迹和执行链 |
-| `assessment_disturbance_sim.launch.py` | `profile:=short_gust`、`use_rviz:=true` | 薄封装 `disturbance_visual_demo.launch.py`；另支持 `profile:=persistent_release` |
+| `assessment_basic_sim.launch.py` | `use_rviz:=true` | 等待 `goal_cli single` 或 `goal_cli multi`，不自动执行 YAML waypoint |
+| `assessment_navigation_sim.launch.py` | `yaw_mode:=path_tangent`、`use_rviz:=true` | RViz/Service 目标、预检、三维规划与执行 |
+| `assessment_disturbance_sim.launch.py` | `profile:=short_gust`、`use_rviz:=true` | 短时外力演示；另支持 `profile:=persistent_release` |
 
-基础入口不会自动读取 YAML waypoint。`single` 与 `multi` 共用同一个运行时任务接口，
-由任务管理节点串行接收，不创建第二套执行器或重名 Marker 发布者。
+基础正式 multi 在 Recorder 启动前完成 `(0,0,1.5,0°)` 预备悬停；正式记录只包含
+`(3,0,1.5,0°)` → `(3,3,1.5,90°)` → `(0,3,1.5,180°)` →
+`(0,0,1.5,-90°)` 四个目标。
 
-## Launch 依赖图
+## 4. 包与节点职责
+
+| 包 | 关键节点/接口 | 职责 |
+|---|---|---|
+| `drone_msgs` | 自定义 msg/srv | 任务、状态与执行接口 |
+| `drone_dynamics` | `quadrotor_dynamics_node` | 四电机 RPM 驱动刚体动力学与可选外力输入 |
+| `drone_controller` | `position_controller_node` | 位置、速度、姿态和电机混控闭环 |
+| `drone_mission` | `waypoint_manager_node`、`goal_visualizer_node`、`goal_cli` | 运行时任务、顺序执行、基础目标 Marker 与命令行提交 |
+| `drone_planning` | `static_environment_node` | 工作空间、障碍 Marker、碰撞与净空统计 |
+| `drone_planning` | `interactive_goal_editor_node` | RViz 目标编辑、预览、预检和执行服务入口 |
+| `drone_planning` | `multi_goal_static_avoidance_node` | 多目标 A*、简化、连续轨迹、yaw 与完成门控 |
+| `drone_bringup` | `disturbance_demo_node` | 扰动时序、外力和积分补偿可视化 |
+
+`robot_state_publisher` 与可选 `rviz2` 属于公共可视化基础设施。
+
+## 5. Launch 依赖
 
 ```text
 assessment_basic_sim
@@ -41,99 +66,92 @@ assessment_disturbance_sim
 └── disturbance_visual_demo
 ```
 
-内部保留的五个 Launch 仅为
-`simulation_core.launch.py`、`basic_sim.launch.py`、`mission_sim.launch.py`、
-`interactive_goal_navigation_sim.launch.py` 和 `disturbance_visual_demo.launch.py`。
+内部 Launch 是三个公开入口的实现组件，不应与公开入口并列宣传。
 
-## 保留的运行节点和工具
-
-| 包 | ROS 节点/命令 | 作用 |
-|---|---|---|
-| `drone_dynamics` | `quadrotor_dynamics_node` | 四电机 RPM 驱动的刚体动力学，可选外力输入 |
-| `drone_controller` | `position_controller_node` | 位置、速度、姿态和电机混控闭环 |
-| `drone_mission` | `waypoint_manager_node` | 运行时单目标/多目标任务、顺序执行与完成状态 |
-| `drone_mission` | `goal_visualizer_node` | 基础任务目标 Marker |
-| `drone_planning` | `static_environment_node` | 唯一正式地图的工作空间、原始/膨胀障碍 Marker 与碰撞统计 |
-| `drone_planning` | `interactive_goal_editor_node` | RViz 目标编辑、预览、预检和执行服务入口 |
-| `drone_planning` | `multi_goal_static_avoidance_node` | 多目标 A*、简化、连续轨迹、yaw 和完成门控 |
-| `drone_bringup` | `disturbance_demo_node` | 扰动时序、外力与补偿可视化 |
-| `drone_mission` | `goal_cli` | 向基础入口提交 `single` 或 `multi` 任务 |
-| `drone_planning` | `map_reachability_check` | 离线检查正式地图可达性 |
-
-`robot_state_publisher` 与可选 `rviz2` 属于公共可视化基础设施。保留的核心库包括
-waypoint、目标解析/可视化、分段五次轨迹、静态环境、碰撞检查、A*、路径简化、
-连续轨迹构建、yaw 参考、目标完成门控、多目标可视化、失败安全和交互目标编辑。
-
-## 配置边界
-
-正式配置为：
-
-- `dynamics.yaml`：动力学和电机参数；
-- `controller.yaml`：闭环控制参数；
-- `mission.yaml`：任务管理默认参数，assessment 基础入口禁用其中的自动 waypoint；
-- `environment.yaml`：唯一正式工作空间和六障碍物地图；
-- `astar.yaml`：正式规划离散化和安全余量；
-- `planned_trajectory.yaml`：简化与连续轨迹参数；
-- `interactive_goal_editor.yaml`：RViz 编辑、预览和预检参数；
-- `interactive_goal_executor.yaml`：正式多目标执行与完成门控参数。
-
-环境、预检和执行器均加载同一个 `environment.yaml`。本轮没有另建未经验证的
-“窄通道地图”；明显绕行或通道展示通过正式六障碍物地图上的人工目标选择验收。
-
-## 正式工作流
+## 6. 数据流
 
 基础任务：
 
 ```text
-goal_cli single/multi
-→ waypoint_manager_node
-→ /drone/goal
-→ position_controller_node
-→ /drone/motor_rpm_cmd
-→ quadrotor_dynamics_node
+goal_cli single/multi → waypoint_manager_node → /drone/goal
+→ position_controller_node → /drone/motor_rpm_cmd → quadrotor_dynamics_node
 ```
 
 交互导航：
 
 ```text
-RViz 目标位置与 yaw
-→ interactive_goal_editor_node 预览和预检
-→ 3D A* → 路径简化 → 安全连续轨迹
-→ multi_goal_static_avoidance_node
-→ path_tangent yaw → /drone/trajectory_setpoint
+RViz/Service 目标 → 交互编辑、预览与预检 → 3D A* → 路径简化
+→ 安全连续轨迹 → path_tangent/终端 yaw → /drone/trajectory_setpoint
 → position_controller_node → quadrotor_dynamics_node
 ```
 
 抗扰演示：
 
 ```text
-disturbance_demo_node
-→ 目标与外力时序
-→ quadrotor_dynamics_node（仅此入口启用 external wrench）
-→ position_controller_node
+disturbance_demo_node → 目标与外力时序
+→ quadrotor_dynamics_node（启用 external wrench）→ position_controller_node
 → 外力/积分补偿 Marker 与恢复状态
 ```
 
-## 测试收束与断言迁移
+输出主要包括 Odometry、IMU、控制诊断、任务/导航状态、Marker，以及 Recorder 生成的
+CSV、路径、事件、summary 和图表。
 
-底层算法和物理测试全部保留。`drone_bringup` 最终固定为 11 个 CTest 目标：2 个结构/
-物理一致性测试、4 个正式入口测试、5 个关键安全与边界测试。
+## 7. 配置边界
 
-| 原重复覆盖中的有效断言 | 迁入位置 |
+| 配置 | 职责 |
 |---|---|
-| 公共 core 复用、内部 Launch 依赖、无重复节点 | `test_assessment_launch_structure.py` |
-| 单目标和多目标正式运行时任务 | `test_assessment_basic_single_e2e.py`、`test_assessment_basic_multi_e2e.py` |
-| 目标顺序、READY、raw/simplified/reference 路径安全、净空、终态、碰撞、非有限值、饱和、单发布者 | `test_interactive_goal_navigation_e2e.py` |
-| 六个原始/膨胀障碍 Marker、工作空间 Marker 语义 | `test_interactive_goal_navigation_e2e.py` |
-| 碰撞边界和工作空间边界 | `test_collision_checker.cpp` |
-| `short_gust`、`persistent_release=10 s`、进程集合、外力/Marker/恢复 | `test_assessment_disturbance_launch.py` 与节点级安全测试 |
+| `dynamics.yaml` | 动力学与电机参数 |
+| `controller.yaml` | 闭环控制参数 |
+| `mission.yaml` | 基础任务参数；assessment 入口禁用自动 waypoint |
+| `environment.yaml` | 唯一正式工作空间与六障碍物地图 |
+| `astar.yaml` | 规划离散化与安全余量 |
+| `planned_trajectory.yaml` | 路径简化与连续轨迹参数 |
+| `interactive_goal_editor.yaml` | RViz 编辑、预览与预检参数 |
+| `interactive_goal_executor.yaml` | 多目标执行与完成门控参数 |
 
-收束前基线为 45 个 CTest 目标，其中 `drone_bringup` 22 个，Launch/E2E 21 个，
-GTest/Pytest 24 个，内部测试用例 361 个。收束后的静态目标为 34 个 CTest，其中
-`drone_bringup` 11 个、Launch/E2E 11 个、GTest/Pytest 23 个；最终内部用例数以本轮
-唯一一次完整回归实测为 326 个。
+环境节点、预检和执行器必须加载同一份 `environment.yaml`。正式导航参数为
+`nominal_speed=0.50 m/s`、`max_reference_speed=0.90 m/s`、
+`max_reference_acceleration=0.60 m/s²`。该组合经三次完整地图验证，相比旧保守参数
+平均缩短约 13.9%，且未引入碰撞、控制饱和、非有限值或明显安全净空下降。
 
-## 三档回归
+## 8. 正式实验协议
+
+```text
+01 Hover
+02 Single Goal
+03 Basic Multi-goal Mission
+04 Full-map Static Avoidance
+05 Multi-goal 3D Navigation
+06 Disturbance
+   ├── Short Gust
+   └── Persistent Release
+```
+
+- 03：无障碍基础环境中的四目标顺序任务与终端 yaw。
+- 04：目标 `(13.2,5.5,1.5)` 的单目标全地图静态避障。
+- 05：在障碍环境中一次提交 P1→P2→P3→P4，验证四段规划、高度变化与各 Pose 的终端 yaw。
+- 06：`+X 0.30 N × 2 s` short gust 与 `+X 0.30 N × 10 s` persistent release 两组独立加分实验。
+
+05 的固定目标为 `(13.15,5.80,3.40,0°)`、`(9.70,-1.20,1.20,177°)`、
+`(6.30,5.55,2.35,-112°)`、`(0.45,5.70,1.00,-97°)`。原 narrow-corridor 协议已被
+该综合场景取代。
+
+正式运行由 `scripts/run_final_assessment.sh` 创建。临时 smoke 输出统一写入
+`/tmp/ros2_drone_assessment_smoke/`，不得作为报告证据。完整目录结构、schema、指标
+定义与 finalize 规则见 `results/README.md`。
+
+## 9. 最终验证状态
+
+七组 Final 的 analyzer 均通过，人工验收均完成，受保护证据与参数校验完整，根
+manifest 全部标记为可用于报告。截图策略为：hover、single、basic multi 与两组
+disturbance 可不登记截图；04 已登记 1 张；05 已登记 3 张。
+
+指标语义以正式结果文件为准。导航报告使用第一条有效正式路径段之后的 navigation
+tracking max/RMS，不使用包含起飞的 full-mission tracking。扰动报告使用撤力后持续
+满足保持条件的 `recovery_confirmed_time_s`；`recovery_time_s` 仅是首次进入门限的
+兼容别名。已有 Final 不得重新分析或 finalize。
+
+## 10. 测试策略
 
 ```bash
 bash scripts/test_fast.sh
@@ -141,87 +159,21 @@ bash scripts/test_assessment.sh
 bash scripts/test_full.sh
 ```
 
-- 普通修改：`test_fast.sh`；
-- 正式入口修改：`test_fast.sh` 后再运行 `test_assessment.sh`；
-- 阶段收尾或合并 `main` 前：仅在前两档通过后运行 `test_full.sh`；
-- 单独文档修改：不重跑完整仿真。
+- 普通修改：fast；
+- 正式入口修改：fast + assessment；
+- 阶段收尾：full；
+- 纯文档修改：不重跑飞行仿真。
 
-快速档运行全部底层测试和轻量安全测试，不运行三个长时间飞行任务。考核档只运行
-三个正式入口、基础入口的 single/multi 两种任务以及预检失败边界。完整档构建并测试
-整个工作区。三档通过标准均为 `errors=0`、`failures=0`。
+最终完整回归记录：fast 为 30 CTest / 313 内部用例，assessment 为 5 CTest / 16
+内部用例，full 为 34 CTest / 326 内部用例；均为 0 errors、0 failures、0 skipped。
+自动回归不能替代 RViz 目标/yaw、障碍与轨迹 Marker、绕行效果、扰动箭头和撤力恢复的
+人工检查。
 
-## 最终实验结果与人工验收边界
+## 11. 关键约束与禁止误述
 
-开发阶段的旧量化结果已从当前收束分支的 `results/` 移除；它们仍由 `main`、历史提交
-和 `assessment-feature-complete-v1` 标签完整保留。新 `results/` 只服务最终报告实验，
-临时调参与独立开发评测不得写入。标记为 `smoke` 的记录只验证统一记录/分析流程，
-不作为最终报告数据。
-
-后续批准的实验按 `01_hover`、`02_single_goal`、`03_multi_goal`、`04_navigation`、
-`05_disturbance`、`06_failure_case` 顺序生成。正式交互导航目标点与路线必须由用户最终
-选择，工具和文档不得代为决定或预填结果。
-
-统一评测工具对六类实验使用独立停止状态机。基础 multi 等待真实 mission complete，
-导航等待 interactive active 与 navigation complete/success，扰动等待外力开始、撤销和
-恢复，失败案例等待明确拒绝并完成地面安全观察。`goal_position_error` 表示实际位置到
-当前任务目标的距离；`tracking_error` 表示实际位置到 trajectory setpoint 的距离。
-`paths.json` 保存各目标的 planned/simplified/reference 唯一路径段，空 Path 只记录清除
-事件，不能覆盖历史。
-
-最终指标语义冻结在 schema 3。full-mission tracking 包含起飞；navigation tracking 从
-第一条带有效 goal index 的 reference 路径段开始，缺失时依次回退 planned、simplified
-和 navigation goal activation，报告优先采用 navigation max/RMS。路径段同时记录
-recording 和 mission 时间，任务前 transient-local 路径的 mission 时间为 null。
-
-多目标 activation 是目标正式成为当前目标的时间，非最终 arrival 等于下一目标
-activation，最终 arrival 等于 complete，duration 为 arrival 减 activation。扰动反向
-超调使用有效阶段平均水平外力方向的有符号位移，仅统计撤力后穿越目标到反方向的距离；
-它与无方向峰值水平偏差、沿力方向正向峰值是三个独立指标。
-
-唯一允许提交的 smoke 是 `results/01_hover/smoke`。single、multi、navigation、
-disturbance 和 failure_case 的工具验证写入 `/tmp/ros2_drone_assessment_smoke/`，不作为
-报告数据。参数表将 ROS 基础/导航完成门控与评测分析阈值分开记录；正式结果仍必须等待
-用户批准目标、路线、阈值和报告图表。
-
-自动回归证明执行链和安全条件，但不能替代以下人工检查：RViz 目标位置/yaw 编辑、
-原始与膨胀障碍 Marker、轨迹 Marker、明显绕行或通道视觉效果，以及抗扰箭头和撤力
-恢复过程。
-
-项目负责人已完成人工 RViz 验收：hover、single goal、multi goal、interactive
-navigation、full-map avoidance、failure rejection、short gust 和 persistent
-disturbance/release 均通过；单目标 Marker 已确认能够从 `GOAL CURRENT` 切换为
-`GOAL DONE`。导航速度与路径净空属于后续 `experiment/navigation-performance` 分支的
-性能探索，不是当前稳定基线的阻塞问题。
-
-## 正式采用 A2 导航参数
-
-本次 `perf/adopt-navigation-a2` 从 `experiment/navigation-performance` 的验证结论中
-只迁移正式产品所需的三个速度默认值和 Launch 透传，不合并实验工具或诊断字段，也不
-修改轨迹算法。正式参数为 `nominal_speed=0.50`、`max_reference_speed=0.90`、
-`max_reference_acceleration=0.60`；预览、预检和正式执行共用这组参数，并保留命令行
-恢复旧保守参数 `0.35/0.70/0.35` 的能力。
-
-旧保守 baseline 完整地图平均任务时间约 `67.421 s`；A2 实验为
-`58.021 / 58.041 / 58.061 s`，平均约 `58.041 s`，3/3 成功，相对缩短约
-`9.360 s`（`13.887%`）。三次均无碰撞、控制饱和或非有限值，最小安全净空基本不变
-（约 `0.1502 m`），tracking max/RMS 均在安全范围；略增的拐角 tracking、cross-track
-和姿态响应已通过人工验收。A3 虽更快，但控制反馈余量更小，未采用；simplifier
-clearance preference（S）和 corner timing（T）实验也未进入正式主线。
-
-产品提交 `01f0cdb` 在工作树干净且正式入口不带速度 override 的条件下完成最终采用
-验证。完整地图三次任务时间为 `58.040 / 58.065 / 58.020 s`，mean/min/max/std 为
-`58.042 / 58.020 / 58.065 / 0.018 s`，3/3 成功；相对 `67.421 s` baseline 改善
-`9.379 s`（`13.912%`）。三次 tracking max 为
-`0.024745 / 0.029895 / 0.022903 m`，RMS 为
-`0.009690 / 0.011076 / 0.009607 m`，最终误差均约 `0.0038 m`，最小安全净空均约
-`0.15018 m`。最大绝对 roll/pitch 约 `0.03620/0.06243 rad`，最大 RPM 为
-`13067.5`；无碰撞、饱和或非有限值。运行时读取确认 editor 与 executor 节点均使用
-`0.50/0.90/0.60`。全部原始验证数据仅位于 `/tmp/ros2_drone_a2_adoption/`。
-
-本轮分级回归记录：
-
-| 档位 | CTest / 内部用例 | 结果 | 总耗时 |
-|---|---:|---|---:|
-| `test_fast.sh` | 30 / 313 | `0 errors, 0 failures, 0 skipped` | `24.39 s` |
-| `test_assessment.sh` | 5 / 16 | `0 errors, 0 failures, 0 skipped` | `120.90 s` |
-| `test_full.sh`（本轮唯一一次） | 34 / 326 | `0 errors, 0 failures, 0 skipped` | `136.20 s` |
+- 不把水平 `P + D + 受限 I + 前馈`、高度/姿态 PD 统称为完整 PID。
+- 不声称静态障碍具有接触物理，不把集中等效外力描述成完整风场。
+- 不声称实现动态障碍、局部重规划、MPC 或完整姿态规划。
+- 不把 smoke/trial、全任务通用指标或旧 narrow-corridor 结果当作正式报告证据。
+- 不将 full-mission tracking 与 navigation tracking 混用。
+- 不修改或重新生成七组已 finalize 的正式证据；Reviewer 保持为 `Peter`。

@@ -1,0 +1,10 @@
+recording_time_s,mission_time_s,event,details
+0.0,,recording_started,{}
+0.010003089904785156,,waypoint_index_changed,"{""value"":0}"
+0.010003089904785156,,mission_complete_changed,"{""value"":false}"
+2.9185757637023926,0.0,mission_started,"{""source"":""goal_received""}"
+2.9185757637023926,0.0,goal_received,"{""position"":[0.0,0.0,1.5],""yaw_rad"":0.0}"
+6.465002536773682,3.546426773071289,goal_activated,"{""goal_index"":0,""source"":""mission_waypoint_index""}"
+6.465002536773682,3.546426773071289,mission_complete_changed,"{""value"":true}"
+6.975062370300293,4.0564866065979,arrival_confirmed,{}
+9.979997634887695,7.061421871185303,recording_stopped,"{""reason"":""arrival_and_steady_window_complete""}"

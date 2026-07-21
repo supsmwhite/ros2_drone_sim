@@ -1,0 +1,51 @@
+[INFO] [launch]: All log files can be found below /home/peter/.ros/log/2026-07-21-14-55-12-027250-peter-acer-62982
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [quadrotor_dynamics_node-1]: process started with pid [62997]
+[INFO] [position_controller_node-2]: process started with pid [62999]
+[INFO] [robot_state_publisher-3]: process started with pid [63001]
+[INFO] [goal_visualizer_node-4]: process started with pid [63003]
+[INFO] [waypoint_manager_node-5]: process started with pid [63005]
+[robot_state_publisher-3] [INFO] [1784616912.146963945] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-3] [INFO] [1784616912.147039586] [robot_state_publisher]: got segment front_marker_link
+[robot_state_publisher-3] [INFO] [1784616912.147044700] [robot_state_publisher]: got segment m1_arm_link
+[robot_state_publisher-3] [INFO] [1784616912.147047191] [robot_state_publisher]: got segment m1_motor_link
+[robot_state_publisher-3] [INFO] [1784616912.147049969] [robot_state_publisher]: got segment m1_rotor_link
+[robot_state_publisher-3] [INFO] [1784616912.147052407] [robot_state_publisher]: got segment m2_arm_link
+[robot_state_publisher-3] [INFO] [1784616912.147054776] [robot_state_publisher]: got segment m2_motor_link
+[robot_state_publisher-3] [INFO] [1784616912.147057142] [robot_state_publisher]: got segment m2_rotor_link
+[robot_state_publisher-3] [INFO] [1784616912.147059582] [robot_state_publisher]: got segment m3_arm_link
+[robot_state_publisher-3] [INFO] [1784616912.147061893] [robot_state_publisher]: got segment m3_motor_link
+[robot_state_publisher-3] [INFO] [1784616912.147064163] [robot_state_publisher]: got segment m3_rotor_link
+[robot_state_publisher-3] [INFO] [1784616912.147066372] [robot_state_publisher]: got segment m4_arm_link
+[robot_state_publisher-3] [INFO] [1784616912.147068592] [robot_state_publisher]: got segment m4_motor_link
+[robot_state_publisher-3] [INFO] [1784616912.147070875] [robot_state_publisher]: got segment m4_rotor_link
+[waypoint_manager_node-5] [INFO] [1784616912.148175458] [waypoint_manager_node]: configured waypoints ignored; runtime mission mode is waiting
+[position_controller_node-2] [INFO] [1784616912.148446855] [position_controller_node]: 3D position controller started at 100.0 Hz (source=pose_goal, odom timeout 0.200 s)
+[waypoint_manager_node-5] [INFO] [1784616912.150263722] [waypoint_manager_node]: waiting for runtime mission
+[quadrotor_dynamics_node-1] [INFO] [1784616912.156596579] [quadrotor_dynamics_node]: Dynamics started at 200.0 Hz; nominal steady-state hover RPM is 10818.9; ground contact is enabled at z=0.000 m; motor command watchdog is enabled (0.300 s)
+[quadrotor_dynamics_node-1] [INFO] [1784616912.156668555] [quadrotor_dynamics_node]: External wrench input is disabled (frame=map, force_limit=2.000 N, timeout=0.200 s, torque_limit=0.000 N*m; torque must be zero)
+[position_controller_node-2] [WARN] [1784616912.158549225] [position_controller_node]: Waiting for /drone/goal; RPM=0
+[position_controller_node-2] [WARN] [1784616913.168556827] [position_controller_node]: Waiting for /drone/goal; RPM=0
+[position_controller_node-2] [WARN] [1784616914.178515539] [position_controller_node]: Waiting for /drone/goal; RPM=0
+[position_controller_node-2] [WARN] [1784616915.178516544] [position_controller_node]: Waiting for /drone/goal; RPM=0
+[position_controller_node-2] [WARN] [1784616916.188517542] [position_controller_node]: Waiting for /drone/goal; RPM=0
+[waypoint_manager_node-5] [INFO] [1784616916.497069939] [waypoint_manager_node]: accepted runtime mission with 1 waypoints
+[position_controller_node-2] [INFO] [1784616916.508484580] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 0.000] world_v=[0.000, 0.000, 0.000] a_xy=[0.000, 0.000] thrust=14.307 torque=[0.0000, 0.0000, 0.0000] rpm_pre=[13067.5, 13067.5, 13067.5, 13067.5] rpm=[13067.5, 13067.5, 13067.5, 13067.5] saturation=[horizontal:false altitude:false attitude:false mixer:false] saturated=false
+[position_controller_node-2] [INFO] [1784616917.518422401] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 0.717] world_v=[0.000, 0.000, 0.864] a_xy=[0.000, 0.000] thrust=9.130 torque=[0.0000, 0.0000, 0.0000] rpm_pre=[10438.9, 10438.9, 10438.9, 10438.9] rpm=[10438.9, 10438.9, 10438.9, 10438.9] saturation=[horizontal:false altitude:false attitude:false mixer:false] saturated=false
+[position_controller_node-2] [INFO] [1784616918.518427984] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.266] world_v=[0.000, 0.000, 0.297] a_xy=[0.000, 0.000] thrust=9.468 torque=[0.0000, 0.0000, 0.0000] rpm_pre=[10630.4, 10630.4, 10630.4, 10630.4] rpm=[10630.4, 10630.4, 10630.4, 10630.4] saturation=[horizontal:false altitude:false attitude:false mixer:false] saturated=false
+[position_controller_node-2] [INFO] [1784616919.518454568] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.435] world_v=[0.000, 0.000, 0.084] a_xy=[0.000, 0.000] thrust=9.707 torque=[0.0000, 0.0000, 0.0000] rpm_pre=[10763.6, 10763.6, 10763.6, 10763.6] rpm=[10763.6, 10763.6, 10763.6, 10763.6] saturation=[horizontal:false altitude:false attitude:false mixer:false] saturated=false
+[waypoint_manager_node-5] [INFO] [1784616920.050319448] [waypoint_manager_node]: waypoint 0 accepted; mission complete
+[position_controller_node-2] [INFO] [1784616920.518508814] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.482] world_v=[0.000, 0.000, 0.023] a_xy=[0.000, 0.000] thrust=9.779 torque=[0.0000, 0.0000, 0.0000] rpm_pre=[10803.7, 10803.7, 10803.7, 10803.7] rpm=[10803.7, 10803.7, 10803.7, 10803.7] saturation=[horizontal:false altitude:false attitude:false mixer:false] saturated=false
+[position_controller_node-2] [INFO] [1784616921.528389777] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.495] world_v=[0.000, 0.000, 0.006] a_xy=[0.000, 0.000] thrust=9.799 torque=[0.0000, 0.0000, 0.0000] rpm_pre=[10814.8, 10814.8, 10814.8, 10814.8] rpm=[10814.8, 10814.8, 10814.8, 10814.8] saturation=[horizontal:false altitude:false attitude:false mixer:false] saturated=false
+[position_controller_node-2] [INFO] [1784616922.528497350] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.499] world_v=[0.000, 0.000, 0.002] a_xy=[0.000, 0.000] thrust=9.805 torque=[0.0000, 0.0000, 0.0000] rpm_pre=[10817.8, 10817.8, 10817.8, 10817.8] rpm=[10817.8, 10817.8, 10817.8, 10817.8] saturation=[horizontal:false altitude:false attitude:false mixer:false] saturated=false
+[position_controller_node-2] [INFO] [1784616923.538421889] [position_controller_node]: position target=[0.000, 0.000, 1.500] current=[0.000, 0.000, 1.500] world_v=[0.000, 0.000, 0.000] a_xy=[0.000, 0.000] thrust=9.806 torque=[0.0000, 0.0000, 0.0000] rpm_pre=[10818.6, 10818.6, 10818.6, 10818.6] rpm=[10818.6, 10818.6, 10818.6, 10818.6] saturation=[horizontal:false altitude:false attitude:false mixer:false] saturated=false
+[position_controller_node-2] [INFO] [1784616923.887936803] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[goal_visualizer_node-4] [INFO] [1784616923.887937050] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[quadrotor_dynamics_node-1] [INFO] [1784616923.887981403] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-3] [INFO] [1784616923.888038640] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[waypoint_manager_node-5] [INFO] [1784616923.888038145] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-3]: process has finished cleanly [pid 63001]
+[INFO] [position_controller_node-2]: process has finished cleanly [pid 62999]
+[INFO] [waypoint_manager_node-5]: process has finished cleanly [pid 63005]
+[INFO] [quadrotor_dynamics_node-1]: process has finished cleanly [pid 62997]
+[INFO] [goal_visualizer_node-4]: process has finished cleanly [pid 63003]

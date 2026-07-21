@@ -132,6 +132,23 @@ def test_navigation_acceptance_response_formats(tmp_path, response, accepted):
     assert (result.returncode == 0) is accepted
 
 
+def test_domain_daemon_cleanup_uses_the_trial_domain(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_ros2 = fake_bin / "ros2"
+    fake_ros2.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s|%s\\n' \"$ROS_DOMAIN_ID\" \"$*\" >\"$DAEMON_CALL_LOG\"\n")
+    fake_ros2.chmod(0o755)
+    call_log = tmp_path / "daemon-call.log"
+    command = (
+        f"source '{REPO / 'scripts/final_assessment_lib.sh'}'; "
+        "stop_ros_domain_daemon 177")
+    env = {"PATH": f"{fake_bin}:/usr/bin:/bin", "DAEMON_CALL_LOG": str(call_log)}
+    subprocess.run(["bash", "-c", command], check=True, env=env)
+    assert call_log.read_text() == "177|daemon stop\n"
+
+
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 

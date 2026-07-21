@@ -145,6 +145,7 @@ stop_process_group() {
 cleanup() {
   stop_process_group "$recorder_pid"
   stop_process_group "$launch_pid"
+  stop_ros_domain_daemon "$domain_id"
   preserve_assessment_logs "$temporary_logs" "$run_dir"
   rm -rf -- "$temporary_logs"
 }

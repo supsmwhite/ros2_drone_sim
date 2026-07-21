@@ -13,3 +13,9 @@ preserve_assessment_logs() {
 navigation_response_was_accepted() {
   grep -Eq "accepted(: true|=True)" "$1"
 }
+
+stop_ros_domain_daemon() {
+  local domain_id="$1"
+  command -v ros2 >/dev/null 2>&1 || return 0
+  ROS_DOMAIN_ID="$domain_id" ros2 daemon stop >/dev/null 2>&1 || true
+}

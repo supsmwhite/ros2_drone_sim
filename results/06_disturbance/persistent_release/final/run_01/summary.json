@@ -1,0 +1,233 @@
+{
+  "schema_version": 3,
+  "experiment": "disturbance",
+  "scenario_id": "disturbance_persistent_release",
+  "status": "final",
+  "repository_commit": "08cf64ee32d38fccb0149c47081e5b9ba22da61f",
+  "sample_count": 5545,
+  "mission_sample_count": 5539,
+  "navigation_phase_start_time_s": null,
+  "navigation_phase_start_source": null,
+  "metrics": {
+    "final_position_error_m": 0.05984137443368622,
+    "final_speed_m_s": 0.02357385421655744,
+    "final_window_mean_error_m": 0.07204729858487115,
+    "recorded_targets": [
+      {
+        "position": [
+          0.0,
+          0.0,
+          1.5
+        ],
+        "yaw_rad": 0.0
+      }
+    ],
+    "target_snapshot_matches_samples": true,
+    "yaw_metrics_status": "available",
+    "yaw_sample_count": 5539,
+    "final_yaw_error_rad": -2.4144136048622994e-18,
+    "yaw_error_rms_rad": 3.88736778486594e-17,
+    "maximum_absolute_yaw_error_rad": 1.391757820862874e-16,
+    "arrival_time_s": 2.1710078716278076,
+    "maximum_overshoot_m": 3.9324445624711046e-05,
+    "maximum_overshoot_percent": 0.00437085902912723,
+    "steady_state_mean_error_m": 0.08752874563688402,
+    "steady_state_rms_error_m": 0.0884199474383728,
+    "steady_state_max_error_m": 0.10149598504702995,
+    "maximum_goal_position_error_m": 0.8996960405873197,
+    "full_mission_tracking_max_error_m": null,
+    "full_mission_tracking_rms_error_m": null,
+    "minimum_raw_obstacle_distance_m": 1.7150397313322345,
+    "safety_radius_m": 0.25,
+    "minimum_safety_clearance_m": 1.4650397313322345,
+    "straight_line_distance_m": 0.8996960405873197,
+    "actual_path_length_m": 2.012767255591581,
+    "flight_time_s": 27.689229488372803,
+    "planned_segment_count": 0,
+    "simplified_segment_count": 0,
+    "reference_segment_count": 0,
+    "planned_path_length_m": null,
+    "simplified_path_length_m": null,
+    "reference_path_length_m": null,
+    "path_efficiency": null,
+    "planned_vs_straight_ratio": null,
+    "actual_vs_reference_ratio": null,
+    "maximum_absolute_roll_rad": 1.8580584848564153e-16,
+    "maximum_absolute_pitch_rad": 0.038775494625750286,
+    "maximum_angular_speed_rad_s": 0.0801448328573471,
+    "non_finite_attitude_count": 0,
+    "attitude_divergence_detected": false,
+    "minimum_commanded_motor_rpm": 10425.313792648614,
+    "maximum_commanded_motor_rpm": 10884.538546909022,
+    "minimum_motor_rpm": 10425.313792648614,
+    "maximum_motor_rpm": 10884.538546909022,
+    "motor_rpm_semantics": "commanded_motor_rpm",
+    "saturation_sample_source": "diagnostics_callbacks",
+    "saturation_sample_count": 0,
+    "longest_saturation_duration_s": 0.0,
+    "saturated_at_end": false,
+    "non_finite_rpm_count": 0,
+    "force_start_time_s": 13.640605926513672,
+    "force_release_time_s": 23.680356740951538,
+    "force_duration_s": 10.039750814437866,
+    "mean_horizontal_force_n": [
+      0.3,
+      0.0
+    ],
+    "peak_horizontal_deviation_m": 0.48496026866776565,
+    "peak_force_direction_displacement_m": 0.48496026866776565,
+    "disturbance_steady_state_error_m": 0.05969731258684394,
+    "recovery_time_s": 0.0,
+    "reverse_overshoot_m": 0.10149598450359482
+  },
+  "yaw_analysis": {
+    "status": "available",
+    "reference_field": "goal_yaw",
+    "error_definition": "wrap_to_pi(reference_yaw - actual_yaw)",
+    "completion_gate_yaw_tolerance_rad": 0.1,
+    "completion_gate_source": "mission.yaml:yaw_tolerance",
+    "acceptance_threshold_applied": false
+  },
+  "assignment_thresholds": {
+    "hover_final_position_error_max_m": 0.3
+  },
+  "project_thresholds": {
+    "final_position_error_max_m": 0.1,
+    "minimum_safety_clearance_strictly_greater_than_m": 0.0,
+    "non_finite_value_count": 0,
+    "attitude_divergence_detected": false,
+    "saturated_at_end": false
+  },
+  "legacy_checks": {
+    "assignment_hover_error_pass": true,
+    "project_final_error_pass": true,
+    "finite_attitude_pass": true,
+    "finite_rpm_pass": true,
+    "attitude_stability_pass": true,
+    "rpm_end_saturation_pass": true
+  },
+  "checks": {
+    "stop_reason_not_timeout": {
+      "metric_name": "stop_reason_not_timeout",
+      "actual_value": "disturbance_recovery_and_steady_window_complete",
+      "threshold": "must not start with timeout",
+      "passed": true,
+      "source": "metadata.json:stop_reason"
+    },
+    "finite_attitude": {
+      "metric_name": "finite_attitude",
+      "actual_value": 0,
+      "threshold": 0,
+      "passed": true,
+      "source": "samples.csv:roll,pitch,yaw"
+    },
+    "finite_commanded_rpm": {
+      "metric_name": "finite_commanded_rpm",
+      "actual_value": 0,
+      "threshold": 0,
+      "passed": true,
+      "source": "samples.csv:commanded_motor_rpm / legacy m*_rpm"
+    },
+    "no_attitude_divergence": {
+      "metric_name": "no_attitude_divergence",
+      "actual_value": false,
+      "threshold": false,
+      "passed": true,
+      "source": "analyzer:attitude duration"
+    },
+    "not_saturated_at_end": {
+      "metric_name": "not_saturated_at_end",
+      "actual_value": false,
+      "threshold": false,
+      "passed": true,
+      "source": "diagnostics.csv:last mission callback / legacy Odom"
+    },
+    "disturbance_profile": {
+      "metric_name": "disturbance_profile",
+      "actual_value": "persistent_release",
+      "threshold": "persistent_release",
+      "passed": true,
+      "source": "metadata.json:scenario_id,disturbance_profile"
+    },
+    "disturbance_stop": {
+      "metric_name": "disturbance_stop",
+      "actual_value": "disturbance_recovery_and_steady_window_complete",
+      "threshold": "disturbance_recovery_and_steady_window_complete",
+      "passed": true,
+      "source": "metadata.json:stop_reason"
+    },
+    "force_start_observed": {
+      "metric_name": "force_start_observed",
+      "actual_value": 13.640605926513672,
+      "threshold": "available",
+      "passed": true,
+      "source": "events.csv:external_force_started"
+    },
+    "force_release_observed": {
+      "metric_name": "force_release_observed",
+      "actual_value": 23.680356740951538,
+      "threshold": "available",
+      "passed": true,
+      "source": "events.csv:external_force_released"
+    },
+    "force_duration": {
+      "metric_name": "force_duration",
+      "actual_value": 10.039750814437866,
+      "threshold": "10.0 \u00b1 0.2 s",
+      "passed": true,
+      "source": "events.csv force start/release"
+    },
+    "mean_horizontal_force": {
+      "metric_name": "mean_horizontal_force",
+      "actual_value": [
+        0.3,
+        0.0
+      ],
+      "threshold": [
+        0.3,
+        0.0
+      ],
+      "passed": true,
+      "source": "samples.csv external force during active interval"
+    },
+    "recovery_time_available": {
+      "metric_name": "recovery_time_available",
+      "actual_value": 0.0,
+      "threshold": "available",
+      "passed": true,
+      "source": "samples.csv post-release recovery gate"
+    },
+    "correct_target_recorded": {
+      "metric_name": "correct_target_recorded",
+      "actual_value": [
+        {
+          "position": [
+            0.0,
+            0.0,
+            1.5
+          ],
+          "yaw_rad": 0.0
+        }
+      ],
+      "threshold": true,
+      "passed": true,
+      "source": "metadata.json target snapshot + samples.csv goal"
+    },
+    "final_position_error": {
+      "metric_name": "final_position_error",
+      "actual_value": 0.05984137443368622,
+      "threshold": "< 0.10 m",
+      "passed": true,
+      "source": "samples.csv:last mission sample"
+    },
+    "final_speed": {
+      "metric_name": "final_speed",
+      "actual_value": 0.02357385421655744,
+      "threshold": "< 0.08 m/s",
+      "passed": true,
+      "source": "samples.csv:last mission sample"
+    }
+  },
+  "overall_pass": true,
+  "failure_reasons": []
+}

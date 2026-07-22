@@ -181,8 +181,32 @@ ros2 service call /drone/interactive_goals/execute \
   "{goals: {header: {frame_id: map}, poses: [{position: {x: 13.2, y: 5.5, z: 1.5}, orientation: {w: 1.0}}]}, draft_revision: 1}"
 ```
 
-四目标正式 Service 请求及完整协议见 `scripts/run_final_assessment.sh` 和
-`results/README.md`。
+四目标三维导航使用同一个 Service，一次提交 P1 → P2 → P3 → P4 的完整任务快照：
+
+```bash
+ros2 service call /drone/interactive_goals/execute \
+  drone_msgs/srv/ExecuteGoalSequence \
+  "{goals: {header: {frame_id: map}, poses: [
+    {position: {x: 13.15, y: 5.80, z: 3.40}, orientation: {x: 0.0, y: 0.0, z: 0.0000000000000000, w: 1.0000000000000000}},
+    {position: {x: 9.70, y: -1.20, z: 1.20}, orientation: {x: 0.0, y: 0.0, z: 0.9996573249755573, w: 0.0261769483078731}},
+    {position: {x: 6.30, y: 5.55, z: 2.35}, orientation: {x: 0.0, y: 0.0, z: -0.8290375725550417, w: 0.5591929034707468}},
+    {position: {x: 0.45, y: 5.70, z: 1.00}, orientation: {x: 0.0, y: 0.0, z: -0.7489557207890021, w: 0.6626200482157375}}
+  ]}, draft_revision: 1}"
+```
+
+正式协议固定为：
+
+| 目标 | 位置 `(x, y, z)` / m | 终端 yaw |
+|---|---|---|
+| P1 | `(13.15, 5.80, 3.40)` | `0°` |
+| P2 | `(9.70, -1.20, 1.20)` | `177°` |
+| P3 | `(6.30, 5.55, 2.35)` | `-112°` |
+| P4 | `(0.45, 5.70, 1.00)` | `-97°` |
+
+请求必须使用 `map` 坐标系并保持上述 Pose 顺序、位置、高度和四元数；
+`draft_revision: 1` 标识本次任务快照。默认 `yaw_mode:=path_tangent` 使飞行段朝向沿路径
+切线变化，到达各目标时再满足对应 Pose 的终端 yaw。执行器会依次为四段飞行重新规划；
+请求被接受后，同一次导航 Launch 不再接受第二个任务，如需重跑应重启 Launch。
 
 ### 抗扰演示
 

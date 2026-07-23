@@ -109,10 +109,17 @@ CSV、路径、事件、summary 和图表。
 | `interactive_goal_editor.yaml` | RViz 编辑、预览与预检参数 |
 | `interactive_goal_executor.yaml` | 多目标执行与完成门控参数 |
 
-环境节点、预检和执行器必须加载同一份 `environment.yaml`。正式导航参数为
-`nominal_speed=0.50 m/s`、`max_reference_speed=0.90 m/s`、
-`max_reference_acceleration=0.60 m/s²`。该组合经三次完整地图验证，相比旧保守参数
-平均缩短约 13.9%，且未引入碰撞、控制饱和、非有限值或明显安全净空下降。
+环境节点、预检和执行器必须加载同一份 `environment.yaml`。当前推荐导航参数为
+`nominal_speed=0.55 m/s`、`max_reference_speed=0.95 m/s`、
+`max_reference_acceleration=0.65 m/s²`、`max_horizontal_acceleration=0.84 m/s²`，
+`min_segment_duration=2.0 s` 与 `max_tilt_angle=0.15 rad` 不变。参考加速度相对控制
+限幅保留约 `22.6%` 余量，控制限幅低于 `g*tan(0.15)=1.482 m/s²`。控制 P/D/I
+参数未改。
+
+旧的 `0.50/0.90/0.60/0.80` 仍是七组 finalized 结果的参数快照，不得回写或重新
+分析。新参数仅通过独立 smoke、assessment 回归和非正式四目标 Trial 验证；Trial
+任务时间 `122.06 s`，相对旧正式 `133.87 s` 缩短 `8.82%`，但不登记为报告证据。
+详细候选与门槛见 `docs/navigation_speed_validation.md`。
 
 ## 8. 正式实验协议
 
@@ -164,8 +171,8 @@ bash scripts/test_full.sh
 - 阶段收尾：full；
 - 纯文档修改：不重跑飞行仿真。
 
-最终完整回归记录：fast 为 30 CTest / 313 内部用例，assessment 为 5 CTest / 16
-内部用例，full 为 34 CTest / 326 内部用例；均为 0 errors、0 failures、0 skipped。
+最终完整回归记录：fast 为 30 CTest / 316 内部用例，assessment 为 5 CTest / 16
+内部用例，full 为 34 CTest / 329 内部用例；均为 0 errors、0 failures、0 skipped。
 自动回归不能替代 RViz 目标/yaw、障碍与轨迹 Marker、绕行效果、扰动箭头和撤力恢复的
 人工检查。
 
@@ -177,3 +184,4 @@ bash scripts/test_full.sh
 - 不把 smoke/trial、全任务通用指标或旧 narrow-corridor 结果当作正式报告证据。
 - 不将 full-mission tracking 与 navigation tracking 混用。
 - 不修改或重新生成七组已 finalize 的正式证据；Reviewer 保持为 `Peter`。
+- 不把当前性能 Trial 的 `122.06 s` 误述为新的 finalized 正式结果或系统最大速度。

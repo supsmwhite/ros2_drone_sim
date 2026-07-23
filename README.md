@@ -132,6 +132,26 @@ Odometry / IMU / RViz / Results
 七组正式结果均已完成自动分析、人工验收和证据 finalize，`results/manifest.json` 中
 均为 `report_eligible=true`，Reviewer 为 `Peter`。
 
+### 当前导航性能参数
+
+在不改动力学、地图、安全膨胀、碰撞检查、RPM 上限和控制增益的前提下，后续性能
+优化把默认参数从
+`nominal_speed/max_reference_speed/max_reference_acceleration/max_horizontal_acceleration`
+的 `0.50/0.90/0.60/0.80` 调整为 `0.55/0.95/0.65/0.84`（SI 单位）。
+这不是固定速度目标，也不代表系统最大速度，而是当前仿真模型、控制结构、规划方法
+和正式地图下，经验证的推荐导航性能参数。
+
+独立 smoke 的 open、obstacle、turning 导航时间分别从
+`17.84/54.41/41.10 s` 降至 `17.04/53.64/39.12 s`。固定 P1→P2→P3→P4 的临时
+Trial 从现有正式结果的 `133.87 s` 降至 `122.06 s`（`8.82%`），导航跟踪最大/RMS
+为 `0.03202/0.01111 m`，最小安全净空 `0.18022 m`，RPM 峰值 `65.34%`，控制饱和、
+碰撞和非有限值均为 `0`。复杂障碍、急转弯和高度变化仍会通过
+`duration_scale`/`velocity_scale` 自动降速。
+
+这些 smoke/Trial 全部位于 `/tmp/ros2_drone_assessment_smoke/navigation_speed/`，没有
+替换或重新分析上方七组 finalized 正式结果。复现方法、候选淘汰原因和冻结门槛见
+[`docs/navigation_speed_validation.md`](docs/navigation_speed_validation.md)。
+
 ## 构建与运行
 
 ```bash
@@ -253,10 +273,12 @@ python3 scripts/monitor_assessment.py --domain-id 137
 bash scripts/test_fast.sh
 bash scripts/test_assessment.sh
 bash scripts/test_full.sh
+bash scripts/test_navigation_speed_smoke.sh all --candidate local_check
 ```
 
 普通代码修改运行 fast；正式入口修改追加 assessment；阶段收尾运行 full。人工 RViz
 验收与自动回归分别记录，自动测试不能替代目标编辑、Marker、绕行轨迹和扰动箭头检查。
+导航性能 smoke 只写临时目录，不登记为正式证据。
 
 ## 系统边界
 

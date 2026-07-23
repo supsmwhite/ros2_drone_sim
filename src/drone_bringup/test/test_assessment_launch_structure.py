@@ -112,11 +112,11 @@ def test_navigation_public_defaults_and_forwarded_arguments():
     assert defaults == {
         'yaw_mode': 'path_tangent',
         'use_rviz': 'true',
-        'nominal_speed': '0.50',
+        'nominal_speed': '0.55',
         'min_segment_duration': '2.0',
-        'max_reference_speed': '0.90',
-        'max_reference_acceleration': '0.60',
-        'max_horizontal_acceleration': '0.8',
+        'max_reference_speed': '0.95',
+        'max_reference_acceleration': '0.65',
+        'max_horizontal_acceleration': '0.84',
         'max_tilt_angle': '0.15',
     }
     includes = [
@@ -136,11 +136,11 @@ def test_internal_navigation_speed_defaults_and_node_overrides_match():
     _, description = _load_launch('interactive_goal_navigation_sim.launch.py')
     defaults = _declared_defaults(description)
     expected_defaults = {
-        'nominal_speed': '0.50',
+        'nominal_speed': '0.55',
         'min_segment_duration': '2.0',
-        'max_reference_speed': '0.90',
-        'max_reference_acceleration': '0.60',
-        'max_horizontal_acceleration': '0.8',
+        'max_reference_speed': '0.95',
+        'max_reference_acceleration': '0.65',
+        'max_horizontal_acceleration': '0.84',
         'max_tilt_angle': '0.15',
     }
     assert {key: defaults[key] for key in expected_defaults} == expected_defaults
@@ -159,18 +159,21 @@ def test_internal_navigation_speed_defaults_and_node_overrides_match():
     } == trajectory_overrides
 
 
-def test_formal_navigation_yaml_and_snapshot_use_a2_defaults():
-    expected = {
-        'nominal_speed': 0.50,
-        'max_reference_speed': 0.90,
-        'max_reference_acceleration': 0.60,
-    }
+def test_formal_navigation_yaml_uses_validated_defaults_and_snapshot_stays_immutable():
     repository = LAUNCH.parents[2]
-    paths = [
-        LAUNCH.parent / 'config' / 'planned_trajectory.yaml',
-        repository / 'results' / 'parameters' / 'planned_trajectory.yaml',
-    ]
-    for path in paths:
+    expected_by_path = {
+        LAUNCH.parent / 'config' / 'planned_trajectory.yaml': {
+            'nominal_speed': 0.55,
+            'max_reference_speed': 0.95,
+            'max_reference_acceleration': 0.65,
+        },
+        repository / 'results' / 'parameters' / 'planned_trajectory.yaml': {
+            'nominal_speed': 0.50,
+            'max_reference_speed': 0.90,
+            'max_reference_acceleration': 0.60,
+        },
+    }
+    for path, expected in expected_by_path.items():
         data = yaml.safe_load(path.read_text(encoding='utf-8'))
         parameters = next(iter(data.values()))['ros__parameters']
         assert {key: parameters[key] for key in expected} == expected

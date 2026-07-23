@@ -196,6 +196,9 @@ set -u
 export ROS_DOMAIN_ID="$domain_id"
 cd "$repo_root"
 
+echo "Live monitor (optional third terminal):"
+echo "  python3 scripts/monitor_assessment.py --domain-id ${domain_id}"
+
 setsid "${launch_command[@]}" >"${temporary_logs}/launch.log" 2>&1 &
 launch_pid=$!
 

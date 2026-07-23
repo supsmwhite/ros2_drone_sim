@@ -217,6 +217,33 @@ ros2 launch drone_bringup assessment_disturbance_sim.launch.py \
 
 持续外力场景使用 `profile:=persistent_release`。
 
+### 实时指标监控（可选第三终端）
+
+同一个只读监控器适用于基础单目标/多目标、静态避障、四目标三维导航和两种抗扰场景：
+
+```bash
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+python3 scripts/monitor_assessment.py
+```
+
+监控器会根据收到的话题自动识别场景，并显示当前位置、当前目标、目标距离、轨迹跟踪
+误差、终端 yaw 误差、速度、任务时间、目标进度、障碍距离、安全净空、碰撞状态和控制
+饱和状态；抗扰场景还会显示外力向量、外力阶段计时、水平误差与积分补偿。任务运行时
+会累计最大目标/跟踪/yaw 误差、最大速度、最小安全净空、峰值外力和饱和记录；任务结束
+后计时回到 `0.0 s` 并保留上一任务汇总，按 `Ctrl+C` 会打印本次监控期间各任务的最终
+摘要。它只订阅 Topic，不发布目标或控制命令。建议先启动监控器，再提交任务，以获得
+完整任务计时。
+
+手动 Launch 默认无需指定 ROS Domain。通过 `scripts/run_final_assessment.sh` 运行时，脚本
+会打印包含实际 Domain 的第三终端命令，例如：
+
+```bash
+python3 scripts/monitor_assessment.py --domain-id 137
+```
+
+也可使用 `--mode basic|navigation|disturbance` 固定显示模式，或用 `--rate 5` 调整刷新率。
+
 正式实验协议、Recorder、Analyzer、manifest、指标语义和证据校验规则见
 `results/README.md`。
 

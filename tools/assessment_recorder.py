@@ -22,12 +22,15 @@ from assessment_metrics import (ExperimentStopController, PathHistory,
 EXPERIMENTS = ("hover", "single_goal", "multi_goal", "navigation", "disturbance", "failure_case")
 PROTOCOL_VERSION = "final-assessment-v1"
 FIELDS = ("recording_time_s mission_time_s goal_x goal_y goal_z reference_x reference_y reference_z "
+          "reference_velocity_x reference_velocity_y reference_velocity_z "
+          "reference_acceleration_x reference_acceleration_y reference_acceleration_z "
           "actual_x actual_y actual_z goal_error_x goal_error_y goal_error_z goal_position_error "
           "tracking_error_x tracking_error_y tracking_error_z tracking_error goal_yaw reference_yaw yaw_error "
           "body_velocity_x body_velocity_y body_velocity_z map_velocity_x map_velocity_y map_velocity_z "
           "speed roll pitch yaw angular_speed_x angular_speed_y angular_speed_z "
           "commanded_motor_rpm_m1 commanded_motor_rpm_m2 commanded_motor_rpm_m3 commanded_motor_rpm_m4 "
           "horizontal_saturated altitude_saturated attitude_saturated "
+          "commanded_horizontal_acceleration_x commanded_horizontal_acceleration_y "
           "mixer_saturated raw_obstacle_distance safety_clearance mission_waypoint_index "
           "mission_complete mission_success navigation_goal_index navigation_visited_goals "
           "navigation_complete navigation_success interactive_ready interactive_active "
@@ -104,7 +107,8 @@ class Recorder:
         self.observed_targets=[]; self.current_goal=None; self.current_goal_yaw=None
         self.final_goal=self.protocol_targets[-1]["position"] if self.protocol_targets else None
         self.final_goal_yaw=self.protocol_targets[-1]["yaw_rad"] if self.protocol_targets else None
-        self.reference=None; self.reference_yaw=None; self.goals=[]
+        self.reference=None; self.reference_velocity=None; self.reference_acceleration=None
+        self.reference_yaw=None; self.goals=[]
         self.rpm=self.diag=self.imu=None; self.force=[0.,0.,0.]; self.force_active=None
         self.mission_index=self.navigation_index=self.visited=None
         self.mission_complete=self.mission_success=None; self.nav_complete=self.nav_success=None
@@ -216,7 +220,11 @@ class Recorder:
         self.start_mission("goal_received",goal_time)
         self.event("goal_received",observed,goal_time)
     def on_reference(self,m):
-        self.tick("/drone/trajectory_setpoint"); self.reference=[m.position.x,m.position.y,m.position.z]; self.reference_yaw=float(m.yaw)
+        self.tick("/drone/trajectory_setpoint")
+        self.reference=[m.position.x,m.position.y,m.position.z]
+        self.reference_velocity=[m.velocity.x,m.velocity.y,m.velocity.z]
+        self.reference_acceleration=[m.acceleration.x,m.acceleration.y,m.acceleration.z]
+        self.reference_yaw=float(m.yaw)
         if self.args.experiment=="disturbance":
             if self.current_goal is None:
                 target=self.protocol_targets[-1] if self.protocol_targets else normalized_target(self.reference,self.reference_yaw)
@@ -329,6 +337,14 @@ class Recorder:
                 row.update({f"{prefix}_x":target[0],f"{prefix}_y":target[1],f"{prefix}_z":target[2]})
             if prefix=="goal" and value is not None: row.update({"goal_error_x":error[0],"goal_error_y":error[1],"goal_error_z":error[2],"goal_position_error":value})
             if prefix=="reference" and value is not None: row.update({"tracking_error_x":error[0],"tracking_error_y":error[1],"tracking_error_z":error[2],"tracking_error":value})
+        if self.reference_velocity is not None:
+            row.update(dict(zip(
+                ("reference_velocity_x","reference_velocity_y","reference_velocity_z"),
+                self.reference_velocity)))
+        if self.reference_acceleration is not None:
+            row.update(dict(zip(
+                ("reference_acceleration_x","reference_acceleration_y",
+                 "reference_acceleration_z"),self.reference_acceleration)))
         if self.current_goal_yaw is not None: row.update({"goal_yaw":self.current_goal_yaw,"yaw_error":math.remainder(self.current_goal_yaw-yaw,2*math.pi)})
         if self.reference_yaw is not None: row["reference_yaw"]=self.reference_yaw
         state={"mission_waypoint_index":self.mission_index,"mission_complete":self.mission_complete,"mission_success":self.mission_success,
@@ -336,7 +352,7 @@ class Recorder:
           "interactive_ready":self.ready,"interactive_active":self.active,"interactive_goal_count":self.goal_count,"collision_state":self.collision,"external_wrench_active":self.force_active}
         row.update({k:"" if val is None else int(val) if isinstance(val,bool) else val for k,val in state.items()})
         if self.rpm: row.update(dict(zip(("commanded_motor_rpm_m1","commanded_motor_rpm_m2","commanded_motor_rpm_m3","commanded_motor_rpm_m4"),(self.rpm.m1_front_left_ccw_rpm,self.rpm.m2_rear_left_cw_rpm,self.rpm.m3_rear_right_ccw_rpm,self.rpm.m4_front_right_cw_rpm))))
-        if self.diag: row.update({"horizontal_saturated":int(self.diag.horizontal_saturated),"altitude_saturated":int(self.diag.altitude_saturated),"attitude_saturated":int(self.diag.attitude_saturated),"mixer_saturated":int(self.diag.mixer_saturated),"integral_compensation_x":self.diag.horizontal_i_acceleration_x,"integral_compensation_y":self.diag.horizontal_i_acceleration_y})
+        if self.diag: row.update({"horizontal_saturated":int(self.diag.horizontal_saturated),"altitude_saturated":int(self.diag.altitude_saturated),"attitude_saturated":int(self.diag.attitude_saturated),"mixer_saturated":int(self.diag.mixer_saturated),"commanded_horizontal_acceleration_x":self.diag.horizontal_acceleration_x,"commanded_horizontal_acceleration_y":self.diag.horizontal_acceleration_y,"integral_compensation_x":self.diag.horizontal_i_acceleration_x,"integral_compensation_y":self.diag.horizontal_i_acceleration_y})
         row.update({"external_force_x":self.force[0],"external_force_y":self.force[1],"external_force_z":self.force[2]})
         if self.mission_start is None:self.pending_rows.append((now,row,actual,yaw))
         else:self.writer.writerow(row)

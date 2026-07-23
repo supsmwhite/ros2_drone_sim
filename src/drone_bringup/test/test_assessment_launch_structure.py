@@ -113,8 +113,11 @@ def test_navigation_public_defaults_and_forwarded_arguments():
         'yaw_mode': 'path_tangent',
         'use_rviz': 'true',
         'nominal_speed': '0.50',
+        'min_segment_duration': '2.0',
         'max_reference_speed': '0.90',
         'max_reference_acceleration': '0.60',
+        'max_horizontal_acceleration': '0.8',
+        'max_tilt_angle': '0.15',
     }
     includes = [
         action for action in description.entities
@@ -134,19 +137,26 @@ def test_internal_navigation_speed_defaults_and_node_overrides_match():
     defaults = _declared_defaults(description)
     expected_defaults = {
         'nominal_speed': '0.50',
+        'min_segment_duration': '2.0',
         'max_reference_speed': '0.90',
         'max_reference_acceleration': '0.60',
+        'max_horizontal_acceleration': '0.8',
+        'max_tilt_angle': '0.15',
     }
     assert {key: defaults[key] for key in expected_defaults} == expected_defaults
 
-    expected_overrides = {key: key for key in expected_defaults}
+    trajectory_overrides = {
+        key: key for key in (
+            'nominal_speed', 'min_segment_duration', 'max_reference_speed',
+            'max_reference_acceleration')
+    }
     assert _node_launch_configuration_overrides(
-        description, 'interactive_goal_editor_node') == expected_overrides
+        description, 'interactive_goal_editor_node') == trajectory_overrides
     executor_overrides = _node_launch_configuration_overrides(
         description, 'multi_goal_static_avoidance_node')
     assert {
-        key: executor_overrides[key] for key in expected_overrides
-    } == expected_overrides
+        key: executor_overrides[key] for key in trajectory_overrides
+    } == trajectory_overrides
 
 
 def test_formal_navigation_yaml_and_snapshot_use_a2_defaults():
@@ -169,6 +179,7 @@ def test_formal_navigation_yaml_and_snapshot_use_a2_defaults():
 def test_internal_navigation_uses_one_environment_yaml_for_all_consumers():
     _, description = _load_launch('interactive_goal_navigation_sim.launch.py')
     context = LaunchContext()
+    context.launch_configurations.update(_declared_defaults(description))
     environment_consumers = []
     for action in description.entities:
         if not isinstance(action, Node):

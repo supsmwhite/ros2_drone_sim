@@ -21,7 +21,8 @@ struct PlannedTrajectoryParameters
   double max_reference_acceleration{0.35};
   std::vector<double> velocity_scale_candidates{1.0, 0.75, 0.5, 0.25, 0.0};
   std::vector<double> duration_scale_candidates{
-    1.0, 1.05, 1.10, 1.15, 1.20, 1.25, 1.5, 2.0, 3.0, 4.0};
+    1.0, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.50,
+    1.75, 2.0, 3.0, 4.0};
   std::size_t max_refinement_iterations{8U};
   std::size_t max_insertions_per_refinement{3U};
   double fixed_yaw{0.0};

@@ -1,0 +1,134 @@
+import math
+import yaml
+
+from tools.navigation_speed_smoke import (
+    FORMAL_FOUR_GOALS, FORMAL_FOUR_GOAL_SCENARIO, ROOT, RUN_SCENARIOS, SCENARIOS,
+    arguments, collision_count, make_open_environment, navigation_parameters,
+    over_threshold_stats, path_collision_count, parse_trajectory_log, path_segments,
+    percentile, segment_intersects_box, segments_length)
+
+
+def test_segment_collision_includes_crossing_and_excludes_clear_segment():
+    box = ((1.0, 1.0, 1.0), (2.0, 2.0, 2.0))
+    assert segment_intersects_box((0.0, 1.5, 1.5), (3.0, 1.5, 1.5), box)
+    assert not segment_intersects_box((0.0, 0.0, 0.0), (0.5, 0.5, 0.5), box)
+    assert collision_count(
+        [(0.0, 1.5, 1.5), (3.0, 1.5, 1.5), (4.0, 1.5, 1.5)], [box]) == 1
+
+
+def test_segments_length_accepts_path_history_shape():
+    segments = [
+        {"points": [[0.0, 0.0, 0.0], [3.0, 4.0, 0.0]]},
+        {"points": [[3.0, 4.0, 0.0], [3.0, 4.0, 2.0]]},
+    ]
+    assert math.isclose(segments_length(segments), 7.0)
+
+
+def test_open_environment_omits_untyped_empty_obstacle_list(tmp_path):
+    path = make_open_environment(tmp_path)
+    document = yaml.safe_load(path.read_text())
+    parameters = next(iter(document.values()))["ros__parameters"]
+    assert "obstacles" not in parameters
+
+
+def test_path_segments_reads_recorder_schema(tmp_path):
+    path = tmp_path / "paths.json"
+    path.write_text('{"planned_segments":[{"mission_time_s":3.5,"points":[[0,0,1],[1,0,1]]}]}')
+    assert path_segments(path, "planned")[0]["mission_time_s"] == 3.5
+
+
+def test_path_collision_count_sums_per_segment_without_joining_segments():
+    box = ((1.0, 1.0, 1.0), (2.0, 2.0, 2.0))
+    segments = [
+        {"points": [(0.0, 1.5, 1.5), (3.0, 1.5, 1.5)]},
+        {"points": [(4.0, 4.0, 4.0), (5.0, 4.0, 4.0)]},
+    ]
+    assert path_collision_count(segments, [box]) == 1
+
+
+def test_percentile_interpolates_between_ranked_samples():
+    values = [1.0, 2.0, 3.0, 4.0, 5.0]
+    assert math.isclose(percentile(values, 0.5), 3.0)
+    assert math.isclose(percentile(values, 0.0), 1.0)
+    assert math.isclose(percentile(values, 1.0), 5.0)
+    assert percentile([], 0.5) is None
+
+
+def test_over_threshold_stats_uses_real_timestamp_deltas():
+    # Above-threshold from t=0 to t=0.3 (0.3 s), then below, then above again
+    # from t=0.5 to t=0.6 (0.1 s); longest continuous run is 0.3 s.
+    series = [
+        (0.0, 0.09), (0.1, 0.08), (0.2, 0.07), (0.3, 0.02),
+        (0.4, 0.01), (0.5, 0.06), (0.6, 0.01),
+    ]
+    samples_over, fraction, duration, longest = over_threshold_stats(series, 0.05)
+    assert samples_over == 4
+    assert math.isclose(fraction, 4 / 7)
+    assert math.isclose(duration, 0.4)
+    assert math.isclose(longest, 0.3)
+
+
+def test_over_threshold_stats_handles_empty_series():
+    assert over_threshold_stats([], 0.05) == (0, None, 0.0, 0.0)
+
+
+def test_formal_four_goal_trial_is_explicit_and_not_part_of_lightweight_all():
+    assert FORMAL_FOUR_GOAL_SCENARIO not in SCENARIOS
+    assert RUN_SCENARIOS[FORMAL_FOUR_GOAL_SCENARIO] == FORMAL_FOUR_GOALS
+    assert [goal[0] for goal in FORMAL_FOUR_GOALS] == [
+        (13.15, 5.80, 3.40),
+        (9.70, -1.20, 1.20),
+        (6.30, 5.55, 2.35),
+        (0.45, 5.70, 1.00),
+    ]
+
+
+def test_duration_scale_configuration_keeps_refined_candidates_in_order():
+    document = yaml.safe_load(
+        (ROOT / "src/drone_bringup/config/planned_trajectory.yaml").read_text())
+    parameters = next(iter(document.values()))["ros__parameters"]
+    assert parameters["duration_scale_candidates"] == [
+        1.0, 1.05, 1.10, 1.15, 1.20, 1.25,
+        1.30, 1.35, 1.40, 1.45, 1.50, 1.75, 2.0, 3.0, 4.0,
+    ]
+
+
+def test_trajectory_log_records_turn_scale_and_keeps_legacy_compatibility(tmp_path):
+    path = tmp_path / "launch.log"
+    path.write_text(
+        "ordered goal 1 trajectory ready: turn_speed_scale=0.80 duration=4.000 s "
+        "velocity_scale=1.00 duration_scale=1.20 max_speed=1.000000 m/s "
+        "max_acceleration=0.700000 m/s^2\n"
+        "ordered goal 2 trajectory ready: duration=5.000 s velocity_scale=1.00 "
+        "duration_scale=1.00 max_speed=0.800000 m/s "
+        "max_acceleration=0.500000 m/s^2\n")
+    values = parse_trajectory_log(path)
+    assert [value["turn_speed_scale"] for value in values] == [0.8, 1.0]
+
+
+def test_release_candidate_defaults_feed_smoke_result_parameters():
+    args = arguments(["formal_four_goal", "--candidate", "h_default_test"])
+    parameters = navigation_parameters(args)
+    assert {
+        key: parameters[key] for key in (
+            "nominal_speed", "max_reference_speed", "max_reference_acceleration",
+            "min_segment_duration", "max_horizontal_acceleration",
+            "max_tilt_angle", "turn_aware_speed_limiting",
+        )
+    } == {
+        "nominal_speed": 0.70,
+        "max_reference_speed": 1.28,
+        "max_reference_acceleration": 0.88,
+        "min_segment_duration": 2.0,
+        "max_horizontal_acceleration": 1.12,
+        "max_tilt_angle": 0.15,
+        "turn_aware_speed_limiting": True,
+    }
+
+
+def test_turn_policy_can_be_disabled_for_historical_comparisons():
+    args = arguments([
+        "turning", "--candidate", "historical_test",
+        "--no-turn-aware-speed-limiting",
+    ])
+    assert args.turn_aware_speed_limiting is False

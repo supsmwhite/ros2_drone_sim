@@ -132,6 +132,31 @@ Odometry / IMU / RViz / Results
 七组正式结果均已完成自动分析、人工验收和证据 finalize，`results/manifest.json` 中
 均为 `report_eligible=true`，Reviewer 为 `Peter`。
 
+### 当前导航性能参数
+
+当前合并候选使用 Candidate H：
+`nominal_speed=0.70 m/s`、`max_reference_speed=1.28 m/s`、
+`max_reference_acceleration=0.88 m/s²`、`max_horizontal_acceleration=1.12 m/s²`、
+`max_tilt_angle=0.15 rad`，并默认启用 `turn_aware_speed_limiting`。这是当前仿真
+模型、控制结构、地图和考核任务下的推荐性能参数，不是系统物理极限。
+
+直线路段使用完整速度包络；即将进入中间目标时，转角小于 `30°`、位于
+`[30°,60°)`、不小于 `60°` 分别使用 `1.0/0.9/0.8` 的局部比例，并同步作用于标称
+速度、最大参考速度和最大参考加速度。单目标任务和最终目标段不额外降速。复杂轨迹
+仍可通过 `duration_scale` 自动延长时长；地图、障碍、安全膨胀、动力学、RPM 上限和
+控制增益均未修改。
+
+同代码固定四目标临时 Trial 中，旧参数 `0.50/0.90/0.60/0.80` 的总任务/导航时间约为
+`130.789/127.149 s`；H 加转弯限速的两次平均约为 `112.695/109.055 s`，导航时间缩短
+约 `14.23%`。H 的平均跟踪最大/p95/RMS 为
+`0.03870/0.02302/0.01256 m`，平均最小净空 `0.17498 m`，RPM 使用率约 `57.45%`，
+超过 `5 cm` 的样本、四类路径碰撞、控制饱和和非有限值均为 `0`。
+
+这些结果仍是 `/tmp/ros2_drone_assessment_smoke/navigation_speed/` 下的临时 Trial，
+没有替换、重新分析或登记为上方七组 finalized 正式证据；旧参数快照保持不变。
+合并前人工 RViz 验收仍待开发者执行。复现方法、历史候选和冻结门槛见
+[`docs/navigation_speed_validation.md`](docs/navigation_speed_validation.md)。
+
 ## 构建与运行
 
 ```bash
@@ -253,10 +278,12 @@ python3 scripts/monitor_assessment.py --domain-id 137
 bash scripts/test_fast.sh
 bash scripts/test_assessment.sh
 bash scripts/test_full.sh
+bash scripts/test_navigation_speed_smoke.sh all --candidate local_check
 ```
 
 普通代码修改运行 fast；正式入口修改追加 assessment；阶段收尾运行 full。人工 RViz
 验收与自动回归分别记录，自动测试不能替代目标编辑、Marker、绕行轨迹和扰动箭头检查。
+导航性能 smoke 只写临时目录，不登记为正式证据。
 
 ## 系统边界
 

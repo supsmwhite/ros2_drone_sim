@@ -23,7 +23,7 @@ position_controller_node:
     horizontal_integrator_unload_gain: 2.0
     horizontal_integral_capture_radius: 0.50
     horizontal_integral_reset_distance: 1.0
-    max_horizontal_acceleration: 0.8
+    max_horizontal_acceleration: 1.12
     max_tilt_angle: 0.15
 
     altitude_kp: 3.0

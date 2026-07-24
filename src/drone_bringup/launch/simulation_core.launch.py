@@ -23,6 +23,8 @@ def generate_launch_description():
         DeclareLaunchArgument('setpoint_source', default_value='pose_goal'),
         DeclareLaunchArgument('dynamics_config', default_value=dynamics_default),
         DeclareLaunchArgument('controller_config', default_value=controller_default),
+        DeclareLaunchArgument('max_horizontal_acceleration', default_value='1.12'),
+        DeclareLaunchArgument('max_tilt_angle', default_value='0.15'),
         Node(
             package='drone_dynamics', executable='quadrotor_dynamics_node',
             name='quadrotor_dynamics_node', output='screen',
@@ -31,7 +33,10 @@ def generate_launch_description():
             package='drone_controller', executable='position_controller_node',
             name='position_controller_node', output='screen',
             parameters=[LaunchConfiguration('controller_config'), {
-                'setpoint_source': LaunchConfiguration('setpoint_source')}]),
+                'setpoint_source': LaunchConfiguration('setpoint_source'),
+                'max_horizontal_acceleration': LaunchConfiguration(
+                    'max_horizontal_acceleration'),
+                'max_tilt_angle': LaunchConfiguration('max_tilt_angle')}]),
         Node(
             package='robot_state_publisher', executable='robot_state_publisher',
             name='robot_state_publisher', output='screen',

@@ -186,6 +186,26 @@ leaving open and single-goal obstacle performance effectively unchanged. All lis
 had zero planned/simplified/reference/actual path collision, zero saturation, and zero
 non-finite samples.
 
+Two fixed P1→P2→P3→P4 temporary Trials then reproduced the H + turn-policy result:
+
+| Metric | Trial 1 | Trial 2 | Mean / spread |
+|---|---:|---:|---:|
+| Task time | `112.705 s` | `112.686 s` | `112.695 s` / `0.020 s` |
+| Navigation time | `109.065 s` | `109.045 s` | `109.055 s` / `0.019 s` |
+| Actual path length | `49.7967 m` | `49.7953 m` | `49.7960 m` / `0.0014 m` |
+| Tracking max | `0.04008 m` | `0.03731 m` | `0.03870 m` |
+| Tracking p95 / RMS | `0.02297 / 0.01242 m` | `0.02307 / 0.01270 m` | `0.02302 / 0.01256 m` |
+| Over 5 cm | `0` | `0` | `0` |
+| Minimum clearance | `0.17501 m` | `0.17495 m` | `0.17498 m` |
+| RPM ratio | `57.48%` | `57.43%` | `57.45%` |
+| Final position / speed | `0.00885 m / 0.00417 m/s` | `0.00861 m / 0.00422 m/s` | stable |
+
+Both selected duration scales `[1.0,1.0,1.2,1.25]`, turn scales
+`[0.8,0.8,0.8,1.0]`, and velocity scales `[1.0,1.0,1.0,1.0]`. All four path collision
+counts, all saturation counts, and non-finite counts were zero. Mean navigation time was
+`14.23%` below the same-code paired baseline (`127.149 s`). These remain temporary
+Trials, not finalized report evidence.
+
 ## Recommended smoke margins
 
 | Scenario | Time change | Max actual speed | Tracking max / RMS | Clearance | RPM ratio | Tilt ratio | Saturation |

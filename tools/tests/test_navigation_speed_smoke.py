@@ -2,6 +2,7 @@ import math
 import yaml
 
 from tools.navigation_speed_smoke import (
+    FORMAL_FOUR_GOALS, FORMAL_FOUR_GOAL_SCENARIO, RUN_SCENARIOS, SCENARIOS,
     collision_count, make_open_environment, over_threshold_stats, path_collision_count,
     path_segments, percentile, segment_intersects_box, segments_length)
 
@@ -68,3 +69,14 @@ def test_over_threshold_stats_uses_real_timestamp_deltas():
 
 def test_over_threshold_stats_handles_empty_series():
     assert over_threshold_stats([], 0.05) == (0, None, 0.0, 0.0)
+
+
+def test_formal_four_goal_trial_is_explicit_and_not_part_of_lightweight_all():
+    assert FORMAL_FOUR_GOAL_SCENARIO not in SCENARIOS
+    assert RUN_SCENARIOS[FORMAL_FOUR_GOAL_SCENARIO] == FORMAL_FOUR_GOALS
+    assert [goal[0] for goal in FORMAL_FOUR_GOALS] == [
+        (13.15, 5.80, 3.40),
+        (9.70, -1.20, 1.20),
+        (6.30, 5.55, 2.35),
+        (0.45, 5.70, 1.00),
+    ]

@@ -32,6 +32,14 @@ SCENARIOS = {
         ((7.0, 5.0, 4.0), -math.pi / 2.0),
     ],
 }
+FORMAL_FOUR_GOAL_SCENARIO = "formal_four_goal"
+FORMAL_FOUR_GOALS = [
+    ((13.15, 5.80, 3.40), 0.0),
+    ((9.70, -1.20, 1.20), 3.0892327760299634),
+    ((6.30, 5.55, 2.35), -1.9547687622336491),
+    ((0.45, 5.70, 1.00), -1.6929693744344996),
+]
+RUN_SCENARIOS = {**SCENARIOS, FORMAL_FOUR_GOAL_SCENARIO: FORMAL_FOUR_GOALS}
 TRAJECTORY_RE = re.compile(
     r"ordered goal (?P<goal>\d+) trajectory ready:.*?"
     r"duration=(?P<duration>[0-9.]+) s velocity_scale=(?P<velocity>[0-9.]+) "
@@ -332,7 +340,7 @@ def consecutive_saturation(diagnostics):
 def analyze(run_dir, scenario, candidate, parameters, environment_path, commit, branch):
     rows = load_rows(run_dir / "samples.csv")
     diagnostics = load_rows(run_dir / "diagnostics.csv")
-    goals = SCENARIOS[scenario]
+    goals = RUN_SCENARIOS[scenario]
     trajectories = parse_trajectory_log(run_dir / "launch.log")
     planned = path_segments(run_dir / "paths.json", "planned")
     simplified = path_segments(run_dir / "paths.json", "simplified")
@@ -712,12 +720,13 @@ def run_once(args, scenario):
             stderr=subprocess.STDOUT, start_new_session=True)
         recorder_arguments = [
             "python3", str(ROOT / "tools/assessment_recorder.py"),
-            "--experiment", "navigation", "--run-status", "smoke",
+            "--experiment", "navigation", "--run-status",
+            "trial" if scenario == FORMAL_FOUR_GOAL_SCENARIO else "smoke",
             "--output", str(run_dir), "--overwrite-existing",
             "--environment-config", str(environment_path),
             "--timeout", str(args.timeout), "--steady-window", "2.0",
         ]
-        for position, yaw in SCENARIOS[scenario]:
+        for position, yaw in RUN_SCENARIOS[scenario]:
             recorder_arguments += [
                 "--expected-goal", *map(str, (*position, yaw))]
         recorder = subprocess.Popen(
@@ -726,7 +735,7 @@ def run_once(args, scenario):
         time.sleep(args.startup_wait)
         service = subprocess.run(command([
             "ros2", "service", "call", "/drone/interactive_goals/execute",
-            "drone_msgs/srv/ExecuteGoalSequence", request_yaml(SCENARIOS[scenario]),
+            "drone_msgs/srv/ExecuteGoalSequence", request_yaml(RUN_SCENARIOS[scenario]),
         ]), cwd=ROOT, env=env, text=True, capture_output=True, timeout=45)
         (run_dir / "service.log").write_text(service.stdout + service.stderr)
         normalized = service.stdout.replace(" ", "").lower()
@@ -755,7 +764,7 @@ def run_once(args, scenario):
 
 def arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("scenario", choices=(*SCENARIOS, "all"))
+    parser.add_argument("scenario", choices=(*RUN_SCENARIOS, "all"))
     parser.add_argument("--candidate", default="baseline")
     parser.add_argument("--nominal-speed", type=float)
     parser.add_argument("--max-reference-speed", type=float)

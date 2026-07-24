@@ -114,11 +114,21 @@ bash scripts/test_navigation_speed_smoke.sh open --candidate baseline
 bash scripts/test_navigation_speed_smoke.sh obstacle --candidate baseline
 bash scripts/test_navigation_speed_smoke.sh turning --candidate baseline
 bash scripts/test_navigation_speed_smoke.sh all --candidate local_check
+bash scripts/test_navigation_speed_smoke.sh formal_four_goal \
+  --candidate paired_baseline_trial \
+  --nominal-speed 0.50 \
+  --max-reference-speed 0.90 \
+  --max-reference-acceleration 0.60 \
+  --max-horizontal-acceleration 0.80 \
+  --max-tilt-angle 0.15
 ```
 
 The three scenarios are an 8 m obstacle-free horizontal flight, the formal static-
 avoidance goal `(13.2,5.5,1.5)`, and a shorter three-goal path with horizontal turns,
 height changes, braking/re-acceleration, and `path_tangent` yaw.
+`formal_four_goal` is an explicit temporary Trial of the fixed P1→P2→P3→P4 protocol;
+it is deliberately excluded from `all` so the normal three-scenario smoke remains
+lightweight.
 
 ## Candidates
 

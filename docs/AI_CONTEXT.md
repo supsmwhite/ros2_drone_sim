@@ -128,6 +128,11 @@ Candidate H：`nominal_speed=0.70 m/s`、`max_reference_speed=1.28 m/s`、
 零。这些仍是临时 Trial，不能作为 finalized 正式证据；合并前人工 RViz 验收待开发者
 执行。
 
+收束后又以公开默认入口、无速度覆盖参数运行一次固定四目标 Trial，实际读取到 H 和
+`turn_aware_speed_limiting=true`；总任务/导航时间 `112.704/109.064 s`，
+tracking 最大/p95/RMS `0.04004/0.02299/0.01237 m`，最小净空 `0.17495 m`，
+碰撞、饱和、非有限值均为零。该结果同样只位于 `/tmp`。
+
 旧的 `0.50/0.90/0.60/0.80` 仍是七组 finalized 结果的参数快照，不得回写或重新
 分析。详细历史候选、门槛和复现方法见 `docs/navigation_speed_validation.md`。
 

@@ -277,6 +277,26 @@ superseded standalone 5 cm maximum. Its convergence run reported max/p95/RMS
 `0.0148 s`, with zero collision, saturation, and non-finite values. Automated checks do
 not replace the pending RViz review.
 
+An additional non-RViz `formal_four_goal` Trial used the public defaults without any
+speed or turn-policy overrides:
+
+| Metric | Default release-candidate Trial |
+|---|---:|
+| Effective parameters | `0.70 / 1.28 / 0.88 / 1.12`, turn-aware `true` |
+| Task / navigation time | `112.704 / 109.064 s` |
+| Tracking max / p95 / RMS | `0.04004 / 0.02299 / 0.01237 m` |
+| Over 5 cm | `0` samples; `0.000 s` |
+| Minimum clearance | `0.17495 m` |
+| Maximum RPM ratio | `57.47%` |
+| Final position / speed | `0.00871 m / 0.00436 m/s` |
+| Turn scales | `[0.8,0.8,0.8,1.0]` |
+| Duration scales | `[1.0,1.0,1.2,1.25]` |
+
+All four goals completed in order; planned, simplified, reference, and actual collision
+counts, every saturation count, and non-finite count were zero. The run passed and remains
+temporary under `/tmp/ros2_drone_assessment_smoke/navigation_speed/`; it is not finalized
+report evidence.
+
 ## Pending manual acceptance
 
 Artificially claiming visual acceptance is prohibited. The developer should run:

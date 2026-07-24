@@ -13,7 +13,9 @@ No candidate changes mass, inertia, thrust/drag coefficients, motor time constan
 controller gains. The horizontal controller remains
 `P + D + limited I + desired-acceleration feedforward`; altitude and attitude remain PD.
 
-## Frozen acceptance policy (v2)
+## Current acceptance policy
+
+### Frozen acceptance policy (v2)
 
 The original policy graded every candidate on a single hard ceiling,
 `tracking_max_m < 0.05 m`. That number was an internal quality choice, not a
@@ -23,7 +25,7 @@ during a sharp turn while the rest of the trajectory tracked tightly. The
 policy below keeps every safety/correctness item unchanged and replaces the
 single tracking ceiling with a distribution- and duration-aware judgement.
 
-### Tier 1 — safety and correctness hard constraints (unchanged, never relaxed)
+#### Tier 1 — safety and correctness hard constraints (unchanged, never relaxed)
 
 Every ordered goal completed through the public interface, correct visit
 order, all planned segments present, zero collision (planned, simplified,
@@ -35,7 +37,7 @@ obstacles or inflation, disabling collision/trajectory validation, raising
 `max_rpm`, changing mass/thrust/drag/motor parameters, or altering the formal
 goals.
 
-### Tier 2 — terminal task quality (frozen this round)
+#### Tier 2 — terminal task quality (frozen this round)
 
 ```text
 final_position_error_m < 0.10
@@ -44,8 +46,10 @@ final_speed_mps        < 0.05
 
 This remains far stricter than the brief's `0.3 m` hover requirement; the
 per-goal position/speed/yaw/angular-speed completion gates are unchanged.
+The brief's `0.3 m` value is a final-hover requirement, not a dynamic
+trajectory-tracking limit.
 
-### Tier 3 — dynamic tracking quality (frozen this round, navigation phase only)
+#### Tier 3 — dynamic tracking quality (frozen this round, navigation phase only)
 
 ```text
 tracking_max_m                          < 0.08
@@ -80,7 +84,7 @@ Rationale, fixed before any candidate re-test:
 Once frozen, thresholds are not moved based on candidate results. If a
 candidate fails, it fails; the thresholds are not relaxed after the fact.
 
-## Frozen acceptance policy (v1, superseded)
+### Frozen acceptance policy (v1, superseded)
 
 The original policy was frozen before candidate testing and was not relaxed
 during the A–G search:
@@ -130,7 +134,9 @@ height changes, braking/re-acceleration, and `path_tangent` yaw.
 it is deliberately excluded from `all` so the normal three-scenario smoke remains
 lightweight.
 
-## Candidates
+## Historical exploration
+
+### Candidates A–G
 
 All candidates retain `min_segment_duration=2.0 s` and `max_tilt_angle=0.15 rad`.
 Columns are `nominal_speed`, `max_reference_speed`, `max_reference_acceleration`, and
@@ -145,7 +151,7 @@ Columns are `nominal_speed`, `max_reference_speed`, `max_reference_acceleration`
 | D | `0.77 / 1.386 / 0.92 / 1.15` | 11.95 | 49.67 | 31.85 | reject: turning tracking `0.07332 m` |
 | E | `0.65 / 1.17 / 0.82 / 1.05` | 13.94 | 53.32 | 33.59 | reject: turning tracking `0.06705 m` |
 | F | `0.55 / 0.99 / 0.65 / 0.84` | 16.30 | 53.68 | 39.02 | boundary: passes, but only `0.00038 m` below tracking limit |
-| G | `0.55 / 0.95 / 0.65 / 0.84` | 17.04 | 53.64 | 39.12 | recommended |
+| G | `0.55 / 0.95 / 0.65 / 0.84` | 17.04 | 53.64 | 39.12 | previous conservative candidate |
 
 The principal limiter is not thrust or RPM. On obstacle-rich simplified paths, quintic
 trajectory speed/acceleration validation selects discrete duration scales. A/B/C raise
@@ -153,7 +159,13 @@ nominal speed but trigger `1.25` or `1.50` scaling, which erases the nominal gai
 acceleration-matched D restores obstacle speed but exceeds the frozen tracking limit in
 rapid turns. G caps short-segment reference speed enough to retain tracking margin.
 
-## Current v2 investigation (temporary evidence)
+## Current recommended solution
+
+Candidate H with turn-aware speed limiting is the **current merge candidate**.
+The defaults are `0.70/1.28/0.88/1.12`, `min_segment_duration=2.0 s`, and
+`max_tilt_angle=0.15 rad`.
+
+### V2 investigation and design
 
 Paired runs at commit `4f49483` confirmed that D and E meet the v2 max/p95/RMS/fraction
 limits but fail the frozen `0.50 s` longest-continuous rule during braking into the second
@@ -167,11 +179,13 @@ or first-valid-candidate selection. It reduced B/C obstacle navigation time from
 `61.46/59.31 s` to `55.49/51.59 s`; their selected scales became `1.35/1.30` instead of
 `1.50`.
 
-A simple optional goal-turn policy was then tested with candidate H
+A simple goal-turn policy was then tested with candidate H
 (`0.70/1.28/0.88/1.12`). It uses speed/acceleration scale `1.0` below 30 degrees, `0.9`
 from 30 to 60 degrees, and `0.8` at 60 degrees or more. Only segments approaching an
-intermediate goal are eligible; single-goal and final segments remain unscaled. The feature
-is disabled by default pending full-protocol validation.
+intermediate goal are eligible; single-goal and final segments remain unscaled. Preflight
+and actual planning use the same scale calculation. The feature is enabled by default for
+the merge candidate and remains available as the unchanged
+`turn_aware_speed_limiting` LaunchArgument.
 
 | H scenario | turn scales | navigation s | max / p95 / RMS m | over-5cm longest s | Result |
 |---|---|---:|---:|---:|---|
@@ -206,7 +220,11 @@ counts, all saturation counts, and non-finite counts were zero. Mean navigation 
 `14.23%` below the same-code paired baseline (`127.149 s`). These remain temporary
 Trials, not finalized report evidence.
 
-## Recommended smoke margins
+## Historical Candidate G evidence
+
+Candidate G is retained as the previous conservative candidate, not the current default.
+
+### Candidate G smoke margins
 
 | Scenario | Time change | Max actual speed | Tracking max / RMS | Clearance | RPM ratio | Tilt ratio | Saturation |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -214,11 +232,11 @@ Trials, not finalized report evidence.
 | obstacle | `54.41 → 53.64 s` (`-1.41%`) | `0.770 m/s` | `0.02807 / 0.01214 m` | `0.15010 m` | `55.82%` | `46.23%` | 0 |
 | turning | `41.10 → 39.12 s` (`-4.81%`) | `0.960 m/s` | `0.04293 / 0.01343 m` | `0.23248 m` | `57.77%` | `45.52%` | 0 |
 
-Every recommended smoke has zero collision, non-finite values, and controller/mixer
+Every Candidate G smoke has zero collision, non-finite values, and controller/mixer
 saturation. Selected duration scales are `1.10` (open), `1.15` (obstacle), and
 `[1.50,1.10,1.00]` (turning); all velocity scales remain `1.0`.
 
-## Four-goal protocol trial and RViz review
+### Candidate G four-goal protocol trial and RViz review
 
 The fixed P1→P2→P3→P4 trial at commit `bc12e7c` completed all four plans in order:
 
@@ -239,18 +257,72 @@ review covered obstacles/inflation, planned/simplified/reference/actual paths, a
 replans, altitude changes, path-tangent yaw, turns, terminal behavior, and attitude. The
 temporary screenshot and checklist remain with that Trial, not in `results/`.
 
-## Remaining limits and rollback
+## Final automated validation
+
+The release-candidate defaults are covered by Launch/YAML consistency tests, immutable
+historical snapshot checks, turn-policy classification and eligibility tests, duration-scale
+ordering/first-valid/determinism tests, smoke metric tests, and the repository's fast,
+assessment, and full suites:
+
+| Validation | Result |
+|---|---|
+| `drone_planning` + `drone_bringup` | `334 tests`, 0 errors, 0 failures |
+| `scripts/test_fast.sh` | tools Python `151 passed`; `321 tests`, 0 errors, 0 failures |
+| `scripts/test_assessment.sh` | `16 tests`, 0 errors, 0 failures |
+| `scripts/test_full.sh` | `334 tests`, 0 errors, 0 failures |
+
+The interactive navigation E2E also applies the complete v2 policy rather than the
+superseded standalone 5 cm maximum. Its convergence run reported max/p95/RMS
+`0.05165/0.04323/0.02140 m`, over-5cm fraction `0.953%`, and longest excursion
+`0.0148 s`, with zero collision, saturation, and non-finite values. Automated checks do
+not replace the pending RViz review.
+
+## Pending manual acceptance
+
+Artificially claiming visual acceptance is prohibited. The developer should run:
+
+```bash
+cd /home/peter/ros2_drone_sim
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch drone_bringup assessment_navigation_sim.launch.py
+```
+
+Then submit the fixed P1→P2→P3→P4 payload shown in the README through
+`/drone/interactive_goals/execute` using
+`drone_msgs/srv/ExecuteGoalSequence`. Check:
+
+1. takeoff is stable;
+2. all four goals are visited in the correct order;
+3. every segment replans successfully;
+4. planned/simplified/reference/actual path Markers remain visible;
+5. inflated-obstacle Markers remain correct;
+6. the vehicle decelerates reasonably before intermediate turns without a long pause;
+7. straight segments are visibly faster than the previous version;
+8. turns do not cut into obstacles;
+9. altitude changes are smooth;
+10. `path_tangent` yaw changes naturally;
+11. acceleration resumes after intermediate goals;
+12. the final segment does not visibly overshoot or oscillate;
+13. attitude changes remain reasonable;
+14. the vehicle ends in a stable hover;
+15. no task failure, abnormal log, or node exit occurs.
+
+**Manual RViz acceptance: pending developer execution.**
+
+## Rollback
 
 Complex corners may still force path refinement and duration scaling; short segments,
 height changes, and terminal yaw prevent the vehicle from sustaining the configured
 speed cap. The project still has no dynamic-obstacle avoidance, local replanning, MPC,
 or complete attitude planning.
 
-Rollback is one commit:
+To restore the pre-convergence Candidate G defaults while retaining the performance
+infrastructure and finalized evidence, revert the dedicated defaults commit:
 
 ```bash
-git revert bc12e7c
+git revert bdeeacd
 ```
 
-This restores the previous defaults without touching the smoke infrastructure or any
-finalized evidence.
+Review the generated revert before pushing. This restores Candidate G and disables the
+turn-aware default without deleting the smoke infrastructure or touching finalized evidence.

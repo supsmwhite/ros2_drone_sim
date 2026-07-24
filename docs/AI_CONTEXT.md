@@ -109,17 +109,27 @@ CSV、路径、事件、summary 和图表。
 | `interactive_goal_editor.yaml` | RViz 编辑、预览与预检参数 |
 | `interactive_goal_executor.yaml` | 多目标执行与完成门控参数 |
 
-环境节点、预检和执行器必须加载同一份 `environment.yaml`。当前推荐导航参数为
-`nominal_speed=0.55 m/s`、`max_reference_speed=0.95 m/s`、
-`max_reference_acceleration=0.65 m/s²`、`max_horizontal_acceleration=0.84 m/s²`，
-`min_segment_duration=2.0 s` 与 `max_tilt_angle=0.15 rad` 不变。参考加速度相对控制
-限幅保留约 `22.6%` 余量，控制限幅低于 `g*tan(0.15)=1.482 m/s²`。控制 P/D/I
-参数未改。
+环境节点、预检和执行器必须加载同一份 `environment.yaml`。当前合并候选默认参数为
+Candidate H：`nominal_speed=0.70 m/s`、`max_reference_speed=1.28 m/s`、
+`max_reference_acceleration=0.88 m/s²`、`max_horizontal_acceleration=1.12 m/s²`、
+`min_segment_duration=2.0 s`、`max_tilt_angle=0.15 rad`。参考加速度低于控制限幅，
+控制限幅低于 `g*tan(0.15)=1.482 m/s²`；控制 P/D/I 参数未改。
+
+`turn_aware_speed_limiting` 默认启用。进入中间目标的转角小于 `30°`、
+位于 `[30°,60°)`、不小于 `60°` 时，分别使用 `1.0/0.9/0.8`，并同步缩放
+`nominal_speed`、`max_reference_speed` 和 `max_reference_acceleration`。预检与实际
+规划调用同一策略；单目标任务和最终目标段保持 `1.0`。复杂轨迹仍从严格升序的
+`duration_scale_candidates` 中选择第一个满足安全和动态约束的比例。
+
+同代码固定四目标配对基线 `0.50/0.90/0.60/0.80` 的总任务/导航时间为
+`130.789/127.149 s`；H 加转弯限速的两次平均为 `112.695/109.055 s`，导航时间缩短
+`14.23%`。H 的平均跟踪最大/p95/RMS 为 `0.03870/0.02302/0.01256 m`，平均最小净空
+`0.17498 m`，RPM 使用率 `57.45%`，超过 `5 cm` 的样本、碰撞、饱和和非有限值均为
+零。这些仍是临时 Trial，不能作为 finalized 正式证据；合并前人工 RViz 验收待开发者
+执行。
 
 旧的 `0.50/0.90/0.60/0.80` 仍是七组 finalized 结果的参数快照，不得回写或重新
-分析。新参数仅通过独立 smoke、assessment 回归和非正式四目标 Trial 验证；Trial
-任务时间 `122.06 s`，相对旧正式 `133.87 s` 缩短 `8.82%`，但不登记为报告证据。
-详细候选与门槛见 `docs/navigation_speed_validation.md`。
+分析。详细历史候选、门槛和复现方法见 `docs/navigation_speed_validation.md`。
 
 ## 8. 正式实验协议
 
@@ -164,17 +174,26 @@ tracking max/RMS，不使用包含起飞的 full-mission tracking。扰动报告
 bash scripts/test_fast.sh
 bash scripts/test_assessment.sh
 bash scripts/test_full.sh
+bash scripts/test_navigation_speed_smoke.sh all --candidate local_check
+bash scripts/test_navigation_speed_smoke.sh formal_four_goal \
+  --candidate h_default_release_candidate
 ```
 
 - 普通修改：fast；
 - 正式入口修改：fast + assessment；
 - 阶段收尾：full；
+- 导航参数或转弯策略修改：三场景 smoke；发布候选默认值再运行显式四目标 Trial；
 - 纯文档修改：不重跑飞行仿真。
 
-最终完整回归记录：fast 为 30 CTest / 316 内部用例，assessment 为 5 CTest / 16
-内部用例，full 为 34 CTest / 329 内部用例；均为 0 errors、0 failures、0 skipped。
+当前合并候选回归记录：fast 为 31 CTest / 321 内部用例（另有 tools Python
+`151 passed`），assessment 为 5 CTest / 16 内部用例，full 为 35 CTest / 334
+内部用例；均为 0 errors、0 failures、0 skipped。
 自动回归不能替代 RViz 目标/yaw、障碍与轨迹 Marker、绕行效果、扰动箭头和撤力恢复的
 人工检查。
+
+性能回归应先检查每段日志中的 `turn_speed_scale` 与 `duration_scale`，再检查 tracking
+p95/RMS、连续超过 `5 cm` 的时间、planned/simplified/reference/actual 四类路径碰撞
+以及控制饱和。smoke 和 Trial 只写入 `/tmp/ros2_drone_assessment_smoke/`。
 
 ## 11. 关键约束与禁止误述
 
@@ -184,4 +203,5 @@ bash scripts/test_full.sh
 - 不把 smoke/trial、全任务通用指标或旧 narrow-corridor 结果当作正式报告证据。
 - 不将 full-mission tracking 与 navigation tracking 混用。
 - 不修改或重新生成七组已 finalize 的正式证据；Reviewer 保持为 `Peter`。
-- 不把当前性能 Trial 的 `122.06 s` 误述为新的 finalized 正式结果或系统最大速度。
+- 不把当前性能 Trial 的 `112.695 s` 误述为新的 finalized 正式结果或系统最大速度。
+- 不声称合并候选已完成人工 RViz 验收；该步骤仍由开发者执行。

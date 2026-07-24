@@ -4,7 +4,7 @@ import yaml
 from tools.navigation_speed_smoke import (
     FORMAL_FOUR_GOALS, FORMAL_FOUR_GOAL_SCENARIO, ROOT, RUN_SCENARIOS, SCENARIOS,
     collision_count, make_open_environment, over_threshold_stats, path_collision_count,
-    path_segments, percentile, segment_intersects_box, segments_length)
+    parse_trajectory_log, path_segments, percentile, segment_intersects_box, segments_length)
 
 
 def test_segment_collision_includes_crossing_and_excludes_clear_segment():
@@ -90,3 +90,16 @@ def test_duration_scale_configuration_keeps_refined_candidates_in_order():
         1.0, 1.05, 1.10, 1.15, 1.20, 1.25,
         1.30, 1.35, 1.40, 1.45, 1.50, 1.75, 2.0, 3.0, 4.0,
     ]
+
+
+def test_trajectory_log_records_turn_scale_and_keeps_legacy_compatibility(tmp_path):
+    path = tmp_path / "launch.log"
+    path.write_text(
+        "ordered goal 1 trajectory ready: turn_speed_scale=0.80 duration=4.000 s "
+        "velocity_scale=1.00 duration_scale=1.20 max_speed=1.000000 m/s "
+        "max_acceleration=0.700000 m/s^2\n"
+        "ordered goal 2 trajectory ready: duration=5.000 s velocity_scale=1.00 "
+        "duration_scale=1.00 max_speed=0.800000 m/s "
+        "max_acceleration=0.500000 m/s^2\n")
+    values = parse_trajectory_log(path)
+    assert [value["turn_speed_scale"] for value in values] == [0.8, 1.0]

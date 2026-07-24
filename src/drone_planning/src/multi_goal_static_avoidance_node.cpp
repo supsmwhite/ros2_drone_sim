@@ -22,6 +22,7 @@
 #include "drone_planning/mission_failure_safety.hpp"
 #include "drone_planning/multi_goal_visualization.hpp"
 #include "drone_planning/planned_trajectory_builder.hpp"
+#include "drone_planning/turn_speed_policy.hpp"
 #include "drone_planning/yaw_reference_generator.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -85,6 +86,7 @@ struct SegmentPlan
 {
   AStarResult astar_result;
   PlannedTrajectoryResult trajectory_result;
+  double turn_speed_scale{1.0};
   std::string error;
 };
 
@@ -109,6 +111,30 @@ std::optional<double> quaternion_yaw(const geometry_msgs::msg::Quaternion & orie
   const double w = orientation.w * inverse_norm;
   const double yaw = std::atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
   return std::isfinite(yaw) ? std::optional<double>(yaw) : std::nullopt;
+}
+
+double goal_turn_speed_scale(
+  bool enabled, const TurnSpeedPolicyParameters & policy,
+  const Eigen::Vector3d & segment_start, const std::vector<MissionGoal> & goals,
+  std::size_t goal_index)
+{
+  if (!enabled || goal_index + 1U >= goals.size()) {
+    return 1.0;
+  }
+  return turn_speed_scale(
+    segment_start, goals[goal_index].position, goals[goal_index + 1U].position, policy);
+}
+
+PlannedTrajectoryParameters scaled_trajectory_parameters(
+  PlannedTrajectoryParameters parameters, double scale)
+{
+  if (!std::isfinite(scale) || scale <= 0.0 || scale > 1.0) {
+    throw std::invalid_argument("turn speed scale must be finite and in (0, 1]");
+  }
+  parameters.nominal_speed *= scale;
+  parameters.max_reference_speed *= scale;
+  parameters.max_reference_acceleration *= scale;
+  return parameters;
 }
 
 }  // namespace
@@ -222,6 +248,17 @@ public:
     trajectory_parameters_.max_insertions_per_refinement =
       static_cast<std::size_t>(max_insertions_per_refinement);
     trajectory_parameters_.fixed_yaw = declare_parameter<double>("fixed_yaw", 0.0);
+    turn_aware_speed_limiting_ =
+      declare_parameter<bool>("turn_aware_speed_limiting", false);
+    turn_speed_policy_parameters_.mild_turn_angle_rad =
+      declare_parameter<double>("mild_turn_angle_rad", 0.5235987755982988);
+    turn_speed_policy_parameters_.sharp_turn_angle_rad =
+      declare_parameter<double>("sharp_turn_angle_rad", 1.0471975511965976);
+    turn_speed_policy_parameters_.mild_turn_scale =
+      declare_parameter<double>("mild_turn_speed_scale", 0.90);
+    turn_speed_policy_parameters_.sharp_turn_scale =
+      declare_parameter<double>("sharp_turn_speed_scale", 0.80);
+    validate_turn_speed_policy(turn_speed_policy_parameters_);
 
     YawReferenceParameters yaw_parameters;
     yaw_mode_ = parse_yaw_mode(declare_parameter<std::string>("yaw_mode", "fixed"));
@@ -510,10 +547,12 @@ private:
     const double resolution = resolution_;
     const std::size_t max_grid_nodes = max_grid_nodes_;
     const PlannedTrajectoryParameters parameters = trajectory_parameters_;
+    const bool turn_aware_speed_limiting = turn_aware_speed_limiting_;
+    const TurnSpeedPolicyParameters turn_policy = turn_speed_policy_parameters_;
     preflight_future_.emplace(std::async(
       std::launch::async,
       [checker, resolution, max_grid_nodes, parameters, preflight_start,
-      goals_snapshot]() mutable {
+      goals_snapshot, turn_aware_speed_limiting, turn_policy]() mutable {
         PreflightResult result;
         Eigen::Vector3d segment_start = preflight_start;
         try {
@@ -526,8 +565,12 @@ private:
               result.message = "preflight segment " + segment + " A* failed";
               return result;
             }
-            const auto trajectory = PlannedTrajectoryBuilder(checker, parameters).build(
-              astar.path_world);
+            const double turn_scale = goal_turn_speed_scale(
+              turn_aware_speed_limiting, turn_policy, segment_start, goals_snapshot, index);
+            const auto segment_parameters =
+              scaled_trajectory_parameters(parameters, turn_scale);
+            const auto trajectory =
+              PlannedTrajectoryBuilder(checker, segment_parameters).build(astar.path_world);
             if (!trajectory.success || !trajectory.trajectory) {
               result.message = "preflight segment " + segment +
                 " has no valid continuous trajectory";
@@ -754,12 +797,17 @@ private:
     const CollisionChecker checker = *navigation_collision_checker_;
     const double resolution = resolution_;
     const std::size_t max_grid_nodes = max_grid_nodes_;
-    const PlannedTrajectoryParameters parameters = trajectory_parameters_;
+    const double turn_scale = goal_turn_speed_scale(
+      turn_aware_speed_limiting_, turn_speed_policy_parameters_, start, goals_,
+      current_goal_index_);
+    const PlannedTrajectoryParameters parameters =
+      scaled_trajectory_parameters(trajectory_parameters_, turn_scale);
     planning_future_.emplace(
       std::async(
         std::launch::async,
-        [checker, resolution, max_grid_nodes, parameters, start, goal]() mutable {
+        [checker, resolution, max_grid_nodes, parameters, start, goal, turn_scale]() mutable {
           SegmentPlan result;
+          result.turn_speed_scale = turn_scale;
           try {
             AStarPlanner planner(checker, resolution, max_grid_nodes);
             result.astar_result = planner.plan(start, goal);
@@ -814,14 +862,15 @@ private:
     RCLCPP_INFO(
       get_logger(),
       "ordered goal %zu trajectory ready: raw_points=%zu simplified_points=%zu "
-      "initial_simplified_points=%zu refinements=%zu duration=%.3f s "
+      "initial_simplified_points=%zu refinements=%zu turn_speed_scale=%.2f duration=%.3f s "
       "velocity_scale=%.2f duration_scale=%.2f max_speed=%.6f m/s "
       "max_acceleration=%.6f m/s^2 raw_length=%.6f m simplified_length=%.6f m "
       "expanded_nodes=%zu",
       current_goal_index_, plan.astar_result.path_world.size(),
       plan.trajectory_result.simplified_path_world.size(),
       plan.trajectory_result.initial_simplified_point_count,
-      plan.trajectory_result.refinement_iterations, trajectory_total_duration_,
+      plan.trajectory_result.refinement_iterations, plan.turn_speed_scale,
+      trajectory_total_duration_,
       plan.trajectory_result.selected_velocity_scale,
       plan.trajectory_result.selected_duration_scale,
       plan.trajectory_result.max_reference_speed,
@@ -1054,10 +1103,12 @@ private:
   std::size_t current_segment_{0U};
   std::size_t visited_goals_{0U};
   bool yaw_initialized_from_odometry_{false};
+  bool turn_aware_speed_limiting_{false};
   YawMode yaw_mode_{YawMode::Fixed};
   State state_{State::WaitingForOdometry};
   GoalCompletionGate goal_completion_gate_;
   PlannedTrajectoryParameters trajectory_parameters_;
+  TurnSpeedPolicyParameters turn_speed_policy_parameters_;
   std::vector<MissionGoal> goals_;
   Eigen::Vector3d initial_position_{Eigen::Vector3d::Zero()};
   Eigen::Vector3d takeoff_anchor_{Eigen::Vector3d::Zero()};

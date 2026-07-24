@@ -42,6 +42,7 @@ FORMAL_FOUR_GOALS = [
 RUN_SCENARIOS = {**SCENARIOS, FORMAL_FOUR_GOAL_SCENARIO: FORMAL_FOUR_GOALS}
 TRAJECTORY_RE = re.compile(
     r"ordered goal (?P<goal>\d+) trajectory ready:.*?"
+    r"(?:turn_speed_scale=(?P<turn>[0-9.]+) )?"
     r"duration=(?P<duration>[0-9.]+) s velocity_scale=(?P<velocity>[0-9.]+) "
     r"duration_scale=(?P<scale>[0-9.]+) max_speed=(?P<speed>[0-9.]+) m/s "
     r"max_acceleration=(?P<accel>[0-9.]+) m/s\^2"
@@ -279,6 +280,8 @@ def parse_trajectory_log(path):
     for match in TRAJECTORY_RE.finditer(text):
         values.append({
             "goal_index": int(match.group("goal")),
+            "turn_speed_scale": (
+                float(match.group("turn")) if match.group("turn") is not None else 1.0),
             "duration_s": float(match.group("duration")),
             "selected_velocity_scale": float(match.group("velocity")),
             "selected_duration_scale": float(match.group("scale")),
@@ -538,6 +541,7 @@ def analyze(run_dir, scenario, candidate, parameters, environment_path, commit, 
         "min_segment_duration": parameters["min_segment_duration"],
         "max_horizontal_acceleration": parameters["max_horizontal_acceleration"],
         "max_tilt_angle": parameters["max_tilt_angle"],
+        "turn_aware_speed_limiting": parameters["turn_aware_speed_limiting"],
         "mass": parameters["mass"],
         "max_rpm": parameters["max_rpm"],
         "task_accepted_time": 0.0 if rows else None,
@@ -602,6 +606,8 @@ def analyze(run_dir, scenario, candidate, parameters, environment_path, commit, 
             item["selected_duration_scale"] for item in trajectories],
         "selected_velocity_scales": [
             item["selected_velocity_scale"] for item in trajectories],
+        "selected_turn_speed_scales": [
+            item["turn_speed_scale"] for item in trajectories],
         "goal_position_errors": goal_position_errors,
         "goal_speeds": goal_speeds,
         "goal_yaw_errors": goal_yaw_errors,
@@ -675,6 +681,7 @@ def run_once(args, scenario):
         "max_horizontal_acceleration": args.max_horizontal_acceleration or
         float(controller["max_horizontal_acceleration"]),
         "max_tilt_angle": args.max_tilt_angle or float(controller["max_tilt_angle"]),
+        "turn_aware_speed_limiting": args.turn_aware_speed_limiting,
         "mass": float(dynamics["mass"]),
         "max_rpm": float(dynamics["max_rpm"]),
     }
@@ -712,6 +719,8 @@ def run_once(args, scenario):
             f"max_reference_acceleration:={parameters['max_reference_acceleration']}",
             f"max_horizontal_acceleration:={parameters['max_horizontal_acceleration']}",
             f"max_tilt_angle:={parameters['max_tilt_angle']}",
+            "turn_aware_speed_limiting:=" +
+            str(parameters["turn_aware_speed_limiting"]).lower(),
         ]
         if scenario == "open":
             launch_arguments.append(f"environment_config:={environment_path}")
@@ -772,6 +781,7 @@ def arguments(argv=None):
     parser.add_argument("--min-segment-duration", type=float)
     parser.add_argument("--max-horizontal-acceleration", type=float)
     parser.add_argument("--max-tilt-angle", type=float)
+    parser.add_argument("--turn-aware-speed-limiting", action="store_true")
     parser.add_argument("--timeout", type=float, default=180.0)
     parser.add_argument("--startup-wait", type=float, default=5.0)
     parser.add_argument("--domain-id", type=int)

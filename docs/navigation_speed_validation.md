@@ -153,6 +153,39 @@ nominal speed but trigger `1.25` or `1.50` scaling, which erases the nominal gai
 acceleration-matched D restores obstacle speed but exceeds the frozen tracking limit in
 rapid turns. G caps short-segment reference speed enough to retain tracking margin.
 
+## Current v2 investigation (temporary evidence)
+
+Paired runs at commit `4f49483` confirmed that D and E meet the v2 max/p95/RMS/fraction
+limits but fail the frozen `0.50 s` longest-continuous rule during braking into the second
+turning goal (`1.575 s` and `1.285 s`). Both peaks are near `(5.5,1.0,4.0)`, with about
+`0.49-0.50 m` safety clearance and no saturation or path collision. The same-code paired
+baseline passed all three smokes and a fixed four-goal temporary Trial in `130.789 s`
+(`127.149 s` navigation time).
+
+The refined duration list adds `1.30/1.35/1.40/1.45` and `1.75` without changing validation
+or first-valid-candidate selection. It reduced B/C obstacle navigation time from roughly
+`61.46/59.31 s` to `55.49/51.59 s`; their selected scales became `1.35/1.30` instead of
+`1.50`.
+
+A simple optional goal-turn policy was then tested with candidate H
+(`0.70/1.28/0.88/1.12`). It uses speed/acceleration scale `1.0` below 30 degrees, `0.9`
+from 30 to 60 degrees, and `0.8` at 60 degrees or more. Only segments approaching an
+intermediate goal are eligible; single-goal and final segments remain unscaled. The feature
+is disabled by default pending full-protocol validation.
+
+| H scenario | turn scales | navigation s | max / p95 / RMS m | over-5cm longest s | Result |
+|---|---|---:|---:|---:|---|
+| open | `[1.0]` | 13.045 | `0.03101 / 0.02086 / 0.01196` | `0.000` | pass |
+| obstacle | `[1.0]` | 53.510 | `0.03632 / 0.02084 / 0.01208` | `0.000` | pass |
+| turning | `[1.0,0.8,1.0]` | 33.190 | `0.05097 / 0.03829 / 0.01883` | `0.010` | pass |
+
+Without the turn policy, H turning took `32.908 s` but had max/p95/RMS
+`0.07366/0.04752/0.02229 m` and a `1.485 s` longest excursion. Thus the local policy
+removed the sustained turn error for only `0.282 s` additional navigation time while
+leaving open and single-goal obstacle performance effectively unchanged. All listed runs
+had zero planned/simplified/reference/actual path collision, zero saturation, and zero
+non-finite samples.
+
 ## Recommended smoke margins
 
 | Scenario | Time change | Max actual speed | Tracking max / RMS | Clearance | RPM ratio | Tilt ratio | Saturation |

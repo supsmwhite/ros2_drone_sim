@@ -67,6 +67,15 @@ target_link_libraries(
   planned_trajectory_builder path_simplifier collision_checker
     drone_mission::piecewise_quintic_trajectory Eigen3::Eigen)
 
+add_library(turn_speed_policy src/turn_speed_policy.cpp)
+target_include_directories(turn_speed_policy
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_options(turn_speed_policy PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(turn_speed_policy Eigen3::Eigen)
+
 add_library(yaw_reference_generator src/yaw_reference_generator.cpp)
 target_include_directories(yaw_reference_generator
   PUBLIC
@@ -131,7 +140,7 @@ ament_target_dependencies(
 target_link_libraries(
   multi_goal_static_avoidance_node
   goal_completion_gate mission_failure_safety multi_goal_visualization planned_trajectory_builder
-  yaw_reference_generator astar_planner Eigen3::Eigen)
+  turn_speed_policy yaw_reference_generator astar_planner Eigen3::Eigen)
 
 add_executable(map_reachability_check src/map_reachability_check.cpp)
 target_compile_options(map_reachability_check PRIVATE -Wall -Wextra -Wpedantic)
@@ -172,6 +181,10 @@ if(BUILD_TESTING)
   target_compile_options(test_yaw_reference_generator PRIVATE -Wall -Wextra -Wpedantic)
   target_link_libraries(test_yaw_reference_generator yaw_reference_generator Eigen3::Eigen)
 
+  ament_add_gtest(test_turn_speed_policy test/test_turn_speed_policy.cpp)
+  target_compile_options(test_turn_speed_policy PRIVATE -Wall -Wextra -Wpedantic)
+  target_link_libraries(test_turn_speed_policy turn_speed_policy Eigen3::Eigen)
+
   ament_add_gtest(
     test_multi_goal_visualization test/test_multi_goal_visualization.cpp)
   target_compile_options(
@@ -204,7 +217,7 @@ endif()
 install(DIRECTORY include/ DESTINATION include)
 install(
   TARGETS static_environment collision_checker astar_planner path_simplifier
-    planned_trajectory_builder yaw_reference_generator goal_completion_gate
+    planned_trajectory_builder turn_speed_policy yaw_reference_generator goal_completion_gate
     multi_goal_visualization mission_failure_safety
     interactive_goal_editor
     static_environment_node multi_goal_static_avoidance_node map_reachability_check

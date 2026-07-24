@@ -118,6 +118,8 @@ def test_navigation_public_defaults_and_forwarded_arguments():
         'max_reference_acceleration': '0.65',
         'max_horizontal_acceleration': '0.84',
         'max_tilt_angle': '0.15',
+        'turn_aware_speed_limiting': 'false',
+        'turn_aware_speed_limiting': 'false',
     }
     includes = [
         action for action in description.entities
@@ -157,6 +159,8 @@ def test_internal_navigation_speed_defaults_and_node_overrides_match():
     assert {
         key: executor_overrides[key] for key in trajectory_overrides
     } == trajectory_overrides
+    assert executor_overrides['turn_aware_speed_limiting'] == \
+        'turn_aware_speed_limiting'
 
 
 def test_formal_navigation_yaml_uses_validated_defaults_and_snapshot_stays_immutable():

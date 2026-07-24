@@ -24,6 +24,7 @@ def generate_launch_description():
         DeclareLaunchArgument('max_reference_acceleration', default_value='0.65'),
         DeclareLaunchArgument('max_horizontal_acceleration', default_value='0.84'),
         DeclareLaunchArgument('max_tilt_angle', default_value='0.15'),
+        DeclareLaunchArgument('turn_aware_speed_limiting', default_value='false'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(navigation),
             launch_arguments={
@@ -37,6 +38,8 @@ def generate_launch_description():
                 'max_horizontal_acceleration': LaunchConfiguration(
                     'max_horizontal_acceleration'),
                 'max_tilt_angle': LaunchConfiguration('max_tilt_angle'),
+                'turn_aware_speed_limiting': LaunchConfiguration(
+                    'turn_aware_speed_limiting'),
             }.items(),
         ),
     ])

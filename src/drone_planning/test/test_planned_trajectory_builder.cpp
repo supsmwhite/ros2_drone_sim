@@ -159,6 +159,27 @@ TEST(PlannedTrajectoryBuilder, DynamicLimitFailureUsesDeterministicDurationScali
   EXPECT_LE(result.max_reference_acceleration, parameters.max_reference_acceleration);
 }
 
+TEST(PlannedTrajectoryBuilder, DurationScalingSelectsFirstValidOrderedCandidate)
+{
+  const CollisionChecker checker(
+    StaticEnvironment(box(-5.0, 5.0, -5.0, 5.0, -5.0, 5.0), {}), 0.0);
+  PlannedTrajectoryParameters parameters;
+  parameters.nominal_speed = 1.0;
+  parameters.min_segment_duration = 1.0;
+  parameters.max_reference_speed = 5.0;
+  parameters.max_reference_acceleration = 1.0;
+  parameters.velocity_scale_candidates = {0.0};
+  parameters.duration_scale_candidates = {1.0, 1.50, 1.75, 2.0};
+  const std::vector<Eigen::Vector3d> raw_path{
+    Eigen::Vector3d(-1.0, 0.0, 0.0),
+    Eigen::Vector3d(0.0, 0.0, 0.0),
+    Eigen::Vector3d(1.0, 0.0, 0.0)};
+
+  const auto result = PlannedTrajectoryBuilder(checker, parameters).build(raw_path);
+  expect_valid_result(checker, parameters, raw_path, result);
+  EXPECT_DOUBLE_EQ(result.selected_duration_scale, 1.75);
+}
+
 TEST(PlannedTrajectoryBuilder, SyntheticCornerCutRecoversOriginalPathPoints)
 {
   const CollisionChecker checker(

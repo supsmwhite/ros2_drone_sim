@@ -2,7 +2,7 @@ import math
 import yaml
 
 from tools.navigation_speed_smoke import (
-    FORMAL_FOUR_GOALS, FORMAL_FOUR_GOAL_SCENARIO, RUN_SCENARIOS, SCENARIOS,
+    FORMAL_FOUR_GOALS, FORMAL_FOUR_GOAL_SCENARIO, ROOT, RUN_SCENARIOS, SCENARIOS,
     collision_count, make_open_environment, over_threshold_stats, path_collision_count,
     path_segments, percentile, segment_intersects_box, segments_length)
 
@@ -79,4 +79,14 @@ def test_formal_four_goal_trial_is_explicit_and_not_part_of_lightweight_all():
         (9.70, -1.20, 1.20),
         (6.30, 5.55, 2.35),
         (0.45, 5.70, 1.00),
+    ]
+
+
+def test_duration_scale_configuration_keeps_refined_candidates_in_order():
+    document = yaml.safe_load(
+        (ROOT / "src/drone_bringup/config/planned_trajectory.yaml").read_text())
+    parameters = next(iter(document.values()))["ros__parameters"]
+    assert parameters["duration_scale_candidates"] == [
+        1.0, 1.05, 1.10, 1.15, 1.20, 1.25,
+        1.30, 1.35, 1.40, 1.45, 1.50, 1.75, 2.0, 3.0, 4.0,
     ]

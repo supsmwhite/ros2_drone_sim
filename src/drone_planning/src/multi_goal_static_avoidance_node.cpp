@@ -118,11 +118,11 @@ double goal_turn_speed_scale(
   const Eigen::Vector3d & segment_start, const std::vector<MissionGoal> & goals,
   std::size_t goal_index)
 {
-  if (!enabled || goal_index + 1U >= goals.size()) {
-    return 1.0;
-  }
-  return turn_speed_scale(
-    segment_start, goals[goal_index].position, goals[goal_index + 1U].position, policy);
+  const std::optional<Eigen::Vector3d> next =
+    goal_index + 1U < goals.size() ?
+    std::optional<Eigen::Vector3d>(goals[goal_index + 1U].position) : std::nullopt;
+  return segment_turn_speed_scale(
+    enabled, segment_start, goals[goal_index].position, next, policy);
 }
 
 PlannedTrajectoryParameters scaled_trajectory_parameters(
@@ -249,7 +249,7 @@ public:
       static_cast<std::size_t>(max_insertions_per_refinement);
     trajectory_parameters_.fixed_yaw = declare_parameter<double>("fixed_yaw", 0.0);
     turn_aware_speed_limiting_ =
-      declare_parameter<bool>("turn_aware_speed_limiting", false);
+      declare_parameter<bool>("turn_aware_speed_limiting", true);
     turn_speed_policy_parameters_.mild_turn_angle_rad =
       declare_parameter<double>("mild_turn_angle_rad", 0.5235987755982988);
     turn_speed_policy_parameters_.sharp_turn_angle_rad =
@@ -1103,7 +1103,7 @@ private:
   std::size_t current_segment_{0U};
   std::size_t visited_goals_{0U};
   bool yaw_initialized_from_odometry_{false};
-  bool turn_aware_speed_limiting_{false};
+  bool turn_aware_speed_limiting_{true};
   YawMode yaw_mode_{YawMode::Fixed};
   State state_{State::WaitingForOdometry};
   GoalCompletionGate goal_completion_gate_;

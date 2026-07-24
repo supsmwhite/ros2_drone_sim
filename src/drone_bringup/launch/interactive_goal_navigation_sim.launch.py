@@ -25,13 +25,13 @@ def generate_launch_description():
         DeclareLaunchArgument('terminal_blend_distance', default_value='0.80'),
         DeclareLaunchArgument('yaw_filter_time_constant', default_value='0.30'),
         DeclareLaunchArgument('max_yaw_rate', default_value='0.80'),
-        DeclareLaunchArgument('nominal_speed', default_value='0.55'),
+        DeclareLaunchArgument('nominal_speed', default_value='0.70'),
         DeclareLaunchArgument('min_segment_duration', default_value='2.0'),
-        DeclareLaunchArgument('max_reference_speed', default_value='0.95'),
-        DeclareLaunchArgument('max_reference_acceleration', default_value='0.65'),
-        DeclareLaunchArgument('max_horizontal_acceleration', default_value='0.84'),
+        DeclareLaunchArgument('max_reference_speed', default_value='1.28'),
+        DeclareLaunchArgument('max_reference_acceleration', default_value='0.88'),
+        DeclareLaunchArgument('max_horizontal_acceleration', default_value='1.12'),
         DeclareLaunchArgument('max_tilt_angle', default_value='0.15'),
-        DeclareLaunchArgument('turn_aware_speed_limiting', default_value='false'),
+        DeclareLaunchArgument('turn_aware_speed_limiting', default_value='true'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(core), launch_arguments={
                 'use_rviz': LaunchConfiguration('use_rviz'),

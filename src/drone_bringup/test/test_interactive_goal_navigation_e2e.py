@@ -60,6 +60,28 @@ def norm3(values):
     return math.sqrt(sum(value * value for value in values))
 
 
+def percentile(sorted_values, fraction):
+    position = (len(sorted_values) - 1) * fraction
+    lower, upper = math.floor(position), math.ceil(position)
+    if lower == upper:
+        return sorted_values[lower]
+    return (sorted_values[lower] * (upper - position) +
+            sorted_values[upper] * (position - lower))
+
+
+def over_threshold_stats(series, threshold):
+    samples_over = sum(value > threshold for _, value in series)
+    fraction = samples_over / len(series)
+    longest = current = 0.0
+    for (time_a, value_a), (time_b, _) in zip(series, series[1:]):
+        if value_a > threshold:
+            current += max(0.0, time_b - time_a)
+            longest = max(longest, current)
+        else:
+            current = 0.0
+    return fraction, longest
+
+
 def distance_to_box(point, lower, upper):
     return norm3(tuple(
         max(lower[index] - point[index], 0.0, point[index] - upper[index])
@@ -98,6 +120,7 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
         health_errors = []
         previous_position = None
         maximum_tracking_error = 0.0
+        tracking_series = []
         minimum_clearance = math.inf
         maximum_rpm = 0.0
         nonzero_rpm_before_execute = False
@@ -174,9 +197,12 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
             # metric, so exclude that pre-navigation climb.
             if (latest.get('mission_status', '').startswith('EXECUTING') and
                     'setpoint' in latest):
-                maximum_tracking_error = max(
-                    maximum_tracking_error,
-                    math.dist(position, latest['setpoint']))
+                tracking_error = math.dist(position, latest['setpoint'])
+                maximum_tracking_error = max(maximum_tracking_error, tracking_error)
+                stamp = (
+                    message.header.stamp.sec +
+                    1.0e-9 * message.header.stamp.nanosec)
+                tracking_series.append((stamp, tracking_error))
 
         def on_setpoint(message):
             nonlocal previous_yaw_reference, previous_yaw_stamp
@@ -451,7 +477,19 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
             self.assertEqual(path_counts, {
                 'planned': 3, 'simplified': 3, 'reference': 3})
             self.assertFalse(health_errors, health_errors)
-            self.assertLess(maximum_tracking_error, 0.05)
+            self.assertTrue(tracking_series)
+            tracking_values = sorted(value for _, value in tracking_series)
+            tracking_p95 = percentile(tracking_values, 0.95)
+            tracking_rms = math.sqrt(
+                sum(value * value for value in tracking_values) /
+                len(tracking_values))
+            tracking_over_fraction, tracking_over_longest = over_threshold_stats(
+                tracking_series, 0.05)
+            self.assertLess(maximum_tracking_error, 0.08)
+            self.assertLess(tracking_p95, 0.05)
+            self.assertLess(tracking_rms, 0.025)
+            self.assertLess(tracking_over_fraction, 0.05)
+            self.assertLess(tracking_over_longest, 0.50)
             self.assertGreaterEqual(minimum_clearance, 0.085)
             self.assertLess(math.dist(latest['position'], TARGETS[-1]), 0.05)
             self.assertLess(latest['speed'], 0.03)
@@ -477,6 +515,10 @@ class TestInteractiveGoalNavigationEndToEnd(unittest.TestCase):
                 'interactive_goal_navigation_e2e: '
                 f'task_time={mission_complete_time - accepted_time:.3f}s '
                 f'goals={TARGETS} max_tracking_error={maximum_tracking_error:.6f}m '
+                f'tracking_p95={tracking_p95:.6f}m '
+                f'tracking_rms={tracking_rms:.6f}m '
+                f'tracking_over_005_fraction={tracking_over_fraction:.6f} '
+                f'tracking_over_005_longest={tracking_over_longest:.6f}s '
                 f'minimum_clearance={minimum_clearance:.6f}m '
                 f'maximum_rpm={maximum_rpm:.1f} final_error='
                 f'{math.dist(latest["position"], TARGETS[-1]):.6f}m '

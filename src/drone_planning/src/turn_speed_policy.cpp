@@ -51,4 +51,15 @@ double turn_speed_scale(
   return 1.0;
 }
 
+double segment_turn_speed_scale(
+  bool enabled, const Eigen::Vector3d & previous, const Eigen::Vector3d & current,
+  const std::optional<Eigen::Vector3d> & next,
+  const TurnSpeedPolicyParameters & parameters)
+{
+  if (!enabled || !next) {
+    return 1.0;
+  }
+  return turn_speed_scale(previous, current, *next, parameters);
+}
+
 }  // namespace drone_planning

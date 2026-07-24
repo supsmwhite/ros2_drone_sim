@@ -49,4 +49,22 @@ TEST(TurnSpeedPolicy, RejectsInvalidPolicyAndDegenerateSegments)
     std::invalid_argument);
 }
 
+TEST(TurnSpeedPolicy, FinalAndSingleGoalSegmentsRemainUnscaled)
+{
+  const TurnSpeedPolicyParameters parameters;
+  const Eigen::Vector3d previous(-1.0, 0.0, 0.0);
+  const Eigen::Vector3d current = Eigen::Vector3d::Zero();
+
+  // A single-goal task has no following goal, so its only segment is not turn-limited.
+  EXPECT_DOUBLE_EQ(
+    segment_turn_speed_scale(true, previous, current, std::nullopt, parameters), 1.0);
+  // The final segment of a multi-goal task likewise has no following goal.
+  EXPECT_DOUBLE_EQ(
+    segment_turn_speed_scale(true, previous, current, std::nullopt, parameters), 1.0);
+  EXPECT_DOUBLE_EQ(
+    segment_turn_speed_scale(
+      false, previous, current, Eigen::Vector3d(0.0, 1.0, 0.0), parameters),
+    1.0);
+}
+
 }  // namespace drone_planning

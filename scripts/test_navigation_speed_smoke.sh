@@ -7,7 +7,7 @@ repo_root="$(cd -- "${script_dir}/.." && pwd)"
 cd "${repo_root}"
 
 if (($# == 0)); then
-  echo "Usage: $0 open|obstacle|turning|all [candidate and parameter options]" >&2
+  echo "Usage: $0 open|obstacle|turning|formal_four_goal|all [candidate and parameter options]" >&2
   exit 2
 fi
 

@@ -663,14 +663,11 @@ def update_comparison(output):
     (output / "comparison.md").write_text("\n".join(lines) + "\n")
 
 
-def run_once(args, scenario):
-    commit, branch, dirty = git_state()
-    if dirty and not args.allow_dirty:
-        raise SystemExit("refusing a smoke run from a dirty worktree; commit infrastructure first")
+def navigation_parameters(args):
     dynamics = node_parameters(ROOT / "src/drone_bringup/config/dynamics.yaml")
     controller = node_parameters(ROOT / "src/drone_bringup/config/controller.yaml")
     trajectory = node_parameters(ROOT / "src/drone_bringup/config/planned_trajectory.yaml")
-    parameters = {
+    return {
         "nominal_speed": args.nominal_speed or float(trajectory["nominal_speed"]),
         "max_reference_speed": args.max_reference_speed or
         float(trajectory["max_reference_speed"]),
@@ -685,6 +682,14 @@ def run_once(args, scenario):
         "mass": float(dynamics["mass"]),
         "max_rpm": float(dynamics["max_rpm"]),
     }
+
+
+def run_once(args, scenario):
+    commit, branch, dirty = git_state()
+    if dirty and not args.allow_dirty:
+        raise SystemExit("refusing a smoke run from a dirty worktree; commit infrastructure first")
+    parameters = navigation_parameters(args)
+    dynamics = node_parameters(ROOT / "src/drone_bringup/config/dynamics.yaml")
     if parameters["max_reference_acceleration"] >= \
             parameters["max_horizontal_acceleration"]:
         raise SystemExit(
@@ -781,7 +786,14 @@ def arguments(argv=None):
     parser.add_argument("--min-segment-duration", type=float)
     parser.add_argument("--max-horizontal-acceleration", type=float)
     parser.add_argument("--max-tilt-angle", type=float)
-    parser.add_argument("--turn-aware-speed-limiting", action="store_true")
+    turn_group = parser.add_mutually_exclusive_group()
+    turn_group.add_argument(
+        "--turn-aware-speed-limiting", dest="turn_aware_speed_limiting",
+        action="store_true", help="enable the release-candidate turn policy (default)")
+    turn_group.add_argument(
+        "--no-turn-aware-speed-limiting", dest="turn_aware_speed_limiting",
+        action="store_false", help="disable the turn policy for historical comparisons")
+    parser.set_defaults(turn_aware_speed_limiting=True)
     parser.add_argument("--timeout", type=float, default=180.0)
     parser.add_argument("--startup-wait", type=float, default=5.0)
     parser.add_argument("--domain-id", type=int)

@@ -23,7 +23,7 @@ def generate_launch_description():
         DeclareLaunchArgument('setpoint_source', default_value='pose_goal'),
         DeclareLaunchArgument('dynamics_config', default_value=dynamics_default),
         DeclareLaunchArgument('controller_config', default_value=controller_default),
-        DeclareLaunchArgument('max_horizontal_acceleration', default_value='0.8'),
+        DeclareLaunchArgument('max_horizontal_acceleration', default_value='1.12'),
         DeclareLaunchArgument('max_tilt_angle', default_value='0.15'),
         Node(
             package='drone_dynamics', executable='quadrotor_dynamics_node',

@@ -18,13 +18,13 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'use_rviz', default_value='true',
             description='Start RViz2 for interactive navigation.'),
-        DeclareLaunchArgument('nominal_speed', default_value='0.55'),
+        DeclareLaunchArgument('nominal_speed', default_value='0.70'),
         DeclareLaunchArgument('min_segment_duration', default_value='2.0'),
-        DeclareLaunchArgument('max_reference_speed', default_value='0.95'),
-        DeclareLaunchArgument('max_reference_acceleration', default_value='0.65'),
-        DeclareLaunchArgument('max_horizontal_acceleration', default_value='0.84'),
+        DeclareLaunchArgument('max_reference_speed', default_value='1.28'),
+        DeclareLaunchArgument('max_reference_acceleration', default_value='0.88'),
+        DeclareLaunchArgument('max_horizontal_acceleration', default_value='1.12'),
         DeclareLaunchArgument('max_tilt_angle', default_value='0.15'),
-        DeclareLaunchArgument('turn_aware_speed_limiting', default_value='false'),
+        DeclareLaunchArgument('turn_aware_speed_limiting', default_value='true'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(navigation),
             launch_arguments={

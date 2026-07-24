@@ -112,14 +112,13 @@ def test_navigation_public_defaults_and_forwarded_arguments():
     assert defaults == {
         'yaw_mode': 'path_tangent',
         'use_rviz': 'true',
-        'nominal_speed': '0.55',
+        'nominal_speed': '0.70',
         'min_segment_duration': '2.0',
-        'max_reference_speed': '0.95',
-        'max_reference_acceleration': '0.65',
-        'max_horizontal_acceleration': '0.84',
+        'max_reference_speed': '1.28',
+        'max_reference_acceleration': '0.88',
+        'max_horizontal_acceleration': '1.12',
         'max_tilt_angle': '0.15',
-        'turn_aware_speed_limiting': 'false',
-        'turn_aware_speed_limiting': 'false',
+        'turn_aware_speed_limiting': 'true',
     }
     includes = [
         action for action in description.entities
@@ -138,12 +137,13 @@ def test_internal_navigation_speed_defaults_and_node_overrides_match():
     _, description = _load_launch('interactive_goal_navigation_sim.launch.py')
     defaults = _declared_defaults(description)
     expected_defaults = {
-        'nominal_speed': '0.55',
+        'nominal_speed': '0.70',
         'min_segment_duration': '2.0',
-        'max_reference_speed': '0.95',
-        'max_reference_acceleration': '0.65',
-        'max_horizontal_acceleration': '0.84',
+        'max_reference_speed': '1.28',
+        'max_reference_acceleration': '0.88',
+        'max_horizontal_acceleration': '1.12',
         'max_tilt_angle': '0.15',
+        'turn_aware_speed_limiting': 'true',
     }
     assert {key: defaults[key] for key in expected_defaults} == expected_defaults
 
@@ -162,14 +162,24 @@ def test_internal_navigation_speed_defaults_and_node_overrides_match():
     assert executor_overrides['turn_aware_speed_limiting'] == \
         'turn_aware_speed_limiting'
 
+    _, core_description = _load_launch('simulation_core.launch.py')
+    core_defaults = _declared_defaults(core_description)
+    assert core_defaults['max_horizontal_acceleration'] == '1.12'
+    assert core_defaults['max_tilt_angle'] == '0.15'
+    controller_overrides = _node_launch_configuration_overrides(
+        core_description, 'position_controller_node')
+    assert controller_overrides['max_horizontal_acceleration'] == \
+        'max_horizontal_acceleration'
+    assert controller_overrides['max_tilt_angle'] == 'max_tilt_angle'
+
 
 def test_formal_navigation_yaml_uses_validated_defaults_and_snapshot_stays_immutable():
     repository = LAUNCH.parents[2]
     expected_by_path = {
         LAUNCH.parent / 'config' / 'planned_trajectory.yaml': {
-            'nominal_speed': 0.55,
-            'max_reference_speed': 0.95,
-            'max_reference_acceleration': 0.65,
+            'nominal_speed': 0.70,
+            'max_reference_speed': 1.28,
+            'max_reference_acceleration': 0.88,
         },
         repository / 'results' / 'parameters' / 'planned_trajectory.yaml': {
             'nominal_speed': 0.50,
@@ -178,6 +188,21 @@ def test_formal_navigation_yaml_uses_validated_defaults_and_snapshot_stays_immut
         },
     }
     for path, expected in expected_by_path.items():
+        data = yaml.safe_load(path.read_text(encoding='utf-8'))
+        parameters = next(iter(data.values()))['ros__parameters']
+        assert {key: parameters[key] for key in expected} == expected
+
+    controller_expected_by_path = {
+        LAUNCH.parent / 'config' / 'controller.yaml': {
+            'max_horizontal_acceleration': 1.12,
+            'max_tilt_angle': 0.15,
+        },
+        repository / 'results' / 'parameters' / 'controller.yaml': {
+            'max_horizontal_acceleration': 0.80,
+            'max_tilt_angle': 0.15,
+        },
+    }
+    for path, expected in controller_expected_by_path.items():
         data = yaml.safe_load(path.read_text(encoding='utf-8'))
         parameters = next(iter(data.values()))['ros__parameters']
         assert {key: parameters[key] for key in expected} == expected

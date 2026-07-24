@@ -3,8 +3,9 @@ import yaml
 
 from tools.navigation_speed_smoke import (
     FORMAL_FOUR_GOALS, FORMAL_FOUR_GOAL_SCENARIO, ROOT, RUN_SCENARIOS, SCENARIOS,
-    collision_count, make_open_environment, over_threshold_stats, path_collision_count,
-    parse_trajectory_log, path_segments, percentile, segment_intersects_box, segments_length)
+    arguments, collision_count, make_open_environment, navigation_parameters,
+    over_threshold_stats, path_collision_count, parse_trajectory_log, path_segments,
+    percentile, segment_intersects_box, segments_length)
 
 
 def test_segment_collision_includes_crossing_and_excludes_clear_segment():
@@ -103,3 +104,31 @@ def test_trajectory_log_records_turn_scale_and_keeps_legacy_compatibility(tmp_pa
         "max_acceleration=0.500000 m/s^2\n")
     values = parse_trajectory_log(path)
     assert [value["turn_speed_scale"] for value in values] == [0.8, 1.0]
+
+
+def test_release_candidate_defaults_feed_smoke_result_parameters():
+    args = arguments(["formal_four_goal", "--candidate", "h_default_test"])
+    parameters = navigation_parameters(args)
+    assert {
+        key: parameters[key] for key in (
+            "nominal_speed", "max_reference_speed", "max_reference_acceleration",
+            "min_segment_duration", "max_horizontal_acceleration",
+            "max_tilt_angle", "turn_aware_speed_limiting",
+        )
+    } == {
+        "nominal_speed": 0.70,
+        "max_reference_speed": 1.28,
+        "max_reference_acceleration": 0.88,
+        "min_segment_duration": 2.0,
+        "max_horizontal_acceleration": 1.12,
+        "max_tilt_angle": 0.15,
+        "turn_aware_speed_limiting": True,
+    }
+
+
+def test_turn_policy_can_be_disabled_for_historical_comparisons():
+    args = arguments([
+        "turning", "--candidate", "historical_test",
+        "--no-turn-aware-speed-limiting",
+    ])
+    assert args.turn_aware_speed_limiting is False
